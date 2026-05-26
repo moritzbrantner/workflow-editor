@@ -69,6 +69,7 @@ import {
   validateWorkflowEditorDocument,
   validateWorkflowEditorConnection,
   wouldCreateWorkflowEditorCycle,
+  workflowEditorCollectionNodeTemplates,
   workflowEditorControlFlowNodeTemplates,
   workflowEditorDocumentFileVersion,
   workflowEditorJsonNodeTemplates,
@@ -129,7 +130,7 @@ afterEach(() => {
 });
 
 describe("@moritzbrantner/workflow-editor core", () => {
-  test("provides built-in control flow and JSON node templates", () => {
+  test("provides built-in control flow, JSON, and collection node templates", () => {
     const templateIds = defaultWorkflowEditorNodeTemplates.map((template) => template.id);
     const branchTemplate = workflowEditorControlFlowNodeTemplates.find(
       (template) => template.id === "control-flow-if",
@@ -145,6 +146,15 @@ describe("@moritzbrantner/workflow-editor core", () => {
     );
     const objectDecomposeTemplate = workflowEditorJsonNodeTemplates.find(
       (template) => template.id === "json-object-decompose",
+    );
+    const filterTemplate = workflowEditorCollectionNodeTemplates.find(
+      (template) => template.id === "collection-filter",
+    );
+    const reduceTemplate = workflowEditorCollectionNodeTemplates.find(
+      (template) => template.id === "collection-reduce",
+    );
+    const aggregateTemplate = workflowEditorCollectionNodeTemplates.find(
+      (template) => template.id === "collection-aggregate",
     );
 
     expect(new Set(templateIds).size).toBe(templateIds.length);
@@ -162,6 +172,9 @@ describe("@moritzbrantner/workflow-editor core", () => {
         "json-array",
         "json-object",
         "json-object-decompose",
+        "collection-filter",
+        "collection-reduce",
+        "collection-aggregate",
       ]),
     );
     expect(branchTemplate?.inputs).toEqual(
@@ -176,6 +189,120 @@ describe("@moritzbrantner/workflow-editor core", () => {
     });
     expect(objectTemplate?.outputs?.[0]?.type).toEqual({ kind: "object" });
     expect(objectDecomposeTemplate?.inputs?.[0]?.type).toEqual({ kind: "object" });
+    expect(filterTemplate?.inputs?.[0]?.type).toEqual({
+      kind: "array",
+      element: { kind: "any" },
+    });
+    expect(filterTemplate?.inputs?.[1]?.type).toEqual({ kind: "boolean" });
+    expect(reduceTemplate?.outputs?.[0]?.type).toEqual({ kind: "any" });
+    expect(aggregateTemplate?.outputs?.[0]?.type).toEqual({
+      kind: "object",
+      properties: expect.objectContaining({
+        count: { type: { kind: "number" } },
+      }),
+    });
+  });
+
+  test("validates collection node template schemas and compatible typed connections", () => {
+    const [filterTemplate, reduceTemplate, aggregateTemplate] = [
+      workflowEditorCollectionNodeTemplates.find((template) => template.id === "collection-filter"),
+      workflowEditorCollectionNodeTemplates.find((template) => template.id === "collection-reduce"),
+      workflowEditorCollectionNodeTemplates.find(
+        (template) => template.id === "collection-aggregate",
+      ),
+    ];
+
+    expect(
+      validateWorkflowEditorDocument({
+        nodes: workflowEditorCollectionNodeTemplates.map((template, index) =>
+          Object.assign({}, template, { x: index * 240, y: 0 }),
+        ),
+        edges: [],
+      }),
+    ).toEqual([]);
+
+    const collectionDocument = normalizeWorkflowEditorDocument<Record<string, unknown>>({
+      nodes: [
+        {
+          id: "events",
+          label: "Events",
+          x: 0,
+          y: 0,
+          outputs: [
+            {
+              id: "items",
+              label: "Items",
+              type: { kind: "array", element: { kind: "number" } },
+            },
+          ],
+        },
+        {
+          ...filterTemplate!,
+          id: "filter",
+          x: 240,
+          y: 0,
+        },
+        {
+          ...reduceTemplate!,
+          id: "reduce",
+          x: 480,
+          y: 0,
+        },
+        {
+          ...aggregateTemplate!,
+          id: "aggregate",
+          x: 720,
+          y: 0,
+        },
+        {
+          id: "summary",
+          label: "Summary",
+          x: 960,
+          y: 0,
+          inputs: [
+            {
+              id: "in",
+              label: "In",
+              type: {
+                kind: "object",
+                properties: {
+                  count: { type: { kind: "number" } },
+                },
+              },
+            },
+          ],
+        },
+      ],
+      edges: [],
+    });
+    const filtered = connectWorkflowEditorNodes(collectionDocument, {
+      sourceNodeId: "events",
+      sourcePortId: "items",
+      targetNodeId: "filter",
+      targetPortId: "items",
+    });
+    const reduced = connectWorkflowEditorNodes(filtered, {
+      sourceNodeId: "filter",
+      sourcePortId: "items",
+      targetNodeId: "reduce",
+      targetPortId: "items",
+    });
+    const aggregated = connectWorkflowEditorNodes(reduced, {
+      sourceNodeId: "filter",
+      sourcePortId: "items",
+      targetNodeId: "aggregate",
+      targetPortId: "items",
+    });
+    const summarized = connectWorkflowEditorNodes(aggregated, {
+      sourceNodeId: "aggregate",
+      sourcePortId: "summary",
+      targetNodeId: "summary",
+      targetPortId: "in",
+    });
+
+    expect(summarized.edges).toHaveLength(4);
+    expect(validateWorkflowEditorDocument(summarized)).toEqual([]);
+    expect(analyzeWorkflowEditorPortTypes(summarized)).toEqual([]);
   });
 
   test("constructs object nodes with expandable named inputs", () => {

@@ -365,9 +365,89 @@ export const workflowEditorJsonNodeTemplates = [
   },
 ] satisfies WorkflowEditorNodeTemplate[];
 
+export const workflowEditorCollectionNodeTemplates = [
+  {
+    id: "collection-filter",
+    label: "Filter",
+    description: "Keep items in a collection that satisfy a predicate.",
+    kind: "collection.filter",
+    category: "Collection",
+    inputs: [
+      { id: "items", label: "Items", type: { kind: "array", element: { kind: "any" } } },
+      { id: "predicate", label: "Predicate", type: { kind: "boolean" } },
+    ],
+    outputs: [
+      {
+        id: "items",
+        label: "Filtered",
+        type: { kind: "array", element: { kind: "any" } },
+      },
+    ],
+    data: { predicate: "" },
+  },
+  {
+    id: "collection-reduce",
+    label: "Reduce",
+    description: "Fold collection items into a single accumulated value.",
+    kind: "collection.reduce",
+    category: "Collection",
+    inputs: [
+      { id: "items", label: "Items", type: { kind: "array", element: { kind: "any" } } },
+      { id: "initial", label: "Initial", type: { kind: "any" } },
+      { id: "accumulator", label: "Accumulator", type: { kind: "any" } },
+    ],
+    outputs: [{ id: "value", label: "Value", type: { kind: "any" } }],
+    data: { reducer: "" },
+  },
+  {
+    id: "collection-aggregate",
+    label: "Aggregate",
+    description: "Calculate summary metrics for a collection.",
+    kind: "collection.aggregate",
+    category: "Collection",
+    inputs: [
+      { id: "items", label: "Items", type: { kind: "array", element: { kind: "any" } } },
+      { id: "value", label: "Value", type: { kind: "any" } },
+      { id: "group", label: "Group", type: { kind: "any" } },
+    ],
+    outputs: [
+      {
+        id: "summary",
+        label: "Summary",
+        type: {
+          kind: "object",
+          properties: {
+            count: { type: { kind: "number" } },
+            sum: { type: { kind: "number" }, optional: true },
+            average: { type: { kind: "number" }, optional: true },
+            min: { type: { kind: "number" }, optional: true },
+            max: { type: { kind: "number" }, optional: true },
+            groups: {
+              type: {
+                kind: "array",
+                element: {
+                  kind: "object",
+                  properties: {
+                    key: { type: { kind: "any" } },
+                    count: { type: { kind: "number" } },
+                    value: { type: { kind: "any" }, optional: true },
+                  },
+                },
+              },
+              optional: true,
+            },
+          },
+        },
+      },
+    ],
+    data: { operation: "count" },
+  },
+] satisfies WorkflowEditorNodeTemplate[];
+
 export const defaultWorkflowEditorNodeTemplates = [
   ...workflowEditorControlFlowNodeTemplates,
   ...workflowEditorJsonNodeTemplates,
+  ...workflowEditorCollectionNodeTemplates,
 ] satisfies WorkflowEditorNodeTemplate[];
 
 export type WorkflowEditorDuplicateNodeOptions = {

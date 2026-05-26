@@ -45,6 +45,7 @@ export {
   validateWorkflowEditorDocument,
   validateWorkflowEditorConnection,
   wouldCreateWorkflowEditorCycle,
+  workflowEditorCollectionNodeTemplates,
   workflowEditorControlFlowNodeTemplates,
   workflowEditorJsonNodeTemplates,
   type WorkflowEditorConnectionInput,

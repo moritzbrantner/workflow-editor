@@ -19,8 +19,10 @@ The React workbench expects `react` as a peer dependency and consumes
 - `WorkflowEditor` for a browser-first workflow editor shell with document library controls,
   local saving/loading, JSON import/export, explicit versions, and undo/redo.
 - `defaultWorkflowEditorNodeTemplates`,
-  `workflowEditorControlFlowNodeTemplates`, and
-  `workflowEditorJsonNodeTemplates` for built-in control-flow and JSON value nodes.
+  `workflowEditorControlFlowNodeTemplates`,
+  `workflowEditorJsonNodeTemplates`, and
+  `workflowEditorCollectionNodeTemplates` for built-in control-flow, JSON value, and
+  collection transform nodes.
 - `normalizeWorkflowEditorDocument(...)`, `connectWorkflowEditorNodes(...)`, `duplicateWorkflowEditorNode(...)`, and node/edge mutation helpers.
 - `createWorkflowEditorComposedNode(...)`, `composeWorkflowEditorNodes(...)`,
   `restoreWorkflowEditorComposedNode(...)`, and `hasWorkflowEditorNodeComposition(...)`
