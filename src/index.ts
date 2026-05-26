@@ -25,10 +25,14 @@ export {
   type WorkflowEditorDocument,
   type WorkflowEditorDuplicateNodeOptions,
   type WorkflowEditorEdge,
+  type WorkflowEditorGraphIndex,
+  type WorkflowEditorIndexedEdge,
+  type WorkflowEditorIndexedNode,
   type WorkflowEditorNode,
   type WorkflowEditorNodeTemplate,
   type WorkflowEditorPort,
   type WorkflowEditorSelection,
+  type WorkflowEditorSubgraph,
   type WorkflowEditorViewport,
 } from "./core";
 export {

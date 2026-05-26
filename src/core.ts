@@ -1,9 +1,23 @@
-import { createGraphDensityIndex } from "@moritzbrantner/graphs";
 import type {
   WorkflowBuilderEdge as UiWorkflowBuilderEdge,
   WorkflowBuilderNodeData as UiWorkflowBuilderNodeData,
   WorkflowBuilderViewport as UiWorkflowBuilderViewport,
 } from "@moritzbrantner/ui/labs";
+
+import {
+  createWorkflowGraphIndex,
+  type WorkflowEditorGraphIndex,
+  type WorkflowEditorIndexedEdge,
+  type WorkflowEditorIndexedNode,
+  type WorkflowEditorSubgraph,
+} from "./graph-index";
+
+export type {
+  WorkflowEditorGraphIndex,
+  WorkflowEditorIndexedEdge,
+  WorkflowEditorIndexedNode,
+  WorkflowEditorSubgraph,
+};
 
 export type WorkflowEditorPort = {
   id: string;
@@ -148,21 +162,10 @@ export function normalizeWorkflowEditorDocument<
 export function createWorkflowEditorGraphIndex<
   TNodeData = Record<string, unknown>,
   TEdgeData = Record<string, unknown>,
->(document: WorkflowEditorDocument<TNodeData, TEdgeData>) {
-  return createGraphDensityIndex(
-    document.nodes.map((node) => ({
-      id: node.id,
-      label: node.label,
-      properties: node,
-    })),
-    document.edges.map((edge) => ({
-      id: edge.id,
-      directed: true,
-      source: edge.sourceNodeId,
-      target: edge.targetNodeId,
-      properties: edge,
-    })),
-  );
+>(
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>,
+): WorkflowEditorGraphIndex<TNodeData, TEdgeData> {
+  return createWorkflowGraphIndex(document);
 }
 
 export function findWorkflowEditorNode<

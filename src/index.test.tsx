@@ -84,6 +84,13 @@ describe("@moritzbrantner/workflow-editor core", () => {
 
     expect(graphIndex.getNodeById("review")?.label).toBe("Human review");
     expect(duplicated.nodes.some((node) => node.id === "review-copy")).toBe(true);
+    expect(
+      normalizeWorkflowEditorDocument({
+        nodes: [{ id: "zoom", label: "Zoom", x: Number.NaN, y: Number.NaN }],
+        edges: [],
+        viewport: { x: Number.NaN, y: Number.NaN, zoom: 10 },
+      }).viewport,
+    ).toEqual({ x: 0, y: 0, zoom: 4 });
 
     const uiNodes = toUiWorkflowBuilderNodes(duplicated.nodes);
     const uiEdges = toUiWorkflowBuilderEdges(duplicated.edges);
@@ -149,7 +156,18 @@ describe("@moritzbrantner/workflow-editor core", () => {
       targetNodeId: "output",
       targetPortId: "in",
     });
+    const graphIndex = createWorkflowEditorGraphIndex(connected);
+    const subgraph = graphIndex.getSubgraph({ offset: 0, limit: 2 });
+
     expect(connected.edges).toHaveLength(2);
+    expect(graphIndex.getEdgeById("input-transform")?.source).toBe("input");
+    expect(subgraph.summary).toEqual(
+      expect.objectContaining({
+        edgeCount: 1,
+        selectedNodeCount: 2,
+        totalCount: 3,
+      }),
+    );
     expect(topologicallySortWorkflowEditorNodes(connected).map((node) => node.id)).toEqual([
       "input",
       "transform",

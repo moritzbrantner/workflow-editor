@@ -2,7 +2,6 @@
 
 import { type ReactNode, useMemo } from "react";
 
-import { formatKeyboardShortcut } from "@moritzbrantner/keyboard";
 import {
   Badge,
   Button,
@@ -41,6 +40,7 @@ import {
   type WorkflowEditorSelection,
   type WorkflowEditorViewport,
 } from "./core";
+import { formatShortcutLabel } from "./shortcut-label";
 
 export type WorkflowWorkbenchPaletteItem<TData = Record<string, unknown>> =
   WorkflowEditorNodeTemplate<TData>;
@@ -287,7 +287,7 @@ export function WorkflowWorkbench<
               indexed
             </Badge>
             <span className="text-xs text-muted-foreground">
-              Duplicate {formatKeyboardShortcut(defaultWorkflowWorkbenchHotkeys.duplicateNode)}
+              Duplicate {formatShortcutLabel(defaultWorkflowWorkbenchHotkeys.duplicateNode)}
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-2">
