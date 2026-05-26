@@ -388,10 +388,11 @@ function DefaultWorkflowInspector<
 
     return (
       <InspectorPanel
+        key={node.id}
         title="Workflow node"
         description={node.kind ?? node.category}
         readOnly={context.readOnly}
-        values={{
+        defaultValues={{
           label: node.label,
           description: node.description ?? "",
           kind: node.kind ?? "",
@@ -435,10 +436,11 @@ function DefaultWorkflowInspector<
 
     return (
       <InspectorPanel
+        key={edge.id}
         title="Workflow edge"
         description={`${edge.sourceNodeId} -> ${edge.targetNodeId}`}
         readOnly={context.readOnly}
-        values={{
+        defaultValues={{
           id: edge.id,
           status: edge.status ?? "idle",
           source: edge.sourcePortId,
