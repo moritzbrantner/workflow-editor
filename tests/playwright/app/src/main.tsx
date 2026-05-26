@@ -9,6 +9,7 @@ import {
   createWorkflowEditorEntry,
   createWorkflowEditorLibrary,
   normalizeWorkflowEditorDocument,
+  type WorkflowEditorDocumentPathItem,
   type WorkflowEditorDocument,
   type WorkflowEditorLibrary,
   type WorkflowWorkbenchSelection,
@@ -86,9 +87,14 @@ const nodeTemplates = [
 ];
 
 function App() {
-  const readOnly = new URLSearchParams(window.location.search).get("readonly") === "1";
+  const searchParams = new URLSearchParams(window.location.search);
+  const readOnly = searchParams.get("readonly") === "1";
+  const maxDepth = Number(searchParams.get("maxDepth") ?? 64);
   const [library, setLibrary] = useState<WorkflowEditorLibrary>(initialLibrary);
   const [selection, setSelection] = useState<WorkflowWorkbenchSelection>(null);
+  const [documentPath, setDocumentPath] = useState<WorkflowEditorDocumentPathItem[]>([
+    { documentId: "demo-workflow" },
+  ]);
   const activeEntry = activeWorkflowEditorEntry(library);
   const document = activeEntry?.document ?? initialDocument;
   const selectedNodeId = selection?.type === "node" ? selection.id : null;
@@ -110,6 +116,7 @@ function App() {
         storageKey="workflow-editor-playwright"
         initialLibrary={initialLibrary}
         readOnly={readOnly}
+        maxNestedWorkflowDepth={Number.isFinite(maxDepth) ? maxDepth : 64}
         nodeTemplates={nodeTemplates}
         renderNodeTemplate={(template) => (
           <span>
@@ -118,6 +125,7 @@ function App() {
           </span>
         )}
         onLibraryChange={setLibrary}
+        onDocumentPathChange={setDocumentPath}
         onSelectionChange={setSelection}
       />
       <section aria-label="Test state">
@@ -129,6 +137,7 @@ function App() {
         <pre data-testid="summary-json">{JSON.stringify(summary)}</pre>
         <pre data-testid="document-json">{JSON.stringify(document)}</pre>
         <pre data-testid="library-json">{JSON.stringify(library)}</pre>
+        <pre data-testid="document-path-json">{JSON.stringify(documentPath)}</pre>
         <pre data-testid="selection-json">{JSON.stringify(selection)}</pre>
         <pre data-testid="selected-node-id">{JSON.stringify(selectedNodeId)}</pre>
         <pre data-testid="selected-edge-id">{JSON.stringify(selectedEdgeId)}</pre>

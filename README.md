@@ -17,6 +17,9 @@ The React workbench expects `react` as a peer dependency and consumes
 - `WorkflowEditor` for a browser-first workflow editor shell with document library controls,
   local saving/loading, JSON import/export, explicit versions, and undo/redo.
 - `normalizeWorkflowEditorDocument(...)`, `connectWorkflowEditorNodes(...)`, `duplicateWorkflowEditorNode(...)`, and node/edge mutation helpers.
+- `updateWorkflowEditorNodeWorkflowReference(...)`,
+  `getWorkflowEditorReferencedDocumentIds(...)`, and
+  `getWorkflowEditorReferenceDiagnostics(...)` for reference-based nested workflow support.
 - `validateWorkflowEditorConnection(...)`, `detectWorkflowEditorCycles(...)`, `topologicallySortWorkflowEditorNodes(...)`, and UI adapter helpers.
 - `createWorkflowEditorLibrary(...)`, `createLocalStorageWorkflowEditorStorage(...)`,
   `buildWorkflowEditorDocumentFile(...)`, and `parseWorkflowEditorDocumentFile(...)`
@@ -80,6 +83,11 @@ export function App() {
   `@moritzbrantner/workflow-editor/share`, and
   `@moritzbrantner/workflow-editor/editor`.
 - The package owns workflow document state and graph validation; `@moritzbrantner/ui` supplies the generic graph surface and inspector controls.
+- Nested workflows are reusable document references stored on nodes as
+  `workflowRef: { documentId }`. References may point to any document, including
+  the current document. The editor shell supports drill-in breadcrumbs with a
+  finite `maxNestedWorkflowDepth` guard; graph DAG validation remains scoped to
+  edges inside each individual document.
 
 ## Enhancement Roadmap
 

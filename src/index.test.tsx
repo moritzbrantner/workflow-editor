@@ -1,7 +1,8 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeAll, describe, expect, test, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 
 import {
+  WorkflowEditor,
   WorkflowWorkbench,
   addWorkflowEditorNode,
   activeWorkflowEditorEntry,
@@ -11,6 +12,7 @@ import {
   commitWorkflowEditorHistory,
   connectWorkflowEditorNodes,
   createLocalStorageWorkflowEditorStorage,
+  createWorkflowEditorEntry,
   createWorkflowEditorGraphIndex,
   createWorkflowEditorHistory,
   createWorkflowEditorLibrary,
@@ -22,7 +24,11 @@ import {
   encodeWorkflowEditorSharePayload,
   fromUiWorkflowBuilderEdges,
   fromUiWorkflowBuilderNodes,
+  getWorkflowEditorReferenceDiagnostics,
+  getWorkflowEditorReferencedDocumentIds,
+  hasWorkflowEditorWorkflowReference,
   isWorkflowEditorDirectedAcyclicGraph,
+  listWorkflowEditorDocumentReferenceOptions,
   loadWorkflowEditorLibrary,
   moveWorkflowEditorNode,
   normalizeWorkflowEditorDocument,
@@ -30,6 +36,7 @@ import {
   removeWorkflowEditorNode,
   removeWorkflowEditorEntry,
   renameWorkflowEditorEntry,
+  resolveWorkflowEditorDocumentReference,
   restoreWorkflowEditorDocumentFile,
   restoreWorkflowEditorVersion,
   redoWorkflowEditorHistory,
@@ -41,6 +48,7 @@ import {
   undoWorkflowEditorHistory,
   upsertWorkflowEditorEntry,
   updateWorkflowEditorNode,
+  updateWorkflowEditorNodeWorkflowReference,
   validateWorkflowEditorConnection,
   wouldCreateWorkflowEditorCycle,
   workflowEditorDocumentFileVersion,
@@ -92,6 +100,11 @@ beforeAll(() => {
       unobserve() {}
     },
   );
+  Element.prototype.scrollIntoView = vi.fn();
+});
+
+afterEach(() => {
+  cleanup();
 });
 
 describe("@moritzbrantner/workflow-editor core", () => {
@@ -214,6 +227,42 @@ describe("@moritzbrantner/workflow-editor core", () => {
       ],
     };
     expect(detectWorkflowEditorCycles(cyclic)).toHaveLength(1);
+  });
+
+  test("preserves reusable workflow references without changing edge validation", () => {
+    const referenced = normalizeWorkflowEditorDocument({
+      ...document,
+      nodes: [
+        {
+          ...document.nodes[0]!,
+          workflowRef: { documentId: "child-workflow" },
+        },
+        document.nodes[1]!,
+        document.nodes[2]!,
+      ],
+    });
+    const uiNodes = toUiWorkflowBuilderNodes(referenced.nodes);
+    uiNodes[0] = { ...uiNodes[0]!, x: 24, y: 36 };
+    const movedNodes = fromUiWorkflowBuilderNodes(uiNodes, referenced.nodes);
+    const cleared = updateWorkflowEditorNodeWorkflowReference(referenced, "input", null);
+
+    expect(hasWorkflowEditorWorkflowReference(referenced.nodes[0]!)).toBe(true);
+    expect(getWorkflowEditorReferencedDocumentIds(referenced)).toEqual(["child-workflow"]);
+    expect(movedNodes[0]?.workflowRef).toEqual({ documentId: "child-workflow" });
+    expect(
+      updateWorkflowEditorNodeWorkflowReference(referenced, "transform", {
+        documentId: "review-workflow",
+      }).nodes.find((node) => node.id === "transform")?.workflowRef,
+    ).toEqual({ documentId: "review-workflow" });
+    expect(cleared.nodes[0]?.workflowRef).toBeUndefined();
+    expect(
+      validateWorkflowEditorConnection(referenced, {
+        sourceNodeId: "transform",
+        sourcePortId: "out",
+        targetNodeId: "output",
+        targetPortId: "in",
+      }),
+    ).toEqual({ valid: true });
   });
 
   test("prevents new edges from closing directed cycles", () => {
@@ -425,6 +474,99 @@ describe("@moritzbrantner/workflow-editor persistence", () => {
     expect(removed.documents).toHaveLength(1);
   });
 
+  test("resolves reusable workflow references and reports missing and recursive diagnostics", async () => {
+    window.localStorage.clear();
+    const parentDocument = normalizeWorkflowEditorDocument({
+      nodes: [
+        {
+          id: "nested",
+          label: "Nested",
+          x: 0,
+          y: 0,
+          workflowRef: { documentId: "child" },
+        },
+        {
+          id: "missing",
+          label: "Missing",
+          x: 200,
+          y: 0,
+          workflowRef: { documentId: "deleted" },
+        },
+      ],
+      edges: [],
+    });
+    const childDocument = normalizeWorkflowEditorDocument({
+      nodes: [
+        {
+          id: "loop",
+          label: "Loop",
+          x: 0,
+          y: 0,
+          workflowRef: { documentId: "parent" },
+        },
+      ],
+      edges: [],
+    });
+    const library = createWorkflowEditorLibrary({
+      activeDocumentId: "parent",
+      documents: [
+        createWorkflowEditorEntry({ id: "parent", name: "Parent", document: parentDocument }),
+        createWorkflowEditorEntry({ id: "child", name: "Child", document: childDocument }),
+      ],
+    });
+    const storage = createLocalStorageWorkflowEditorStorage("workflow-editor-reference-test");
+
+    await saveWorkflowEditorLibrary(storage, library);
+    const restored = await loadWorkflowEditorLibrary(storage);
+    const parent = restored.documents.find((entry) => entry.id === "parent")!;
+    const childReference = parent.document.nodes.find((node) => node.id === "nested")!.workflowRef;
+
+    expect(listWorkflowEditorDocumentReferenceOptions(restored)).toEqual([
+      { id: "parent", name: "Parent" },
+      { id: "child", name: "Child" },
+    ]);
+    expect(resolveWorkflowEditorDocumentReference(restored, childReference)?.id).toBe("child");
+    expect(
+      duplicateWorkflowEditorEntry(restored, "parent").documents[0]?.document.nodes[0],
+    ).toMatchObject({ workflowRef: { documentId: "child" } });
+
+    const withoutChild = removeWorkflowEditorEntry(restored, "child");
+    expect(
+      withoutChild.documents.find((entry) => entry.id === "parent")?.document.nodes[0],
+    ).toMatchObject({ workflowRef: { documentId: "child" } });
+    expect(getWorkflowEditorReferenceDiagnostics(withoutChild)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "missing-document",
+          sourceDocumentId: "parent",
+          sourceNodeId: "nested",
+          targetDocumentId: "child",
+        }),
+      ]),
+    );
+    expect(getWorkflowEditorReferenceDiagnostics(restored)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "missing-document",
+          sourceDocumentId: "parent",
+          sourceNodeId: "missing",
+          targetDocumentId: "deleted",
+        }),
+      ]),
+    );
+    expect(getWorkflowEditorReferenceDiagnostics(restored, { includeRecursive: true })).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "recursive-reference",
+          sourceDocumentId: "parent",
+          sourceNodeId: "nested",
+          targetDocumentId: "parent",
+          path: ["parent", "child", "parent"],
+        }),
+      ]),
+    );
+  });
+
   test("loads and saves localStorage libraries with corrupt storage fallback", async () => {
     window.localStorage.clear();
     const storage = createLocalStorageWorkflowEditorStorage("workflow-editor-test");
@@ -554,5 +696,144 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     );
     fireEvent.click(screen.getAllByRole("button", { name: /Decision/ })[0]!);
     expect(handleDocumentChange).not.toHaveBeenCalled();
+  });
+
+  test("assigns workflow references from the default inspector", () => {
+    const handleDocumentChange = vi.fn();
+    render(
+      <WorkflowWorkbench
+        document={document}
+        selectedNodeId="input"
+        documentReferences={[{ id: "child", name: "Child workflow" }]}
+        onDocumentChange={handleDocumentChange}
+      />,
+    );
+
+    fireEvent.click(screen.getAllByLabelText("Workflow document")[0]!);
+    fireEvent.click(screen.getByRole("option", { name: "Child workflow" }));
+    fireEvent.click(
+      screen
+        .getAllByRole("button", { name: "Apply" })
+        .find((button) => !(button as HTMLButtonElement).disabled)!,
+    );
+
+    expect(handleDocumentChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        nodes: expect.arrayContaining([
+          expect.objectContaining({
+            id: "input",
+            workflowRef: { documentId: "child" },
+          }),
+        ]),
+      }),
+    );
+  });
+
+  test("creates and opens referenced workflows with breadcrumbs in the editor shell", async () => {
+    const handlePathChange = vi.fn();
+    const storage = {
+      loadLibrary: vi.fn(async () => null),
+      saveLibrary: vi.fn(async () => {}),
+    };
+    const initialLibrary = createWorkflowEditorLibrary({
+      activeDocumentId: "parent",
+      documents: [
+        createWorkflowEditorEntry({
+          id: "parent",
+          name: "Parent",
+          document,
+        }),
+      ],
+    });
+
+    render(
+      <WorkflowEditor
+        initialLibrary={initialLibrary}
+        storage={storage}
+        onDocumentPathChange={handlePathChange}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("active-node-count").textContent).toBe("3 nodes"),
+    );
+    fireEvent.click(screen.getAllByText("Input")[1]!);
+    fireEvent.click(
+      screen
+        .getAllByRole("button", { name: "Create nested workflow" })
+        .find((button) => !(button as HTMLButtonElement).disabled)!,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("active-node-count").textContent).toBe("0 nodes"),
+    );
+    expect((screen.getByRole("button", { name: "Parent" }) as HTMLButtonElement).disabled).toBe(
+      false,
+    );
+    expect(
+      (screen.getByRole("button", { name: "Input Workflow" }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(handlePathChange).toHaveBeenLastCalledWith([
+      { documentId: "parent" },
+      expect.objectContaining({ documentId: expect.stringMatching(/^workflow-/) }),
+    ]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Parent" }));
+    await waitFor(() =>
+      expect(screen.getByTestId("active-node-count").textContent).toBe("3 nodes"),
+    );
+  });
+
+  test("allows recursive drill-in until the configured editor depth", async () => {
+    const storage = {
+      loadLibrary: vi.fn(async () => null),
+      saveLibrary: vi.fn(async () => {}),
+    };
+    const recursiveDocument = normalizeWorkflowEditorDocument({
+      nodes: [
+        {
+          id: "self",
+          label: "Self",
+          x: 0,
+          y: 0,
+          workflowRef: { documentId: "recursive" },
+        },
+      ],
+      edges: [],
+    });
+    const initialLibrary = createWorkflowEditorLibrary({
+      activeDocumentId: "recursive",
+      documents: [
+        createWorkflowEditorEntry({
+          id: "recursive",
+          name: "Recursive",
+          document: recursiveDocument,
+        }),
+      ],
+    });
+
+    render(
+      <WorkflowEditor
+        initialLibrary={initialLibrary}
+        storage={storage}
+        maxNestedWorkflowDepth={2}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("active-node-count").textContent).toBe("1 nodes"),
+    );
+    fireEvent.click(screen.getAllByText("Self")[1]!);
+    fireEvent.click(
+      screen
+        .getAllByRole("button", { name: "Open workflow" })
+        .find((button) => !(button as HTMLButtonElement).disabled)!,
+    );
+    await waitFor(() =>
+      expect(screen.getAllByRole("button", { name: "Recursive" })).toHaveLength(2),
+    );
+    fireEvent.click(screen.getAllByText("Self")[1]!);
+    const cappedOpenButtons = screen.queryAllByRole("button", { name: "Open workflow" });
+    expect(cappedOpenButtons.every((button) => (button as HTMLButtonElement).disabled)).toBe(true);
   });
 });

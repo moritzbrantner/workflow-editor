@@ -9,6 +9,8 @@ export {
   findWorkflowEditorNode,
   fromUiWorkflowBuilderEdges,
   fromUiWorkflowBuilderNodes,
+  getWorkflowEditorReferencedDocumentIds,
+  hasWorkflowEditorWorkflowReference,
   isWorkflowEditorDirectedAcyclicGraph,
   moveWorkflowEditorNode,
   normalizeWorkflowEditorDocument,
@@ -19,6 +21,7 @@ export {
   toUiWorkflowBuilderViewport,
   topologicallySortWorkflowEditorNodes,
   updateWorkflowEditorNode,
+  updateWorkflowEditorNodeWorkflowReference,
   validateWorkflowEditorConnection,
   wouldCreateWorkflowEditorCycle,
   type WorkflowEditorConnectionInput,
@@ -36,6 +39,7 @@ export {
   type WorkflowEditorSelection,
   type WorkflowEditorSubgraph,
   type WorkflowEditorViewport,
+  type WorkflowEditorWorkflowReference,
 } from "./core";
 export {
   WorkflowWorkbench,
@@ -45,7 +49,11 @@ export {
   type WorkflowWorkbenchProps,
   type WorkflowWorkbenchSelection,
 } from "./react";
-export { WorkflowEditor, type WorkflowEditorProps } from "./editor";
+export {
+  WorkflowEditor,
+  type WorkflowEditorDocumentPathItem,
+  type WorkflowEditorProps,
+} from "./editor";
 export {
   canRedoWorkflowEditorHistory,
   canUndoWorkflowEditorHistory,
@@ -72,11 +80,14 @@ export {
   defaultWorkflowEditorStorageKey,
   downloadWorkflowEditorDocumentJson,
   duplicateWorkflowEditorEntry,
+  getWorkflowEditorReferenceDiagnostics,
+  listWorkflowEditorDocumentReferenceOptions,
   loadWorkflowEditorLibrary,
   parseWorkflowEditorDocumentFile,
   readWorkflowEditorDocumentFile,
   removeWorkflowEditorEntry,
   renameWorkflowEditorEntry,
+  resolveWorkflowEditorDocumentReference,
   restoreWorkflowEditorDocumentFile,
   restoreWorkflowEditorVersion,
   saveWorkflowEditorLibrary,
@@ -85,11 +96,13 @@ export {
   workflowEditorDocumentFormat,
   workflowEditorLibraryFormat,
   workflowEditorLibraryVersion,
+  type WorkflowEditorDocumentReferenceOption,
   type WorkflowEditorDocumentFile,
   type WorkflowEditorEntryInput,
   type WorkflowEditorLibrary,
   type WorkflowEditorLibraryEntry,
   type WorkflowEditorLibraryInput,
+  type WorkflowEditorReferenceDiagnostic,
   type WorkflowEditorRestoredDocumentFile,
   type WorkflowEditorSavedVersion,
   type WorkflowEditorStorageAdapter,

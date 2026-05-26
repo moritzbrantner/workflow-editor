@@ -23,6 +23,10 @@ export type {
 
 export type WorkflowEditorPort = UiWorkflowNodePort;
 
+export type WorkflowEditorWorkflowReference = {
+  documentId: string;
+};
+
 export type WorkflowEditorNode<TData = Record<string, unknown>> = Omit<
   UiWorkflowNodeData,
   "metadata"
@@ -30,6 +34,7 @@ export type WorkflowEditorNode<TData = Record<string, unknown>> = Omit<
   x: number;
   y: number;
   data?: TData;
+  workflowRef?: WorkflowEditorWorkflowReference;
 };
 
 export type WorkflowEditorEdge<TData = Record<string, unknown>> = {
@@ -196,6 +201,40 @@ export function updateWorkflowEditorNode<
       node.id === nodeId ? { ...node, ...patch, id: node.id } : node,
     ),
   });
+}
+
+export function updateWorkflowEditorNodeWorkflowReference<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+>(
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>,
+  nodeId: string,
+  reference: WorkflowEditorWorkflowReference | null,
+): WorkflowEditorDocument<TNodeData, TEdgeData> {
+  return updateWorkflowEditorNode(document, nodeId, {
+    workflowRef: reference?.documentId ? { documentId: reference.documentId } : undefined,
+  } as Partial<WorkflowEditorNode<TNodeData>>);
+}
+
+export function getWorkflowEditorReferencedDocumentIds<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+>(document: WorkflowEditorDocument<TNodeData, TEdgeData>) {
+  const documentIds = new Set<string>();
+
+  for (const node of document.nodes) {
+    if (hasWorkflowEditorWorkflowReference(node)) {
+      documentIds.add(node.workflowRef.documentId);
+    }
+  }
+
+  return [...documentIds];
+}
+
+export function hasWorkflowEditorWorkflowReference<TData = Record<string, unknown>>(
+  node: WorkflowEditorNode<TData>,
+): node is WorkflowEditorNode<TData> & { workflowRef: WorkflowEditorWorkflowReference } {
+  return typeof node.workflowRef?.documentId === "string" && node.workflowRef.documentId !== "";
 }
 
 export function moveWorkflowEditorNode<
@@ -503,6 +542,7 @@ export function fromUiWorkflowBuilderNodes<TData = Record<string, unknown>>(
       inputs: node.inputs,
       outputs: node.outputs,
       data: (node.metadata as TData | undefined) ?? previousNode?.data,
+      workflowRef: previousNode?.workflowRef,
     };
   });
 }

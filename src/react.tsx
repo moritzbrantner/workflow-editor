@@ -34,6 +34,7 @@ import {
   toUiWorkflowBuilderEdges,
   toUiWorkflowBuilderNodes,
   updateWorkflowEditorNode,
+  updateWorkflowEditorNodeWorkflowReference,
   validateWorkflowEditorConnection,
   type WorkflowEditorDocument,
   type WorkflowEditorEdge,
@@ -42,6 +43,7 @@ import {
   type WorkflowEditorSelection,
   type WorkflowEditorViewport,
 } from "./core";
+import type { WorkflowEditorDocumentReferenceOption } from "./persistence";
 import { formatShortcutLabel } from "./shortcut-label";
 
 export type WorkflowWorkbenchPaletteItem<TData = Record<string, unknown>> =
@@ -57,11 +59,15 @@ export type WorkflowWorkbenchInspectorContext<
   TEdgeData extends Record<string, unknown> = Record<string, unknown>,
 > = {
   document: WorkflowEditorDocument<TNodeData, TEdgeData>;
+  documentReferences?: WorkflowEditorDocumentReferenceOption[];
   readOnly: boolean;
   selectedEdge?: WorkflowEditorEdge<TEdgeData>;
   selectedNode?: WorkflowEditorNode<TNodeData>;
+  openSelectedNodeWorkflow?: () => void;
+  createSelectedNodeWorkflow?: () => void;
   updateSelectedNode: (patch: Partial<WorkflowEditorNode<TNodeData>>) => void;
   updateSelectedEdge: (patch: Partial<WorkflowEditorEdge<TEdgeData>>) => void;
+  updateSelectedNodeWorkflowReference: (documentId: string | null) => void;
 };
 
 export type WorkflowWorkbenchProps<
@@ -74,10 +80,13 @@ export type WorkflowWorkbenchProps<
   selectedEdgeId?: string | null;
   readOnly?: boolean;
   nodeTemplates?: Array<WorkflowWorkbenchPaletteItem<TTemplateData>>;
+  documentReferences?: WorkflowEditorDocumentReferenceOption[];
   className?: string;
   onDocumentChange?: (document: WorkflowEditorDocument<TNodeData, TEdgeData>) => void;
   onSelectionChange?: (selection: WorkflowWorkbenchSelection<TNodeData, TEdgeData>) => void;
   onViewportChange?: (viewport: WorkflowEditorViewport) => void;
+  onOpenWorkflowReference?: (node: WorkflowEditorNode<TNodeData>) => void;
+  onCreateWorkflowReference?: (node: WorkflowEditorNode<TNodeData>) => void;
   renderNodeTemplate?: (template: WorkflowWorkbenchPaletteItem<TTemplateData>) => ReactNode;
   renderInspector?: (context: WorkflowWorkbenchInspectorContext<TNodeData, TEdgeData>) => ReactNode;
   renderToolbarActions?: (
@@ -105,10 +114,13 @@ export function WorkflowWorkbench<
   selectedEdgeId,
   readOnly = false,
   nodeTemplates = [],
+  documentReferences,
   className,
   onDocumentChange,
   onSelectionChange,
   onViewportChange,
+  onOpenWorkflowReference,
+  onCreateWorkflowReference,
   renderNodeTemplate,
   renderInspector,
   renderToolbarActions,
@@ -146,13 +158,56 @@ export function WorkflowWorkbench<
     });
   };
 
+  const updateSelectedNodeWorkflowReference = (documentId: string | null) => {
+    if (readOnly || !selectedNode) {
+      return;
+    }
+
+    commitDocument(
+      updateWorkflowEditorNodeWorkflowReference(
+        document,
+        selectedNode.id,
+        documentId ? { documentId } : null,
+      ),
+    );
+  };
+
+  const selectedNodeWorkflowReferenceValid =
+    !!selectedNode?.workflowRef?.documentId &&
+    !!documentReferences?.some(
+      (reference) => reference.id === selectedNode.workflowRef?.documentId,
+    );
+  const selectedNodeHasWorkflowReference = !!selectedNode?.workflowRef?.documentId;
+
+  const openSelectedNodeWorkflow = () => {
+    if (!selectedNode || !selectedNodeWorkflowReferenceValid) {
+      return;
+    }
+
+    onOpenWorkflowReference?.(selectedNode);
+  };
+
+  const createSelectedNodeWorkflow = () => {
+    if (!selectedNode || readOnly) {
+      return;
+    }
+
+    onCreateWorkflowReference?.(selectedNode);
+  };
+
   const inspectorContext = {
     document,
+    documentReferences,
     readOnly,
+    createSelectedNodeWorkflow:
+      documentReferences && onCreateWorkflowReference ? createSelectedNodeWorkflow : undefined,
+    openSelectedNodeWorkflow:
+      documentReferences && onOpenWorkflowReference ? openSelectedNodeWorkflow : undefined,
     selectedEdge,
     selectedNode,
     updateSelectedEdge,
     updateSelectedNode,
+    updateSelectedNodeWorkflowReference,
   } satisfies WorkflowWorkbenchInspectorContext<TNodeData, TEdgeData>;
 
   const addTemplateNode = (template: WorkflowWorkbenchPaletteItem<TTemplateData>) => {
@@ -301,6 +356,29 @@ export function WorkflowWorkbench<
             >
               Duplicate
             </Button>
+            {documentReferences ? (
+              selectedNodeHasWorkflowReference ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={!selectedNodeWorkflowReferenceValid || !onOpenWorkflowReference}
+                  onClick={openSelectedNodeWorkflow}
+                >
+                  Open workflow
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={readOnly || !selectedNode || !onCreateWorkflowReference}
+                  onClick={createSelectedNodeWorkflow}
+                >
+                  Create nested workflow
+                </Button>
+              )
+            ) : null}
             <Button
               type="button"
               size="sm"
@@ -378,6 +456,9 @@ export function WorkflowWorkbench<
               commitDocument(connectWorkflowEditorNodes(document, connection));
             }
           }}
+          onDoubleClick={() => {
+            openSelectedNodeWorkflow();
+          }}
         />
       </WorkbenchCanvas>
     </WorkbenchLayout>
@@ -427,49 +508,113 @@ function DefaultWorkflowInspector<
 >({ context }: { context: WorkflowWorkbenchInspectorContext<TNodeData, TEdgeData> }) {
   if (context.selectedNode) {
     const node = context.selectedNode;
+    const referenceOptions = createWorkflowReferenceOptions(context.documentReferences, node);
+    const referencedDocumentId = node.workflowRef?.documentId ?? "";
+    const referenceMissing =
+      referencedDocumentId !== "" &&
+      !context.documentReferences?.some((reference) => reference.id === referencedDocumentId);
 
     return (
-      <InspectorPanel
-        key={node.id}
-        title="Workflow node"
-        description={node.kind ?? node.category}
-        readOnly={context.readOnly}
-        defaultValues={{
-          label: node.label,
-          description: node.description ?? "",
-          kind: node.kind ?? "",
-          category: node.category ?? "",
-          x: node.x,
-          y: node.y,
-          status: node.status ?? "idle",
-        }}
-        sections={[
-          {
-            id: "node",
-            title: "Node",
-            fields: [
-              { id: "label", label: "Label", type: "text" },
-              { id: "description", label: "Description", type: "textarea" },
-              { id: "kind", label: "Kind", type: "text" },
-              { id: "category", label: "Category", type: "text" },
-              { id: "x", label: "X", type: "number", step: 10 },
-              { id: "y", label: "Y", type: "number", step: 10 },
-              { id: "status", label: "Status", type: "text" },
-            ],
-          },
-        ]}
-        onApply={(values) => {
-          context.updateSelectedNode({
-            label: String(values.label ?? node.label),
-            description: String(values.description ?? "") || undefined,
-            kind: String(values.kind ?? "") || undefined,
-            category: String(values.category ?? "") || undefined,
-            x: toNumber(values.x, node.x),
-            y: toNumber(values.y, node.y),
-            status: String(values.status ?? "") || undefined,
-          });
-        }}
-      />
+      <div className="grid gap-3">
+        <InspectorPanel
+          key={node.id}
+          title="Workflow node"
+          description={node.kind ?? node.category}
+          readOnly={context.readOnly}
+          validationMessages={
+            referenceMissing
+              ? { workflowDocumentId: `Missing workflow document: ${referencedDocumentId}` }
+              : undefined
+          }
+          defaultValues={{
+            label: node.label,
+            description: node.description ?? "",
+            kind: node.kind ?? "",
+            category: node.category ?? "",
+            x: node.x,
+            y: node.y,
+            status: node.status ?? "idle",
+            workflowDocumentId: referencedDocumentId,
+          }}
+          sections={[
+            {
+              id: "node",
+              title: "Node",
+              fields: [
+                { id: "label", label: "Label", type: "text" },
+                { id: "description", label: "Description", type: "textarea" },
+                { id: "kind", label: "Kind", type: "text" },
+                { id: "category", label: "Category", type: "text" },
+                { id: "x", label: "X", type: "number", step: 10 },
+                { id: "y", label: "Y", type: "number", step: 10 },
+                { id: "status", label: "Status", type: "text" },
+              ],
+            },
+            ...(context.documentReferences
+              ? [
+                  {
+                    id: "nested-workflow",
+                    title: "Nested workflow",
+                    fields: [
+                      {
+                        id: "workflowDocumentId",
+                        label: "Workflow document",
+                        type: "select" as const,
+                        options: referenceOptions,
+                        readOnly: context.readOnly,
+                      },
+                    ],
+                  },
+                ]
+              : []),
+          ]}
+          onApply={(values) => {
+            const patch: Partial<WorkflowEditorNode<TNodeData>> = {
+              label: String(values.label ?? node.label),
+              description: String(values.description ?? "") || undefined,
+              kind: String(values.kind ?? "") || undefined,
+              category: String(values.category ?? "") || undefined,
+              x: toNumber(values.x, node.x),
+              y: toNumber(values.y, node.y),
+              status: String(values.status ?? "") || undefined,
+            };
+
+            if (context.documentReferences) {
+              patch.workflowRef =
+                typeof values.workflowDocumentId === "string" && values.workflowDocumentId
+                  ? { documentId: values.workflowDocumentId }
+                  : undefined;
+            }
+
+            context.updateSelectedNode(patch);
+          }}
+        />
+        {context.documentReferences ? (
+          <div className="flex flex-wrap gap-2 px-4 pb-4">
+            {referencedDocumentId ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={referenceMissing || !context.openSelectedNodeWorkflow}
+                onClick={context.openSelectedNodeWorkflow}
+              >
+                Open workflow
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={context.readOnly || !context.createSelectedNodeWorkflow}
+                onClick={context.createSelectedNodeWorkflow}
+              >
+                Create nested workflow
+              </Button>
+            )}
+          </div>
+        ) : null}
+      </div>
     );
   }
 
@@ -513,6 +658,26 @@ function DefaultWorkflowInspector<
 function toNumber(value: InspectorFieldValue, fallback: number) {
   const nextValue = typeof value === "number" ? value : Number(value);
   return Number.isFinite(nextValue) ? nextValue : fallback;
+}
+
+function createWorkflowReferenceOptions<TNodeData extends Record<string, unknown>>(
+  references: WorkflowEditorDocumentReferenceOption[] | undefined,
+  node: WorkflowEditorNode<TNodeData>,
+) {
+  const options = [
+    { label: "None", value: "" },
+    ...(references?.map((reference) => ({
+      label: reference.missing ? `Missing: ${reference.id}` : reference.name,
+      value: reference.id,
+    })) ?? []),
+  ];
+  const referencedDocumentId = node.workflowRef?.documentId;
+
+  if (referencedDocumentId && !options.some((option) => option.value === referencedDocumentId)) {
+    options.push({ label: `Missing: ${referencedDocumentId}`, value: referencedDocumentId });
+  }
+
+  return options;
 }
 
 function createTemplateNodeId<TData extends Record<string, unknown>>(

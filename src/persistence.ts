@@ -1,4 +1,8 @@
-import { normalizeWorkflowEditorDocument, type WorkflowEditorDocument } from "./core";
+import {
+  normalizeWorkflowEditorDocument,
+  type WorkflowEditorDocument,
+  type WorkflowEditorWorkflowReference,
+} from "./core";
 
 export const workflowEditorDocumentFormat = "@moritzbrantner/workflow-editor/document";
 export const workflowEditorLibraryFormat = "@moritzbrantner/workflow-editor/library";
@@ -54,6 +58,20 @@ export type WorkflowEditorLibrary<
   version: typeof workflowEditorLibraryVersion;
   activeDocumentId: string | null;
   documents: Array<WorkflowEditorLibraryEntry<TNodeData, TEdgeData>>;
+};
+
+export type WorkflowEditorDocumentReferenceOption = {
+  id: string;
+  name: string;
+  missing?: boolean;
+};
+
+export type WorkflowEditorReferenceDiagnostic = {
+  type: "missing-document" | "recursive-reference";
+  sourceDocumentId: string;
+  sourceNodeId: string;
+  targetDocumentId: string;
+  path: string[];
 };
 
 export type WorkflowEditorStorageAdapter<
@@ -173,6 +191,73 @@ export function activeWorkflowEditorEntry<
     library.documents[0] ??
     null
   );
+}
+
+export function resolveWorkflowEditorDocumentReference<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+>(
+  library: WorkflowEditorLibrary<TNodeData, TEdgeData>,
+  reference: WorkflowEditorWorkflowReference | null | undefined,
+): WorkflowEditorLibraryEntry<TNodeData, TEdgeData> | null {
+  if (!reference?.documentId) {
+    return null;
+  }
+
+  return library.documents.find((entry) => entry.id === reference.documentId) ?? null;
+}
+
+export function listWorkflowEditorDocumentReferenceOptions<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+>(library: WorkflowEditorLibrary<TNodeData, TEdgeData>): WorkflowEditorDocumentReferenceOption[] {
+  return library.documents.map((entry) => ({ id: entry.id, name: entry.name }));
+}
+
+export function getWorkflowEditorReferenceDiagnostics<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+>(
+  library: WorkflowEditorLibrary<TNodeData, TEdgeData>,
+  options: { includeRecursive?: boolean; maxDepth?: number } = {},
+): WorkflowEditorReferenceDiagnostic[] {
+  const documents = new Map(library.documents.map((entry) => [entry.id, entry]));
+  const diagnostics: WorkflowEditorReferenceDiagnostic[] = [];
+  const maxDepth = Math.max(1, Math.trunc(options.maxDepth ?? 64));
+
+  for (const entry of library.documents) {
+    for (const node of entry.document.nodes) {
+      const targetDocumentId = node.workflowRef?.documentId;
+      if (!targetDocumentId) {
+        continue;
+      }
+
+      if (!documents.has(targetDocumentId)) {
+        diagnostics.push({
+          type: "missing-document",
+          sourceDocumentId: entry.id,
+          sourceNodeId: node.id,
+          targetDocumentId,
+          path: [entry.id, targetDocumentId],
+        });
+        continue;
+      }
+
+      if (options.includeRecursive) {
+        collectRecursiveReferenceDiagnostics({
+          documents,
+          diagnostics,
+          sourceDocumentId: entry.id,
+          sourceNodeId: node.id,
+          targetDocumentId,
+          path: [entry.id, targetDocumentId],
+          maxDepth,
+        });
+      }
+    }
+  }
+
+  return diagnostics;
 }
 
 export function upsertWorkflowEditorEntry<
@@ -674,6 +759,61 @@ function isWorkflowEditorDocumentLike(value: unknown): value is WorkflowEditorDo
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function collectRecursiveReferenceDiagnostics<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+>({
+  documents,
+  diagnostics,
+  sourceDocumentId,
+  sourceNodeId,
+  targetDocumentId,
+  path,
+  maxDepth,
+}: {
+  documents: ReadonlyMap<string, WorkflowEditorLibraryEntry<TNodeData, TEdgeData>>;
+  diagnostics: WorkflowEditorReferenceDiagnostic[];
+  sourceDocumentId: string;
+  sourceNodeId: string;
+  targetDocumentId: string;
+  path: string[];
+  maxDepth: number;
+}) {
+  const currentEntry = documents.get(targetDocumentId);
+  if (!currentEntry || path.length > maxDepth) {
+    return;
+  }
+
+  const ancestors = path.slice(0, -1);
+  if (ancestors.includes(targetDocumentId)) {
+    diagnostics.push({
+      type: "recursive-reference",
+      sourceDocumentId,
+      sourceNodeId,
+      targetDocumentId,
+      path,
+    });
+    return;
+  }
+
+  for (const node of currentEntry.document.nodes) {
+    const nextDocumentId = node.workflowRef?.documentId;
+    if (!nextDocumentId || !documents.has(nextDocumentId)) {
+      continue;
+    }
+
+    collectRecursiveReferenceDiagnostics({
+      documents,
+      diagnostics,
+      sourceDocumentId,
+      sourceNodeId,
+      targetDocumentId: nextDocumentId,
+      path: [...path, nextDocumentId],
+      maxDepth,
+    });
+  }
 }
 
 function createWorkflowEditorId(prefix: string) {

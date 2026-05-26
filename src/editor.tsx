@@ -26,9 +26,11 @@ import {
   defaultWorkflowEditorStorageKey,
   downloadWorkflowEditorDocumentJson,
   duplicateWorkflowEditorEntry,
+  listWorkflowEditorDocumentReferenceOptions,
   readWorkflowEditorDocumentFile,
   removeWorkflowEditorEntry,
   renameWorkflowEditorEntry,
+  resolveWorkflowEditorDocumentReference,
   restoreWorkflowEditorVersion,
   saveWorkflowEditorLibrary,
   upsertWorkflowEditorEntry,
@@ -42,7 +44,15 @@ import {
   type WorkflowWorkbenchProps,
   type WorkflowWorkbenchSelection,
 } from "./react";
-import type { WorkflowEditorDocument } from "./core";
+import {
+  updateWorkflowEditorNodeWorkflowReference,
+  type WorkflowEditorDocument,
+  type WorkflowEditorNode,
+} from "./core";
+
+export type WorkflowEditorDocumentPathItem = {
+  documentId: string;
+};
 
 export type WorkflowEditorProps<
   TNodeData extends Record<string, unknown> = Record<string, unknown>,
@@ -56,7 +66,10 @@ export type WorkflowEditorProps<
   readOnly?: boolean;
   className?: string;
   maxVersions?: number;
+  enableNestedWorkflows?: boolean;
+  maxNestedWorkflowDepth?: number;
   onLibraryChange?: (library: WorkflowEditorLibrary<TNodeData, TEdgeData>) => void;
+  onDocumentPathChange?: (path: WorkflowEditorDocumentPathItem[]) => void;
   onError?: (error: Error) => void;
   onSelectionChange?: (selection: WorkflowWorkbenchSelection<TNodeData, TEdgeData>) => void;
   renderNodeTemplate?: WorkflowWorkbenchProps<
@@ -88,7 +101,10 @@ export function WorkflowEditor<
   readOnly = false,
   className,
   maxVersions = defaultWorkflowEditorMaxVersions,
+  enableNestedWorkflows = true,
+  maxNestedWorkflowDepth = 64,
   onLibraryChange,
+  onDocumentPathChange,
   onError,
   onSelectionChange,
   renderNodeTemplate,
@@ -109,13 +125,30 @@ export function WorkflowEditor<
   const [saveState, setSaveState] = useState<SaveState>("loading");
   const [selection, setSelection] =
     useState<WorkflowWorkbenchSelection<TNodeData, TEdgeData>>(null);
-  const activeEntry = activeWorkflowEditorEntry(library);
+  const initialActiveEntry = activeWorkflowEditorEntry(fallbackLibrary);
+  const [documentPath, setDocumentPath] = useState<WorkflowEditorDocumentPathItem[]>(() =>
+    initialActiveEntry ? [{ documentId: initialActiveEntry.id }] : [],
+  );
+  const [historyByDocumentId, setHistoryByDocumentId] = useState<
+    Record<string, WorkflowEditorHistoryState<TNodeData, TEdgeData>>
+  >(() =>
+    initialActiveEntry
+      ? { [initialActiveEntry.id]: createWorkflowEditorHistory(initialActiveEntry.document) }
+      : {},
+  );
+  const activeEntry = workflowEditorEntryForPath(library, documentPath);
   const [nameDraft, setNameDraft] = useState(activeEntry?.name ?? "Untitled Workflow");
   const [selectedVersionId, setSelectedVersionId] = useState(activeEntry?.versions[0]?.id ?? "");
-  const [history, setHistory] = useState<WorkflowEditorHistoryState<TNodeData, TEdgeData>>(
-    createWorkflowEditorHistory(activeEntry?.document ?? createBlankWorkflowEditorDocument()),
-  );
   const importInputRef = useRef<HTMLInputElement | null>(null);
+  const activeDocument =
+    activeEntry?.document ?? createBlankWorkflowEditorDocument<TNodeData, TEdgeData>();
+  const history =
+    (activeEntry ? historyByDocumentId[activeEntry.id] : undefined) ??
+    createWorkflowEditorHistory(activeDocument);
+  const documentReferenceOptions = enableNestedWorkflows
+    ? listWorkflowEditorDocumentReferenceOptions(library)
+    : undefined;
+  const canOpenNestedWorkflow = documentPath.length < Math.max(1, maxNestedWorkflowDepth);
 
   useEffect(() => {
     let canceled = false;
@@ -133,8 +166,9 @@ export function WorkflowEditor<
           : fallbackLibrary;
         setLibrary(nextLibrary);
         const nextEntry = activeWorkflowEditorEntry(nextLibrary);
-        setHistory(
-          createWorkflowEditorHistory(nextEntry?.document ?? createBlankWorkflowEditorDocument()),
+        setDocumentPath(nextEntry ? [{ documentId: nextEntry.id }] : []);
+        setHistoryByDocumentId(
+          nextEntry ? { [nextEntry.id]: createWorkflowEditorHistory(nextEntry.document) } : {},
         );
         setNameDraft(nextEntry?.name ?? "Untitled Workflow");
         setSelectedVersionId(nextEntry?.versions[0]?.id ?? "");
@@ -148,6 +182,11 @@ export function WorkflowEditor<
           error instanceof Error ? error : new Error("Failed to load workflow library");
         onError?.(nextError);
         setLibrary(fallbackLibrary);
+        const nextEntry = activeWorkflowEditorEntry(fallbackLibrary);
+        setDocumentPath(nextEntry ? [{ documentId: nextEntry.id }] : []);
+        setHistoryByDocumentId(
+          nextEntry ? { [nextEntry.id]: createWorkflowEditorHistory(nextEntry.document) } : {},
+        );
         setSaveState("error");
       })
       .finally(() => {
@@ -191,15 +230,30 @@ export function WorkflowEditor<
     setNameDraft(activeEntry?.name ?? "Untitled Workflow");
     setSelectedVersionId(activeEntry?.versions[0]?.id ?? "");
     setSelection(null);
-    setHistory(
-      resetWorkflowEditorHistory(activeEntry?.document ?? createBlankWorkflowEditorDocument()),
-    );
   }, [activeEntry?.id]);
+
+  useEffect(() => {
+    if (!activeEntry) {
+      return;
+    }
+
+    setHistoryByDocumentId((current) =>
+      current[activeEntry.id]
+        ? current
+        : { ...current, [activeEntry.id]: createWorkflowEditorHistory(activeEntry.document) },
+    );
+  }, [activeEntry]);
+
+  useEffect(() => {
+    onDocumentPathChange?.(documentPath);
+  }, [documentPath, onDocumentPathChange]);
 
   const selectedNodeId = selection?.type === "node" ? selection.id : null;
   const selectedEdgeId = selection?.type === "edge" ? selection.id : null;
-  const activeDocument =
-    activeEntry?.document ?? createBlankWorkflowEditorDocument<TNodeData, TEdgeData>();
+  const documentPathEntries = documentPath.map((item) => ({
+    documentId: item.documentId,
+    entry: library.documents.find((candidate) => candidate.id === item.documentId) ?? null,
+  }));
 
   const updateLibrary = (nextLibrary: WorkflowEditorLibrary<TNodeData, TEdgeData>) => {
     setSaveState("dirty");
@@ -219,7 +273,10 @@ export function WorkflowEditor<
     const nextEntry = updater(activeEntry);
     updateLibrary(upsertWorkflowEditorEntry(library, nextEntry, { activate: true }));
     if (options.resetHistory) {
-      setHistory(resetWorkflowEditorHistory(nextEntry.document));
+      setHistoryByDocumentId((current) => ({
+        ...current,
+        [nextEntry.id]: resetWorkflowEditorHistory(nextEntry.document),
+      }));
     }
   };
 
@@ -229,7 +286,7 @@ export function WorkflowEditor<
     }
 
     const nextHistory = commitWorkflowEditorHistory(history, document);
-    setHistory(nextHistory);
+    setHistoryByDocumentId((current) => ({ ...current, [activeEntry.id]: nextHistory }));
     updateActiveEntry((entry) => ({
       ...entry,
       updatedAt: new Date().toISOString(),
@@ -244,7 +301,11 @@ export function WorkflowEditor<
     }
 
     setSelection(null);
-    setHistory(resetWorkflowEditorHistory(entry.document));
+    setDocumentPath([{ documentId: entry.id }]);
+    setHistoryByDocumentId((current) => ({
+      ...current,
+      [entry.id]: current[entry.id] ?? createWorkflowEditorHistory(entry.document),
+    }));
     updateLibrary({ ...library, activeDocumentId: entry.id });
   };
 
@@ -256,7 +317,11 @@ export function WorkflowEditor<
     const entry = createWorkflowEditorEntry<TNodeData, TEdgeData>({
       name: "Untitled Workflow",
     });
-    setHistory(resetWorkflowEditorHistory(entry.document));
+    setDocumentPath([{ documentId: entry.id }]);
+    setHistoryByDocumentId((current) => ({
+      ...current,
+      [entry.id]: createWorkflowEditorHistory(entry.document),
+    }));
     updateLibrary(upsertWorkflowEditorEntry(library, entry, { activate: true }));
   };
 
@@ -275,8 +340,11 @@ export function WorkflowEditor<
 
     const nextLibrary = duplicateWorkflowEditorEntry(library, activeEntry.id);
     const nextEntry = activeWorkflowEditorEntry(nextLibrary);
-    setHistory(
-      resetWorkflowEditorHistory(nextEntry?.document ?? createBlankWorkflowEditorDocument()),
+    setDocumentPath(nextEntry ? [{ documentId: nextEntry.id }] : []);
+    setHistoryByDocumentId((current) =>
+      nextEntry
+        ? { ...current, [nextEntry.id]: resetWorkflowEditorHistory(nextEntry.document) }
+        : current,
     );
     updateLibrary(nextLibrary);
   };
@@ -287,11 +355,19 @@ export function WorkflowEditor<
     }
 
     const nextLibrary = removeWorkflowEditorEntry(library, activeEntry.id);
-    const nextEntry = activeWorkflowEditorEntry(nextLibrary);
-    setHistory(
-      resetWorkflowEditorHistory(nextEntry?.document ?? createBlankWorkflowEditorDocument()),
-    );
-    updateLibrary(nextLibrary);
+    const nextPath = reconcileWorkflowEditorDocumentPath(nextLibrary, documentPath);
+    const nextEntry = workflowEditorEntryForPath(nextLibrary, nextPath);
+    setDocumentPath(nextPath);
+    setHistoryByDocumentId((current) => {
+      const { [activeEntry.id]: _removed, ...remaining } = current;
+      return nextEntry && !remaining[nextEntry.id]
+        ? { ...remaining, [nextEntry.id]: resetWorkflowEditorHistory(nextEntry.document) }
+        : remaining;
+    });
+    updateLibrary({
+      ...nextLibrary,
+      activeDocumentId: nextEntry?.id ?? nextLibrary.activeDocumentId,
+    });
   };
 
   const saveVersion = () => {
@@ -319,7 +395,7 @@ export function WorkflowEditor<
     }
 
     const nextHistory = undoWorkflowEditorHistory(history);
-    setHistory(nextHistory);
+    setHistoryByDocumentId((current) => ({ ...current, [activeEntry.id]: nextHistory }));
     updateActiveEntry((entry) => ({
       ...entry,
       updatedAt: new Date().toISOString(),
@@ -333,7 +409,7 @@ export function WorkflowEditor<
     }
 
     const nextHistory = redoWorkflowEditorHistory(history);
-    setHistory(nextHistory);
+    setHistoryByDocumentId((current) => ({ ...current, [activeEntry.id]: nextHistory }));
     updateActiveEntry((entry) => ({
       ...entry,
       updatedAt: new Date().toISOString(),
@@ -374,12 +450,83 @@ export function WorkflowEditor<
         updatedAt: restored.exportedAt,
         document: restored.document,
       });
-      setHistory(resetWorkflowEditorHistory(entry.document));
+      setDocumentPath([{ documentId: entry.id }]);
+      setHistoryByDocumentId((current) => ({
+        ...current,
+        [entry.id]: resetWorkflowEditorHistory(entry.document),
+      }));
       updateLibrary(upsertWorkflowEditorEntry(library, entry, { activate: true }));
     } catch (error) {
       setSaveState("error");
       onError?.(error instanceof Error ? error : new Error("Failed to import workflow document"));
     }
+  };
+
+  const openWorkflowReference = (node: WorkflowEditorNode<TNodeData>) => {
+    if (!enableNestedWorkflows || !canOpenNestedWorkflow) {
+      return;
+    }
+
+    const targetEntry = resolveWorkflowEditorDocumentReference(library, node.workflowRef);
+    if (!targetEntry) {
+      return;
+    }
+
+    setSelection(null);
+    setDocumentPath([...documentPath, { documentId: targetEntry.id }]);
+    setHistoryByDocumentId((current) => ({
+      ...current,
+      [targetEntry.id]:
+        current[targetEntry.id] ?? createWorkflowEditorHistory(targetEntry.document),
+    }));
+    updateLibrary({ ...library, activeDocumentId: targetEntry.id });
+  };
+
+  const createWorkflowReference = (node: WorkflowEditorNode<TNodeData>) => {
+    if (!activeEntry || readOnly || !enableNestedWorkflows || !canOpenNestedWorkflow) {
+      return;
+    }
+
+    const childEntry = createWorkflowEditorEntry<TNodeData, TEdgeData>({
+      name: `${node.label} Workflow`,
+    });
+    const nextParentDocument = updateWorkflowEditorNodeWorkflowReference(
+      activeEntry.document,
+      node.id,
+      { documentId: childEntry.id },
+    );
+    const nextParentHistory = commitWorkflowEditorHistory(history, nextParentDocument);
+    const nextParentEntry = {
+      ...activeEntry,
+      updatedAt: new Date().toISOString(),
+      document: nextParentHistory.present,
+    };
+    const nextLibrary = upsertWorkflowEditorEntry(
+      upsertWorkflowEditorEntry(library, nextParentEntry),
+      childEntry,
+      { activate: true },
+    );
+
+    setSelection(null);
+    setDocumentPath([...documentPath, { documentId: childEntry.id }]);
+    setHistoryByDocumentId((current) => ({
+      ...current,
+      [activeEntry.id]: nextParentHistory,
+      [childEntry.id]: createWorkflowEditorHistory(childEntry.document),
+    }));
+    updateLibrary(nextLibrary);
+  };
+
+  const selectDocumentPathItem = (index: number) => {
+    const nextPath = documentPath.slice(0, index + 1);
+    const nextEntry = workflowEditorEntryForPath(library, nextPath);
+    if (!nextEntry) {
+      return;
+    }
+
+    setSelection(null);
+    setDocumentPath(nextPath);
+    updateLibrary({ ...library, activeDocumentId: nextEntry.id });
   };
 
   return (
@@ -542,12 +689,36 @@ export function WorkflowEditor<
         </div>
       </WorkbenchToolbar>
 
+      {enableNestedWorkflows ? (
+        <WorkbenchToolbar
+          className="flex flex-wrap items-center gap-2 border border-border bg-background px-3 py-2"
+          aria-label="Workflow path"
+        >
+          <span className="text-xs text-muted-foreground">Path</span>
+          {documentPathEntries.map((item, index) => (
+            <Button
+              key={`${item.documentId}-${index}`}
+              type="button"
+              size="sm"
+              variant={index === documentPathEntries.length - 1 ? "secondary" : "ghost"}
+              disabled={!item.entry || index === documentPathEntries.length - 1}
+              onClick={() => selectDocumentPathItem(index)}
+            >
+              {item.entry?.name ?? `Missing: ${item.documentId}`}
+            </Button>
+          ))}
+        </WorkbenchToolbar>
+      ) : null}
+
       <WorkflowWorkbench
         document={activeDocument}
         selectedNodeId={selectedNodeId}
         selectedEdgeId={selectedEdgeId}
         readOnly={readOnly}
         nodeTemplates={nodeTemplates}
+        documentReferences={documentReferenceOptions}
+        onOpenWorkflowReference={canOpenNestedWorkflow ? openWorkflowReference : undefined}
+        onCreateWorkflowReference={canOpenNestedWorkflow ? createWorkflowReference : undefined}
         onDocumentChange={updateDocument}
         onSelectionChange={(nextSelection) => {
           setSelection(nextSelection);
@@ -559,6 +730,44 @@ export function WorkflowEditor<
       />
     </section>
   );
+}
+
+function workflowEditorEntryForPath<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+>(library: WorkflowEditorLibrary<TNodeData, TEdgeData>, path: WorkflowEditorDocumentPathItem[]) {
+  const pathEntry = path.at(-1);
+  if (pathEntry) {
+    const entry = library.documents.find((candidate) => candidate.id === pathEntry.documentId);
+    if (entry) {
+      return entry;
+    }
+  }
+
+  return activeWorkflowEditorEntry(library);
+}
+
+function reconcileWorkflowEditorDocumentPath<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+>(library: WorkflowEditorLibrary<TNodeData, TEdgeData>, path: WorkflowEditorDocumentPathItem[]) {
+  const documentIds = new Set(library.documents.map((entry) => entry.id));
+  const nextPath: WorkflowEditorDocumentPathItem[] = [];
+
+  for (const item of path) {
+    if (!documentIds.has(item.documentId)) {
+      break;
+    }
+
+    nextPath.push(item);
+  }
+
+  if (nextPath.length > 0) {
+    return nextPath;
+  }
+
+  const fallbackEntry = activeWorkflowEditorEntry(library) ?? library.documents[0];
+  return fallbackEntry ? [{ documentId: fallbackEntry.id }] : [];
 }
 
 function formatSaveState(state: SaveState) {

@@ -21,6 +21,19 @@ async function selectNode(page: Page, label: string) {
   await page.getByRole("button", { name: label, exact: true }).click();
 }
 
+async function clickAction(page: Page, name: string) {
+  await page.getByRole("button", { name, exact: true }).first().click();
+}
+
+async function selectInspectorWorkflowReference(page: Page, label: string) {
+  await page
+    .locator('button[aria-label="Workflow document"]')
+    .filter({ visible: true })
+    .first()
+    .click();
+  await page.getByRole("option", { name: label, exact: true }).click();
+}
+
 test.describe("WorkflowWorkbench", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/");
@@ -200,6 +213,72 @@ test.describe("WorkflowWorkbench", () => {
 
     await expect(page.getByTestId("active-document-name")).toHaveText("Imported Flow");
     await expect(page.getByTestId("node-count")).toHaveText("1");
+  });
+
+  test("creates a nested workflow, opens it, and returns through breadcrumbs", async ({ page }) => {
+    await page.goto("/");
+    await selectNode(page, "Input");
+    await clickAction(page, "Create nested workflow");
+
+    await expect(page.getByTestId("document-count")).toHaveText("2");
+    await expect(page.getByTestId("node-count")).toHaveText("0");
+    await expect(page.getByTestId("active-document-name")).toHaveText("Input Workflow");
+    await expect(page.getByTestId("document-path-json")).toContainText("demo-workflow");
+
+    await page.getByRole("button", { name: "Demo Workflow" }).click();
+    await expect(page.getByTestId("active-document-name")).toHaveText("Demo Workflow");
+    await expect(page.getByTestId("node-count")).toHaveText("3");
+    await expect(page.getByTestId("document-json")).toContainText('"workflowRef"');
+  });
+
+  test("assigns an existing workflow reference and drills into it", async ({ page }) => {
+    await page.goto("/");
+
+    await page.getByRole("button", { name: "New" }).click();
+    await page.getByRole("textbox", { name: "Document name" }).fill("Child Flow");
+    await page.getByRole("button", { name: "Rename" }).click();
+    await page.getByLabel("Workflow document").first().selectOption({ label: "Demo Workflow" });
+    await selectNode(page, "Input");
+    await selectInspectorWorkflowReference(page, "Child Flow");
+    await clickAction(page, "Apply");
+    await clickAction(page, "Open workflow");
+
+    await expect(page.getByTestId("active-document-name")).toHaveText("Child Flow");
+    await expect(page.getByTestId("node-count")).toHaveText("0");
+  });
+
+  test("allows self-references until the nested workflow depth cap", async ({ page }) => {
+    await page.goto("/?maxDepth=2");
+    await selectNode(page, "Input");
+    await selectInspectorWorkflowReference(page, "Demo Workflow");
+    await clickAction(page, "Apply");
+    await clickAction(page, "Open workflow");
+
+    await expect(page.getByTestId("active-document-name")).toHaveText("Demo Workflow");
+    await expect(page.getByTestId("document-path-json")).toContainText("demo-workflow");
+    await selectNode(page, "Input");
+    await expect(page.getByRole("button", { name: "Open workflow" }).first()).toBeDisabled();
+  });
+
+  test("preserves and surfaces missing workflow references", async ({ page }) => {
+    await page.goto("/");
+    await selectNode(page, "Input");
+    await clickAction(page, "Create nested workflow");
+    await expect(page.getByTestId("active-document-name")).toHaveText("Input Workflow");
+
+    await page.getByRole("button", { name: "Demo Workflow" }).click();
+    await page.getByLabel("Workflow document").first().selectOption({ label: "Input Workflow" });
+    await page.getByRole("button", { name: "Delete document" }).click();
+    await expect(page.getByTestId("active-document-name")).toHaveText("Demo Workflow");
+
+    await selectNode(page, "Input");
+    await expect(page.getByTestId("document-json")).toContainText('"workflowRef"');
+    await expect(
+      page.getByText(/Missing workflow document/).filter({ visible: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Open workflow" }).filter({ visible: true }).first(),
+    ).toBeDisabled();
   });
 
   test("recovers from corrupt localStorage", async ({ page }) => {
