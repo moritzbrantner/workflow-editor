@@ -23,7 +23,7 @@ const initialDocument: WorkflowEditorDocument = normalizeWorkflowEditorDocument(
       x: 0,
       y: 0,
       category: "Source",
-      outputs: [{ id: "out", label: "Out", kind: "text" }],
+      outputs: [{ id: "out", label: "Out", type: { kind: "string" } }],
     },
     {
       id: "transform",
@@ -31,8 +31,8 @@ const initialDocument: WorkflowEditorDocument = normalizeWorkflowEditorDocument(
       x: 280,
       y: 0,
       category: "Processor",
-      inputs: [{ id: "in", label: "In", kind: "text" }],
-      outputs: [{ id: "out", label: "Out", kind: "text" }],
+      inputs: [{ id: "in", label: "In", type: { kind: "string" } }],
+      outputs: [{ id: "out", label: "Out", type: { kind: "string" } }],
     },
     {
       id: "output",
@@ -40,7 +40,7 @@ const initialDocument: WorkflowEditorDocument = normalizeWorkflowEditorDocument(
       x: 560,
       y: 0,
       category: "Sink",
-      inputs: [{ id: "in", label: "In", kind: "text" }],
+      inputs: [{ id: "in", label: "In", type: { kind: "string" } }],
     },
   ],
   edges: [
@@ -71,10 +71,10 @@ const nodeTemplates = [
     label: "Decision",
     description: "Route a workflow by condition.",
     category: "Logic",
-    inputs: [{ id: "in", label: "In", kind: "text" }],
+    inputs: [{ id: "in", label: "In", type: { kind: "string" } }],
     outputs: [
-      { id: "yes", label: "Yes", kind: "text" },
-      { id: "no", label: "No", kind: "text" },
+      { id: "yes", label: "Yes", type: { kind: "string" } },
+      { id: "no", label: "No", type: { kind: "string" } },
     ],
   },
   {
@@ -82,7 +82,7 @@ const nodeTemplates = [
     label: "Webhook",
     description: "Send workflow data to an HTTP endpoint.",
     category: "Integration",
-    inputs: [{ id: "in", label: "In", kind: "text" }],
+    inputs: [{ id: "in", label: "In", type: { kind: "string" } }],
   },
 ];
 

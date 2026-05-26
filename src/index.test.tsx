@@ -6,6 +6,7 @@ import {
   WorkflowWorkbench,
   addWorkflowEditorNode,
   activeWorkflowEditorEntry,
+  analyzeWorkflowEditorPortTypes,
   buildWorkflowEditorDocumentFile,
   canRedoWorkflowEditorHistory,
   canUndoWorkflowEditorHistory,
@@ -31,6 +32,7 @@ import {
   hasWorkflowEditorNodeComposition,
   hasWorkflowEditorWorkflowReference,
   isWorkflowEditorDirectedAcyclicGraph,
+  isWorkflowEditorPortTypeAssignable,
   listWorkflowEditorDocumentReferenceOptions,
   loadWorkflowEditorLibrary,
   moveWorkflowEditorNode,
@@ -66,22 +68,22 @@ const document: WorkflowEditorDocument = normalizeWorkflowEditorDocument({
       label: "Input",
       x: 0,
       y: 0,
-      outputs: [{ id: "out", label: "Out", kind: "text" }],
+      outputs: [{ id: "out", label: "Out", type: { kind: "string" } }],
     },
     {
       id: "transform",
       label: "Transform",
       x: 240,
       y: 0,
-      inputs: [{ id: "in", label: "In", kind: "text" }],
-      outputs: [{ id: "out", label: "Out", kind: "text" }],
+      inputs: [{ id: "in", label: "In", type: { kind: "string" } }],
+      outputs: [{ id: "out", label: "Out", type: { kind: "string" } }],
     },
     {
       id: "output",
       label: "Output",
       x: 480,
       y: 0,
-      inputs: [{ id: "in", label: "In", kind: "text" }],
+      inputs: [{ id: "in", label: "In", type: { kind: "string" } }],
     },
   ],
   edges: [
@@ -118,7 +120,7 @@ describe("@moritzbrantner/workflow-editor core", () => {
       label: "Review",
       x: 360,
       y: 120,
-      inputs: [{ id: "in", label: "In", kind: "text" }],
+      inputs: [{ id: "in", label: "In", type: { kind: "string" } }],
     });
     const moved = moveWorkflowEditorNode(added, "review", { x: 400, y: 160 });
     const updated = updateWorkflowEditorNode(moved, "review", { label: "Human review" });
@@ -178,9 +180,15 @@ describe("@moritzbrantner/workflow-editor core", () => {
               label: "A",
               x: 0,
               y: 0,
-              outputs: [{ id: "out", label: "Out", kind: "text" }],
+              outputs: [{ id: "out", label: "Out", type: { kind: "string" } }],
             },
-            { id: "b", label: "B", x: 0, y: 0, inputs: [{ id: "in", label: "In", kind: "image" }] },
+            {
+              id: "b",
+              label: "B",
+              x: 0,
+              y: 0,
+              inputs: [{ id: "in", label: "In", type: { kind: "number" } }],
+            },
           ],
           edges: [],
         },
@@ -284,7 +292,7 @@ describe("@moritzbrantner/workflow-editor core", () => {
     expect(composedTemplate).toMatchObject({
       id: "ingest-component",
       label: "Ingest component",
-      outputs: [expect.objectContaining({ id: "out-transform-out", kind: "text" })],
+      outputs: [expect.objectContaining({ id: "out-transform-out", type: { kind: "string" } })],
     });
     expect(composedTemplate?.composition?.nodes.map((node) => node.id)).toEqual([
       "input",
@@ -346,24 +354,24 @@ describe("@moritzbrantner/workflow-editor core", () => {
           label: "A",
           x: 0,
           y: 0,
-          inputs: [{ id: "in", label: "In", kind: "text" }],
-          outputs: [{ id: "out", label: "Out", kind: "text" }],
+          inputs: [{ id: "in", label: "In", type: { kind: "string" } }],
+          outputs: [{ id: "out", label: "Out", type: { kind: "string" } }],
         },
         {
           id: "b",
           label: "B",
           x: 220,
           y: 0,
-          inputs: [{ id: "in", label: "In", kind: "text" }],
-          outputs: [{ id: "out", label: "Out", kind: "text" }],
+          inputs: [{ id: "in", label: "In", type: { kind: "string" } }],
+          outputs: [{ id: "out", label: "Out", type: { kind: "string" } }],
         },
         {
           id: "c",
           label: "C",
           x: 440,
           y: 0,
-          inputs: [{ id: "in", label: "In", kind: "text" }],
-          outputs: [{ id: "out", label: "Out", kind: "text" }],
+          inputs: [{ id: "in", label: "In", type: { kind: "string" } }],
+          outputs: [{ id: "out", label: "Out", type: { kind: "string" } }],
         },
       ],
       edges: [
@@ -411,6 +419,188 @@ describe("@moritzbrantner/workflow-editor core", () => {
 
     expect(normalized.edges.map((edge) => edge.id)).toEqual(["a-b", "b-c"]);
     expect(isWorkflowEditorDirectedAcyclicGraph(normalized)).toBe(true);
+  });
+
+  test("validates TypeScript-like port type assignability", () => {
+    const userType = {
+      kind: "object" as const,
+      properties: {
+        id: { type: { kind: "string" as const } },
+        email: { type: { kind: "string" as const } },
+      },
+    };
+    const adminType = {
+      kind: "object" as const,
+      properties: {
+        permissions: {
+          type: { kind: "array" as const, element: { kind: "string" as const } },
+        },
+      },
+    };
+    const typeDefinitions = [
+      { name: "User", type: userType },
+      { name: "AdminUser", extends: ["User"], type: adminType },
+    ];
+
+    expect(
+      isWorkflowEditorPortTypeAssignable(
+        { kind: "ref", name: "AdminUser" },
+        { kind: "ref", name: "User" },
+        typeDefinitions,
+      ),
+    ).toBe(true);
+    expect(
+      isWorkflowEditorPortTypeAssignable(
+        { kind: "ref", name: "User" },
+        { kind: "ref", name: "AdminUser" },
+        typeDefinitions,
+      ),
+    ).toBe(false);
+    expect(
+      isWorkflowEditorPortTypeAssignable(
+        {
+          kind: "object",
+          properties: {
+            id: { type: { kind: "string" } },
+            email: { type: { kind: "string" } },
+            role: { type: { kind: "literal", value: "admin" } },
+          },
+        },
+        userType,
+      ),
+    ).toBe(true);
+    expect(
+      isWorkflowEditorPortTypeAssignable(
+        { kind: "object", properties: { id: { type: { kind: "string" }, optional: true } } },
+        { kind: "object", properties: { id: { type: { kind: "string" } } } },
+      ),
+    ).toBe(false);
+    expect(
+      isWorkflowEditorPortTypeAssignable({ kind: "literal", value: "ready" }, { kind: "string" }),
+    ).toBe(true);
+    expect(
+      isWorkflowEditorPortTypeAssignable(
+        { kind: "union", types: [{ kind: "literal", value: "a" }, { kind: "string" }] },
+        { kind: "string" },
+      ),
+    ).toBe(true);
+    expect(
+      isWorkflowEditorPortTypeAssignable(
+        { kind: "union", types: [{ kind: "string" }, { kind: "number" }] },
+        { kind: "string" },
+      ),
+    ).toBe(false);
+    expect(
+      isWorkflowEditorPortTypeAssignable(
+        { kind: "literal", value: 1 },
+        { kind: "union", types: [{ kind: "string" }, { kind: "number" }] },
+      ),
+    ).toBe(true);
+    expect(
+      isWorkflowEditorPortTypeAssignable(
+        { kind: "array", element: { kind: "literal", value: "active" } },
+        { kind: "array", element: { kind: "string" } },
+      ),
+    ).toBe(true);
+
+    const typedDocument = normalizeWorkflowEditorDocument({
+      nodes: [
+        {
+          id: "admin",
+          label: "Admin",
+          x: 0,
+          y: 0,
+          outputs: [{ id: "out", label: "Out", type: { kind: "ref", name: "AdminUser" } }],
+        },
+        {
+          id: "user",
+          label: "User",
+          x: 240,
+          y: 0,
+          inputs: [{ id: "in", label: "In", type: { kind: "ref", name: "User" } }],
+        },
+        {
+          id: "admin-sink",
+          label: "Admin Sink",
+          x: 480,
+          y: 0,
+          inputs: [{ id: "in", label: "In", type: { kind: "ref", name: "AdminUser" } }],
+        },
+      ],
+      edges: [],
+    });
+
+    expect(
+      validateWorkflowEditorConnection(
+        typedDocument,
+        {
+          sourceNodeId: "admin",
+          sourcePortId: "out",
+          targetNodeId: "user",
+          targetPortId: "in",
+        },
+        { typeDefinitions },
+      ),
+    ).toEqual({ valid: true });
+    expect(
+      validateWorkflowEditorConnection(
+        {
+          ...typedDocument,
+          nodes: [
+            {
+              id: "user-source",
+              label: "User Source",
+              x: 0,
+              y: 0,
+              outputs: [{ id: "out", label: "Out", type: { kind: "ref", name: "User" } }],
+            },
+            typedDocument.nodes[2]!,
+          ],
+        },
+        {
+          sourceNodeId: "user-source",
+          sourcePortId: "out",
+          targetNodeId: "admin-sink",
+          targetPortId: "in",
+        },
+        { typeDefinitions },
+      ).reason,
+    ).toBe("kind-mismatch");
+
+    const missingTypeDocument = normalizeWorkflowEditorDocument({
+      nodes: [
+        {
+          id: "source",
+          label: "Source",
+          x: 0,
+          y: 0,
+          outputs: [{ id: "out", label: "Out", type: { kind: "ref", name: "Missing" } }],
+        },
+        {
+          id: "target",
+          label: "Target",
+          x: 240,
+          y: 0,
+          inputs: [{ id: "in", label: "In", type: { kind: "string" } }],
+        },
+      ],
+      edges: [
+        {
+          id: "source-target",
+          sourceNodeId: "source",
+          sourcePortId: "out",
+          targetNodeId: "target",
+          targetPortId: "in",
+        },
+      ],
+    });
+
+    expect(analyzeWorkflowEditorPortTypes(missingTypeDocument)).toEqual([
+      expect.objectContaining({
+        message: "Missing workflow port type definition: Missing",
+        type: "missing-type-definition",
+      }),
+    ]);
   });
 });
 
@@ -734,8 +924,8 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
           {
             id: "decision",
             label: "Decision",
-            inputs: [{ id: "in", label: "In", kind: "text" }],
-            outputs: [{ id: "out", label: "Out", kind: "text" }],
+            inputs: [{ id: "in", label: "In", type: { kind: "string" } }],
+            outputs: [{ id: "out", label: "Out", type: { kind: "string" } }],
           },
         ]}
         renderNodeTemplate={(template) => template.label}
@@ -769,6 +959,75 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     );
     fireEvent.click(screen.getAllByRole("button", { name: /Decision/ })[0]!);
     expect(handleDocumentChange).not.toHaveBeenCalled();
+  });
+
+  test("uses type definitions for workbench connection validation", () => {
+    const handleDocumentChange = vi.fn();
+    const typedDocument = normalizeWorkflowEditorDocument({
+      nodes: [
+        {
+          id: "source",
+          label: "Source",
+          x: 0,
+          y: 0,
+          outputs: [{ id: "out", label: "Out", type: { kind: "ref", name: "AdminUser" } }],
+        },
+        {
+          id: "target",
+          label: "Target",
+          x: 240,
+          y: 0,
+          inputs: [{ id: "in", label: "In", type: { kind: "ref", name: "User" } }],
+        },
+      ],
+      edges: [],
+    });
+
+    render(
+      <WorkflowWorkbench
+        document={typedDocument}
+        typeDefinitions={[
+          {
+            name: "User",
+            type: {
+              kind: "object",
+              properties: {
+                id: { type: { kind: "string" } },
+              },
+            },
+          },
+          {
+            name: "AdminUser",
+            extends: ["User"],
+            type: {
+              kind: "object",
+              properties: {
+                permissions: {
+                  type: { kind: "array", element: { kind: "string" } },
+                },
+              },
+            },
+          },
+        ]}
+        onDocumentChange={handleDocumentChange}
+      />,
+    );
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Start Source Out" })[0]!);
+    fireEvent.click(screen.getAllByRole("button", { name: "Connect to Target In" })[0]!);
+
+    expect(handleDocumentChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        edges: [
+          expect.objectContaining({
+            sourceNodeId: "source",
+            sourcePortId: "out",
+            targetNodeId: "target",
+            targetPortId: "in",
+          }),
+        ],
+      }),
+    );
   });
 
   test("assigns workflow references from the default inspector", () => {

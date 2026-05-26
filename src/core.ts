@@ -21,7 +21,46 @@ export type {
   WorkflowEditorSubgraph,
 };
 
-export type WorkflowEditorPort = UiWorkflowNodePort;
+export type WorkflowEditorPortType =
+  | { kind: "any" }
+  | { kind: "unknown" }
+  | { kind: "never" }
+  | { kind: "string" | "number" | "boolean" | "null" | "undefined" }
+  | { kind: "literal"; value: string | number | boolean | null }
+  | { kind: "array"; element: WorkflowEditorPortType }
+  | { kind: "object"; properties?: Record<string, WorkflowEditorPortProperty> }
+  | { kind: "union"; types: WorkflowEditorPortType[] }
+  | { kind: "intersection"; types: WorkflowEditorPortType[] }
+  | { kind: "ref"; name: string };
+
+export type WorkflowEditorPortProperty = {
+  type: WorkflowEditorPortType;
+  optional?: boolean;
+};
+
+export type WorkflowEditorTypeDefinition = {
+  name: string;
+  type: WorkflowEditorPortType;
+  extends?: string[];
+};
+
+export type WorkflowEditorTypeValidationOptions = {
+  typeDefinitions?: readonly WorkflowEditorTypeDefinition[];
+};
+
+export type WorkflowEditorTypeDiagnostic = {
+  type: "incompatible-port-type" | "missing-type-definition";
+  edgeId?: string;
+  sourceNodeId: string;
+  sourcePortId: string;
+  targetNodeId: string;
+  targetPortId: string;
+  message: string;
+};
+
+export type WorkflowEditorPort = Omit<UiWorkflowNodePort, "kind"> & {
+  type: WorkflowEditorPortType;
+};
 
 export type WorkflowEditorWorkflowReference = {
   documentId: string;
@@ -42,10 +81,12 @@ export type WorkflowEditorNodeComposition<TNodeData = Record<string, unknown>> =
 
 export type WorkflowEditorNode<TData = Record<string, unknown>> = Omit<
   UiWorkflowNodeData,
-  "metadata"
+  "inputs" | "metadata" | "outputs"
 > & {
   x: number;
   y: number;
+  inputs?: WorkflowEditorPort[];
+  outputs?: WorkflowEditorPort[];
   data?: TData;
   workflowRef?: WorkflowEditorWorkflowReference;
   composition?: WorkflowEditorNodeComposition<TData>;
@@ -606,6 +647,7 @@ export function validateWorkflowEditorConnection<
 >(
   document: WorkflowEditorDocument<TNodeData, TEdgeData>,
   connection: WorkflowEditorConnectionInput,
+  options: WorkflowEditorTypeValidationOptions = {},
 ): WorkflowEditorConnectionValidity {
   const sourceNode = findWorkflowEditorNode(document, connection.sourceNodeId);
   const targetNode = findWorkflowEditorNode(document, connection.targetNodeId);
@@ -625,7 +667,9 @@ export function validateWorkflowEditorConnection<
     return { valid: false, reason: "missing-port" };
   }
 
-  if (sourcePort.kind && targetPort.kind && sourcePort.kind !== targetPort.kind) {
+  if (
+    !isWorkflowEditorPortTypeAssignable(sourcePort.type, targetPort.type, options.typeDefinitions)
+  ) {
     return { valid: false, reason: "kind-mismatch" };
   }
 
@@ -654,8 +698,9 @@ export function connectWorkflowEditorNodes<
 >(
   document: WorkflowEditorDocument<TNodeData, TEdgeData>,
   connection: WorkflowEditorConnectionInput,
+  options: WorkflowEditorTypeValidationOptions = {},
 ): WorkflowEditorDocument<TNodeData, TEdgeData> {
-  const validity = validateWorkflowEditorConnection(document, connection);
+  const validity = validateWorkflowEditorConnection(document, connection, options);
 
   if (!validity.valid) {
     return document;
@@ -667,6 +712,79 @@ export function connectWorkflowEditorNodes<
     id: edgeId,
     ...connection,
   } as WorkflowEditorEdge<TEdgeData>);
+}
+
+export function analyzeWorkflowEditorPortTypes<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+>(
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>,
+  options: WorkflowEditorTypeValidationOptions = {},
+): WorkflowEditorTypeDiagnostic[] {
+  const diagnostics: WorkflowEditorTypeDiagnostic[] = [];
+  const typeDefinitions = createWorkflowEditorTypeDefinitionMap(options.typeDefinitions);
+
+  for (const edge of document.edges) {
+    const sourceNode = findWorkflowEditorNode(document, edge.sourceNodeId);
+    const targetNode = findWorkflowEditorNode(document, edge.targetNodeId);
+    const sourcePort = sourceNode?.outputs?.find((port) => port.id === edge.sourcePortId);
+    const targetPort = targetNode?.inputs?.find((port) => port.id === edge.targetPortId);
+
+    if (!sourceNode || !targetNode || !sourcePort || !targetPort) {
+      continue;
+    }
+
+    const resolutionErrors = [
+      ...findWorkflowEditorPortTypeResolutionErrors(sourcePort.type, typeDefinitions),
+      ...findWorkflowEditorPortTypeResolutionErrors(targetPort.type, typeDefinitions),
+    ];
+    const uniqueResolutionErrors = [...new Set(resolutionErrors)];
+
+    for (const error of uniqueResolutionErrors) {
+      diagnostics.push({
+        type: "missing-type-definition",
+        edgeId: edge.id,
+        sourceNodeId: edge.sourceNodeId,
+        sourcePortId: edge.sourcePortId,
+        targetNodeId: edge.targetNodeId,
+        targetPortId: edge.targetPortId,
+        message: error,
+      });
+    }
+
+    if (
+      uniqueResolutionErrors.length === 0 &&
+      !isWorkflowEditorPortTypeAssignable(sourcePort.type, targetPort.type, options.typeDefinitions)
+    ) {
+      diagnostics.push({
+        type: "incompatible-port-type",
+        edgeId: edge.id,
+        sourceNodeId: edge.sourceNodeId,
+        sourcePortId: edge.sourcePortId,
+        targetNodeId: edge.targetNodeId,
+        targetPortId: edge.targetPortId,
+        message: `Output port ${edge.sourceNodeId}.${edge.sourcePortId} is not assignable to input port ${edge.targetNodeId}.${edge.targetPortId}`,
+      });
+    }
+  }
+
+  return diagnostics;
+}
+
+export function isWorkflowEditorPortTypeAssignable(
+  source: WorkflowEditorPortType,
+  target: WorkflowEditorPortType,
+  typeDefinitions: readonly WorkflowEditorTypeDefinition[] = [],
+): boolean {
+  return isWorkflowEditorPortTypeAssignableWithState(
+    source,
+    target,
+    {
+      definitions: createWorkflowEditorTypeDefinitionMap(typeDefinitions),
+      resolving: new Set(),
+    },
+    0,
+  );
 }
 
 export function duplicateWorkflowEditorNode<
@@ -845,8 +963,8 @@ export function fromUiWorkflowBuilderNodes<TData = Record<string, unknown>>(
       tags: node.tags,
       x: node.x,
       y: node.y,
-      inputs: node.inputs,
-      outputs: node.outputs,
+      inputs: node.inputs as WorkflowEditorPort[] | undefined,
+      outputs: node.outputs as WorkflowEditorPort[] | undefined,
       data: (node.metadata as TData | undefined) ?? previousNode?.data,
       workflowRef: previousNode?.workflowRef,
       composition: previousNode?.composition,
@@ -893,6 +1011,350 @@ export function toUiWorkflowBuilderViewport(
   viewport: WorkflowEditorViewport | undefined,
 ): UiWorkflowBuilderViewport | undefined {
   return viewport;
+}
+
+type WorkflowEditorPortTypeAssignabilityState = {
+  definitions: Map<string, WorkflowEditorTypeDefinition>;
+  resolving: Set<string>;
+};
+
+function createWorkflowEditorTypeDefinitionMap(
+  typeDefinitions: readonly WorkflowEditorTypeDefinition[] = [],
+) {
+  return new Map(typeDefinitions.map((definition) => [definition.name, definition]));
+}
+
+function isWorkflowEditorPortTypeAssignableWithState(
+  source: WorkflowEditorPortType,
+  target: WorkflowEditorPortType,
+  state: WorkflowEditorPortTypeAssignabilityState,
+  depth: number,
+): boolean {
+  if (depth > 100) {
+    return false;
+  }
+
+  const resolvedSource = resolveWorkflowEditorPortType(source, state);
+  const resolvedTarget = resolveWorkflowEditorPortType(target, state);
+
+  if (!resolvedSource || !resolvedTarget) {
+    return false;
+  }
+
+  if (resolvedSource !== source) {
+    return isWorkflowEditorPortTypeAssignableWithState(resolvedSource, target, state, depth + 1);
+  }
+
+  if (resolvedTarget !== target) {
+    return isWorkflowEditorPortTypeAssignableWithState(source, resolvedTarget, state, depth + 1);
+  }
+
+  if (source.kind === "any" || target.kind === "any") {
+    return true;
+  }
+
+  if (target.kind === "unknown" || source.kind === "never") {
+    return true;
+  }
+
+  if (source.kind === "unknown") {
+    return false;
+  }
+
+  if (target.kind === "never") {
+    return false;
+  }
+
+  if (target.kind === "union") {
+    return target.types.some((type) =>
+      isWorkflowEditorPortTypeAssignableWithState(source, type, state, depth + 1),
+    );
+  }
+
+  if (source.kind === "union") {
+    return source.types.every((type) =>
+      isWorkflowEditorPortTypeAssignableWithState(type, target, state, depth + 1),
+    );
+  }
+
+  if (target.kind === "intersection") {
+    return target.types.every((type) =>
+      isWorkflowEditorPortTypeAssignableWithState(source, type, state, depth + 1),
+    );
+  }
+
+  if (source.kind === "intersection" && target.kind !== "object") {
+    return source.types.some((type) =>
+      isWorkflowEditorPortTypeAssignableWithState(type, target, state, depth + 1),
+    );
+  }
+
+  if (source.kind === "literal") {
+    if (target.kind === "literal") {
+      return source.value === target.value;
+    }
+
+    return target.kind === workflowEditorPrimitiveKindForLiteral(source.value);
+  }
+
+  if (target.kind === "literal") {
+    return false;
+  }
+
+  if (isWorkflowEditorPrimitivePortTypeKind(source.kind)) {
+    return source.kind === target.kind;
+  }
+
+  if (source.kind === "array" && target.kind === "array") {
+    return isWorkflowEditorPortTypeAssignableWithState(
+      source.element,
+      target.element,
+      state,
+      depth + 1,
+    );
+  }
+
+  if (target.kind === "object") {
+    return isWorkflowEditorObjectPortTypeAssignable(source, target, state, depth + 1);
+  }
+
+  return false;
+}
+
+function resolveWorkflowEditorPortType(
+  type: WorkflowEditorPortType,
+  state: WorkflowEditorPortTypeAssignabilityState,
+): WorkflowEditorPortType | null {
+  if (type.kind !== "ref") {
+    return type;
+  }
+
+  if (state.resolving.has(type.name)) {
+    return null;
+  }
+
+  const definition = state.definitions.get(type.name);
+
+  if (!definition) {
+    return null;
+  }
+
+  state.resolving.add(type.name);
+
+  const parentTypes: WorkflowEditorPortType[] = [];
+
+  for (const parentName of definition.extends ?? []) {
+    const parentType = resolveWorkflowEditorPortType({ kind: "ref", name: parentName }, state);
+
+    if (!parentType) {
+      state.resolving.delete(type.name);
+      return null;
+    }
+
+    parentTypes.push(parentType);
+  }
+
+  state.resolving.delete(type.name);
+
+  if (parentTypes.length === 0) {
+    return definition.type;
+  }
+
+  return {
+    kind: "intersection",
+    types: [...parentTypes, definition.type],
+  };
+}
+
+function isWorkflowEditorObjectPortTypeAssignable(
+  source: WorkflowEditorPortType,
+  target: WorkflowEditorPortType,
+  state: WorkflowEditorPortTypeAssignabilityState,
+  depth: number,
+) {
+  const sourceProperties = workflowEditorObjectPropertiesFromType(source, state, depth);
+  const targetProperties = workflowEditorObjectPropertiesFromType(target, state, depth);
+
+  if (!sourceProperties || !targetProperties) {
+    return false;
+  }
+
+  for (const [propertyName, targetProperty] of Object.entries(targetProperties)) {
+    const sourceProperty = sourceProperties[propertyName];
+
+    if (!sourceProperty) {
+      if (targetProperty.optional) {
+        continue;
+      }
+
+      return false;
+    }
+
+    if (sourceProperty.optional && !targetProperty.optional) {
+      return false;
+    }
+
+    if (
+      !isWorkflowEditorPortTypeAssignableWithState(
+        sourceProperty.type,
+        targetProperty.type,
+        state,
+        depth + 1,
+      )
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function workflowEditorObjectPropertiesFromType(
+  type: WorkflowEditorPortType,
+  state: WorkflowEditorPortTypeAssignabilityState,
+  depth: number,
+): Record<string, WorkflowEditorPortProperty> | null {
+  if (depth > 100) {
+    return null;
+  }
+
+  const resolvedType = resolveWorkflowEditorPortType(type, state);
+
+  if (!resolvedType) {
+    return null;
+  }
+
+  if (resolvedType !== type) {
+    return workflowEditorObjectPropertiesFromType(resolvedType, state, depth + 1);
+  }
+
+  if (type.kind === "object") {
+    return type.properties ?? {};
+  }
+
+  if (type.kind !== "intersection") {
+    return null;
+  }
+
+  let merged: Record<string, WorkflowEditorPortProperty> | null = null;
+
+  for (const intersectionType of type.types) {
+    const properties = workflowEditorObjectPropertiesFromType(intersectionType, state, depth + 1);
+
+    if (!properties) {
+      continue;
+    }
+
+    merged ??= {};
+
+    for (const [propertyName, property] of Object.entries(properties)) {
+      const existing = merged[propertyName];
+
+      merged[propertyName] = existing
+        ? {
+            optional: existing.optional && property.optional,
+            type: { kind: "intersection", types: [existing.type, property.type] },
+          }
+        : property;
+    }
+  }
+
+  return merged;
+}
+
+function findWorkflowEditorPortTypeResolutionErrors(
+  type: WorkflowEditorPortType,
+  definitions: Map<string, WorkflowEditorTypeDefinition>,
+) {
+  const errors: string[] = [];
+  collectWorkflowEditorPortTypeResolutionErrors(type, definitions, [], errors);
+  return errors;
+}
+
+function collectWorkflowEditorPortTypeResolutionErrors(
+  type: WorkflowEditorPortType,
+  definitions: Map<string, WorkflowEditorTypeDefinition>,
+  stack: string[],
+  errors: string[],
+) {
+  switch (type.kind) {
+    case "array":
+      collectWorkflowEditorPortTypeResolutionErrors(type.element, definitions, stack, errors);
+      return;
+    case "object":
+      for (const property of Object.values(type.properties ?? {})) {
+        collectWorkflowEditorPortTypeResolutionErrors(property.type, definitions, stack, errors);
+      }
+      return;
+    case "union":
+    case "intersection":
+      for (const childType of type.types) {
+        collectWorkflowEditorPortTypeResolutionErrors(childType, definitions, stack, errors);
+      }
+      return;
+    case "ref": {
+      if (stack.includes(type.name)) {
+        errors.push(`Cyclic workflow port type reference: ${[...stack, type.name].join(" -> ")}`);
+        return;
+      }
+
+      const definition = definitions.get(type.name);
+
+      if (!definition) {
+        errors.push(`Missing workflow port type definition: ${type.name}`);
+        return;
+      }
+
+      const nextStack = [...stack, type.name];
+
+      for (const parentName of definition.extends ?? []) {
+        collectWorkflowEditorPortTypeResolutionErrors(
+          { kind: "ref", name: parentName },
+          definitions,
+          nextStack,
+          errors,
+        );
+      }
+
+      collectWorkflowEditorPortTypeResolutionErrors(
+        definition.type,
+        definitions,
+        nextStack,
+        errors,
+      );
+      return;
+    }
+    default:
+      return;
+  }
+}
+
+function isWorkflowEditorPrimitivePortTypeKind(kind: WorkflowEditorPortType["kind"]) {
+  return (
+    kind === "string" ||
+    kind === "number" ||
+    kind === "boolean" ||
+    kind === "null" ||
+    kind === "undefined"
+  );
+}
+
+function workflowEditorPrimitiveKindForLiteral(
+  value: string | number | boolean | null,
+): "string" | "number" | "boolean" | "null" {
+  if (value === null) {
+    return "null";
+  }
+
+  if (typeof value === "string") {
+    return "string";
+  }
+
+  if (typeof value === "number") {
+    return "number";
+  }
+
+  return "boolean";
 }
 
 function normalizePorts(ports: WorkflowEditorPort[] | undefined) {

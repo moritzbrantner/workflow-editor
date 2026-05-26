@@ -48,6 +48,7 @@ import {
   updateWorkflowEditorNodeWorkflowReference,
   type WorkflowEditorDocument,
   type WorkflowEditorNode,
+  type WorkflowEditorTypeDefinition,
 } from "./core";
 
 export type WorkflowEditorDocumentPathItem = {
@@ -65,6 +66,7 @@ export type WorkflowEditorProps<
   nodeTemplates?: Array<WorkflowWorkbenchPaletteItem<TTemplateData>>;
   readOnly?: boolean;
   className?: string;
+  typeDefinitions?: readonly WorkflowEditorTypeDefinition[];
   maxVersions?: number;
   enableNestedWorkflows?: boolean;
   maxNestedWorkflowDepth?: number;
@@ -100,6 +102,7 @@ export function WorkflowEditor<
   nodeTemplates = [],
   readOnly = false,
   className,
+  typeDefinitions,
   maxVersions = defaultWorkflowEditorMaxVersions,
   enableNestedWorkflows = true,
   maxNestedWorkflowDepth = 64,
@@ -716,6 +719,7 @@ export function WorkflowEditor<
         selectedEdgeId={selectedEdgeId}
         readOnly={readOnly}
         nodeTemplates={nodeTemplates}
+        typeDefinitions={typeDefinitions}
         documentReferences={documentReferenceOptions}
         onOpenWorkflowReference={canOpenNestedWorkflow ? openWorkflowReference : undefined}
         onCreateWorkflowReference={canOpenNestedWorkflow ? createWorkflowReference : undefined}

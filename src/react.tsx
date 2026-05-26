@@ -41,6 +41,7 @@ import {
   type WorkflowEditorNode,
   type WorkflowEditorNodeTemplate,
   type WorkflowEditorSelection,
+  type WorkflowEditorTypeDefinition,
   type WorkflowEditorViewport,
 } from "./core";
 import type { WorkflowEditorDocumentReferenceOption } from "./persistence";
@@ -80,6 +81,7 @@ export type WorkflowWorkbenchProps<
   selectedEdgeId?: string | null;
   readOnly?: boolean;
   nodeTemplates?: Array<WorkflowWorkbenchPaletteItem<TTemplateData>>;
+  typeDefinitions?: readonly WorkflowEditorTypeDefinition[];
   documentReferences?: WorkflowEditorDocumentReferenceOption[];
   className?: string;
   onDocumentChange?: (document: WorkflowEditorDocument<TNodeData, TEdgeData>) => void;
@@ -114,6 +116,7 @@ export function WorkflowWorkbench<
   selectedEdgeId,
   readOnly = false,
   nodeTemplates = [],
+  typeDefinitions,
   documentReferences,
   className,
   onDocumentChange,
@@ -446,7 +449,9 @@ export function WorkflowWorkbench<
             onSelectionChange?.(edge ? { type: "edge", id: selection.id, edge } : null);
           }}
           isConnectionValid={(connection) => {
-            const validity = validateWorkflowEditorConnection(document, connection);
+            const validity = validateWorkflowEditorConnection(document, connection, {
+              typeDefinitions,
+            });
 
             return {
               valid: validity.valid,
@@ -455,7 +460,7 @@ export function WorkflowWorkbench<
           }}
           onConnectionComplete={(connection) => {
             if (!readOnly) {
-              commitDocument(connectWorkflowEditorNodes(document, connection));
+              commitDocument(connectWorkflowEditorNodes(document, connection, { typeDefinitions }));
             }
           }}
           onDoubleClick={() => {

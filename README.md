@@ -68,8 +68,8 @@ export function App() {
         {
           id: "decision",
           label: "Decision",
-          inputs: [{ id: "in", label: "In", kind: "text" }],
-          outputs: [{ id: "yes", label: "Yes", kind: "text" }],
+          inputs: [{ id: "in", label: "In", type: { kind: "string" } }],
+          outputs: [{ id: "yes", label: "Yes", type: { kind: "string" } }],
         },
       ]}
     />
@@ -86,6 +86,10 @@ export function App() {
   `@moritzbrantner/workflow-editor/share`, and
   `@moritzbrantner/workflow-editor/editor`.
 - The package owns workflow document state and graph validation; `@moritzbrantner/ui` supplies the generic graph surface and inspector controls.
+- Workflow ports use serializable TypeScript-like `type` objects instead of port-level
+  `kind` strings. `validateWorkflowEditorConnection(...)` accepts an optional
+  `typeDefinitions` registry and allows an output to connect to an input when the
+  output type is assignable to the input type.
 - Nested workflows are reusable document references stored on nodes as
   `workflowRef: { documentId }`. References may point to any document, including
   the current document. The editor shell supports drill-in breadcrumbs with a
