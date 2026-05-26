@@ -10,8 +10,10 @@ import {
   canRedoWorkflowEditorHistory,
   canUndoWorkflowEditorHistory,
   commitWorkflowEditorHistory,
+  composeWorkflowEditorNodes,
   connectWorkflowEditorNodes,
   createLocalStorageWorkflowEditorStorage,
+  createWorkflowEditorComposedNode,
   createWorkflowEditorEntry,
   createWorkflowEditorGraphIndex,
   createWorkflowEditorHistory,
@@ -26,6 +28,7 @@ import {
   fromUiWorkflowBuilderNodes,
   getWorkflowEditorReferenceDiagnostics,
   getWorkflowEditorReferencedDocumentIds,
+  hasWorkflowEditorNodeComposition,
   hasWorkflowEditorWorkflowReference,
   isWorkflowEditorDirectedAcyclicGraph,
   listWorkflowEditorDocumentReferenceOptions,
@@ -36,6 +39,7 @@ import {
   removeWorkflowEditorNode,
   removeWorkflowEditorEntry,
   renameWorkflowEditorEntry,
+  restoreWorkflowEditorComposedNode,
   resolveWorkflowEditorDocumentReference,
   restoreWorkflowEditorDocumentFile,
   restoreWorkflowEditorVersion,
@@ -263,6 +267,75 @@ describe("@moritzbrantner/workflow-editor core", () => {
         targetPortId: "in",
       }),
     ).toEqual({ valid: true });
+  });
+
+  test("creates and restores composed workflow nodes with boundary ports", () => {
+    const connected = connectWorkflowEditorNodes(document, {
+      sourceNodeId: "transform",
+      sourcePortId: "out",
+      targetNodeId: "output",
+      targetPortId: "in",
+    });
+    const composedTemplate = createWorkflowEditorComposedNode(connected, ["input", "transform"], {
+      id: "ingest-component",
+      label: "Ingest component",
+    });
+
+    expect(composedTemplate).toMatchObject({
+      id: "ingest-component",
+      label: "Ingest component",
+      outputs: [expect.objectContaining({ id: "out-transform-out", kind: "text" })],
+    });
+    expect(composedTemplate?.composition?.nodes.map((node) => node.id)).toEqual([
+      "input",
+      "transform",
+    ]);
+    expect(composedTemplate?.composition?.edges.map((edge) => edge.id)).toEqual([
+      "input-transform",
+    ]);
+
+    const composed = composeWorkflowEditorNodes(connected, ["input", "transform"], {
+      id: "ingest-component",
+      label: "Ingest component",
+    });
+    const wrapper = composed.nodes.find((node) => node.id === "ingest-component");
+
+    expect(wrapper && hasWorkflowEditorNodeComposition(wrapper)).toBe(true);
+    expect(composed.nodes.map((node) => node.id).sort()).toEqual(["ingest-component", "output"]);
+    expect(composed.edges).toEqual([
+      expect.objectContaining({
+        sourceNodeId: "ingest-component",
+        sourcePortId: "out-transform-out",
+        targetNodeId: "output",
+        targetPortId: "in",
+      }),
+    ]);
+
+    const uiNodes = toUiWorkflowBuilderNodes(composed.nodes);
+    uiNodes[1] = { ...uiNodes[1]!, x: 96, y: 120 };
+    expect(fromUiWorkflowBuilderNodes(uiNodes, composed.nodes)[1]?.composition).toEqual(
+      wrapper?.composition,
+    );
+
+    const restored = restoreWorkflowEditorComposedNode(composed, "ingest-component");
+
+    expect(restored.nodes.map((node) => node.id).sort()).toEqual(["input", "output", "transform"]);
+    expect(restored.edges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceNodeId: "input",
+          sourcePortId: "out",
+          targetNodeId: "transform",
+          targetPortId: "in",
+        }),
+        expect.objectContaining({
+          sourceNodeId: "transform",
+          sourcePortId: "out",
+          targetNodeId: "output",
+          targetPortId: "in",
+        }),
+      ]),
+    );
   });
 
   test("prevents new edges from closing directed cycles", () => {

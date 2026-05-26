@@ -216,7 +216,7 @@ export function WorkflowWorkbench<
     }
 
     const id = createTemplateNodeId(document.nodes, template.id);
-    const node = {
+    const node: WorkflowEditorNode<TNodeData> = {
       id,
       label: template.label,
       description: template.description,
@@ -234,6 +234,8 @@ export function WorkflowWorkbench<
       inputs: template.inputs,
       outputs: template.outputs,
       data: template.data as TNodeData | undefined,
+      workflowRef: template.workflowRef,
+      composition: template.composition as WorkflowEditorNode<TNodeData>["composition"],
     };
 
     const nextDocument = {

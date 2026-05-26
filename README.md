@@ -17,6 +17,9 @@ The React workbench expects `react` as a peer dependency and consumes
 - `WorkflowEditor` for a browser-first workflow editor shell with document library controls,
   local saving/loading, JSON import/export, explicit versions, and undo/redo.
 - `normalizeWorkflowEditorDocument(...)`, `connectWorkflowEditorNodes(...)`, `duplicateWorkflowEditorNode(...)`, and node/edge mutation helpers.
+- `createWorkflowEditorComposedNode(...)`, `composeWorkflowEditorNodes(...)`,
+  `restoreWorkflowEditorComposedNode(...)`, and `hasWorkflowEditorNodeComposition(...)`
+  for reusable component-style nodes backed by embedded subgraphs.
 - `updateWorkflowEditorNodeWorkflowReference(...)`,
   `getWorkflowEditorReferencedDocumentIds(...)`, and
   `getWorkflowEditorReferenceDiagnostics(...)` for reference-based nested workflow support.
@@ -88,6 +91,11 @@ export function App() {
   the current document. The editor shell supports drill-in breadcrumbs with a
   finite `maxNestedWorkflowDepth` guard; graph DAG validation remains scoped to
   edges inside each individual document.
+- Composed workflow nodes embed a normalized subgraph on the node as `composition`.
+  `composeWorkflowEditorNodes(...)` wraps selected nodes, exposes boundary ports
+  for unconnected or externally connected inputs/outputs, and reroutes external
+  edges through the wrapper. `restoreWorkflowEditorComposedNode(...)` expands the
+  wrapper back into ordinary nodes and edges.
 
 ## Enhancement Roadmap
 

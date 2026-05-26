@@ -27,6 +27,19 @@ export type WorkflowEditorWorkflowReference = {
   documentId: string;
 };
 
+export type WorkflowEditorCompositionBoundary = {
+  wrapperPortId: string;
+  nodeId: string;
+  portId: string;
+};
+
+export type WorkflowEditorNodeComposition<TNodeData = Record<string, unknown>> = {
+  nodes: Array<WorkflowEditorNode<TNodeData>>;
+  edges: Array<WorkflowEditorEdge>;
+  inputBoundaries: WorkflowEditorCompositionBoundary[];
+  outputBoundaries: WorkflowEditorCompositionBoundary[];
+};
+
 export type WorkflowEditorNode<TData = Record<string, unknown>> = Omit<
   UiWorkflowNodeData,
   "metadata"
@@ -35,6 +48,7 @@ export type WorkflowEditorNode<TData = Record<string, unknown>> = Omit<
   y: number;
   data?: TData;
   workflowRef?: WorkflowEditorWorkflowReference;
+  composition?: WorkflowEditorNodeComposition<TData>;
 };
 
 export type WorkflowEditorEdge<TData = Record<string, unknown>> = {
@@ -109,6 +123,25 @@ export type WorkflowEditorDuplicateNodeOptions = {
   createId?: (nodeId: string, existingIds: ReadonlySet<string>) => string;
 };
 
+export type WorkflowEditorComposeNodesOptions<TNodeData = Record<string, unknown>> = {
+  id?: string;
+  label?: string;
+  description?: string;
+  kind?: string;
+  category?: string;
+  eyebrow?: string;
+  packageLabel?: string;
+  status?: "idle" | "running" | "success" | "error" | "warning" | string;
+  tone?: "neutral" | "info" | "success" | "warning" | "error" | string;
+  variant?: "default" | "compact";
+  minimized?: boolean;
+  tags?: string[];
+  data?: TNodeData;
+  x?: number;
+  y?: number;
+  createId?: (baseId: string, existingIds: ReadonlySet<string>) => string;
+};
+
 export function normalizeWorkflowEditorDocument<
   TNodeData = Record<string, unknown>,
   TEdgeData = Record<string, unknown>,
@@ -124,13 +157,7 @@ export function normalizeWorkflowEditorDocument<
     "workflow edge",
   );
 
-  const nodes = document.nodes.map((node) => ({
-    ...node,
-    x: Number.isFinite(node.x) ? node.x : 0,
-    y: Number.isFinite(node.y) ? node.y : 0,
-    inputs: normalizePorts(node.inputs),
-    outputs: normalizePorts(node.outputs),
-  }));
+  const nodes = document.nodes.map((node) => normalizeWorkflowEditorNode(node));
   const nodeIds = new Set(nodes.map((node) => node.id));
 
   return {
@@ -237,6 +264,20 @@ export function hasWorkflowEditorWorkflowReference<TData = Record<string, unknow
   return typeof node.workflowRef?.documentId === "string" && node.workflowRef.documentId !== "";
 }
 
+export function hasWorkflowEditorNodeComposition<TNodeData = Record<string, unknown>>(
+  node: WorkflowEditorNode<TNodeData>,
+): node is WorkflowEditorNode<TNodeData> & {
+  composition: WorkflowEditorNodeComposition<TNodeData>;
+} {
+  return (
+    !!node.composition &&
+    Array.isArray(node.composition.nodes) &&
+    Array.isArray(node.composition.edges) &&
+    Array.isArray(node.composition.inputBoundaries) &&
+    Array.isArray(node.composition.outputBoundaries)
+  );
+}
+
 export function moveWorkflowEditorNode<
   TNodeData = Record<string, unknown>,
   TEdgeData = Record<string, unknown>,
@@ -262,6 +303,271 @@ export function removeWorkflowEditorNode<
       (edge) => edge.sourceNodeId !== nodeId && edge.targetNodeId !== nodeId,
     ),
   };
+}
+
+export function createWorkflowEditorComposedNode<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+>(
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>,
+  nodeIds: readonly string[],
+  options: WorkflowEditorComposeNodesOptions<TNodeData> = {},
+): WorkflowEditorNode<TNodeData> | null {
+  const parts = createWorkflowEditorCompositionParts(document, nodeIds);
+
+  if (!parts) {
+    return null;
+  }
+
+  const existingIds = new Set(document.nodes.map((node) => node.id));
+  const baseId = options.id ?? safeWorkflowEditorId(options.label ?? "composed-node");
+  const id =
+    options.id ?? options.createId?.(baseId, existingIds) ?? createUniqueId(existingIds, baseId);
+
+  return normalizeWorkflowEditorNode({
+    id,
+    label: options.label?.trim() || defaultWorkflowEditorComposedNodeLabel(parts.nodes),
+    description:
+      options.description ?? `${parts.nodes.length} workflow nodes composed behind boundary ports.`,
+    kind: options.kind ?? "composed",
+    category: options.category ?? commonWorkflowEditorNodeCategory(parts.nodes),
+    eyebrow: options.eyebrow,
+    packageLabel: options.packageLabel,
+    status: options.status,
+    tone: options.tone,
+    variant: options.variant,
+    minimized: options.minimized,
+    tags: options.tags ?? commonWorkflowEditorNodeTags(parts.nodes),
+    x: Number.isFinite(options.x) ? options.x! : parts.minX,
+    y: Number.isFinite(options.y) ? options.y! : parts.minY,
+    inputs: parts.inputPorts,
+    outputs: parts.outputPorts,
+    data: options.data,
+    composition: {
+      nodes: parts.nodes.map((node) => {
+        const cloned = cloneWorkflowEditorNode(node);
+        cloned.x = node.x - parts.minX;
+        cloned.y = node.y - parts.minY;
+        return cloned;
+      }),
+      edges: parts.internalEdges.map((edge) => cloneWorkflowEditorEdge(edge) as WorkflowEditorEdge),
+      inputBoundaries: parts.inputBoundaries.map(cloneWorkflowEditorCompositionBoundary),
+      outputBoundaries: parts.outputBoundaries.map(cloneWorkflowEditorCompositionBoundary),
+    },
+  });
+}
+
+export function composeWorkflowEditorNodes<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+>(
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>,
+  nodeIds: readonly string[],
+  options: WorkflowEditorComposeNodesOptions<TNodeData> = {},
+): WorkflowEditorDocument<TNodeData, TEdgeData> {
+  const parts = createWorkflowEditorCompositionParts(document, nodeIds);
+
+  if (!parts) {
+    return document;
+  }
+
+  const composedNode = createWorkflowEditorComposedNode(document, nodeIds, options);
+
+  if (!composedNode) {
+    return document;
+  }
+
+  const selectedIds = new Set(parts.nodes.map((node) => node.id));
+  const visibleEdges = document.edges
+    .filter((edge) => !selectedIds.has(edge.sourceNodeId) && !selectedIds.has(edge.targetNodeId))
+    .map(cloneWorkflowEditorEdge);
+  const usedEdgeIds = new Set(visibleEdges.map((edge) => edge.id));
+  const inputBoundaryByPort = new Map(
+    parts.inputBoundaries.map((boundary) => [
+      boundaryKey(boundary.nodeId, boundary.portId),
+      boundary,
+    ]),
+  );
+  const outputBoundaryByPort = new Map(
+    parts.outputBoundaries.map((boundary) => [
+      boundaryKey(boundary.nodeId, boundary.portId),
+      boundary,
+    ]),
+  );
+  const reroutedIncomingEdges = parts.incomingEdges.flatMap((edge) => {
+    const boundary = inputBoundaryByPort.get(boundaryKey(edge.targetNodeId, edge.targetPortId));
+
+    if (!boundary) {
+      return [];
+    }
+
+    return [
+      createWorkflowEditorReroutedEdge(
+        edge,
+        {
+          sourceNodeId: edge.sourceNodeId,
+          sourcePortId: edge.sourcePortId,
+          targetNodeId: composedNode.id,
+          targetPortId: boundary.wrapperPortId,
+        },
+        usedEdgeIds,
+      ),
+    ];
+  });
+  const reroutedOutgoingEdges = parts.outgoingEdges.flatMap((edge) => {
+    const boundary = outputBoundaryByPort.get(boundaryKey(edge.sourceNodeId, edge.sourcePortId));
+
+    if (!boundary) {
+      return [];
+    }
+
+    return [
+      createWorkflowEditorReroutedEdge(
+        edge,
+        {
+          sourceNodeId: composedNode.id,
+          sourcePortId: boundary.wrapperPortId,
+          targetNodeId: edge.targetNodeId,
+          targetPortId: edge.targetPortId,
+        },
+        usedEdgeIds,
+      ),
+    ];
+  });
+
+  return normalizeWorkflowEditorDocument({
+    ...document,
+    nodes: document.nodes
+      .filter((node) => !selectedIds.has(node.id))
+      .map(cloneWorkflowEditorNode)
+      .concat(composedNode),
+    edges: visibleEdges.concat(reroutedIncomingEdges, reroutedOutgoingEdges),
+  });
+}
+
+export function restoreWorkflowEditorComposedNode<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+>(
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>,
+  nodeId: string,
+): WorkflowEditorDocument<TNodeData, TEdgeData> {
+  const composedNode = findWorkflowEditorNode(document, nodeId);
+
+  if (!composedNode?.composition) {
+    return document;
+  }
+
+  const composition = normalizeWorkflowEditorNodeComposition(composedNode.composition);
+  const occupiedIds = new Set(
+    document.nodes.filter((node) => node.id !== nodeId).map((node) => node.id),
+  );
+  const idByOriginalId = new Map<string, string>();
+
+  for (const node of composition.nodes) {
+    const restoredId = occupiedIds.has(node.id)
+      ? createUniqueId(occupiedIds, `${composedNode.id}-${safeWorkflowEditorId(node.id)}`)
+      : node.id;
+    occupiedIds.add(restoredId);
+    idByOriginalId.set(node.id, restoredId);
+  }
+
+  const restoredNodes = composition.nodes.map((node) => ({
+    ...cloneWorkflowEditorNode(node),
+    id: idByOriginalId.get(node.id)!,
+    x: composedNode.x + node.x,
+    y: composedNode.y + node.y,
+  }));
+  const visibleEdges = document.edges
+    .filter((edge) => edge.sourceNodeId !== nodeId && edge.targetNodeId !== nodeId)
+    .map(cloneWorkflowEditorEdge);
+  const usedEdgeIds = new Set(visibleEdges.map((edge) => edge.id));
+  const inputBoundaryByPort = new Map(
+    composition.inputBoundaries.map((boundary) => [boundary.wrapperPortId, boundary]),
+  );
+  const outputBoundaryByPort = new Map(
+    composition.outputBoundaries.map((boundary) => [boundary.wrapperPortId, boundary]),
+  );
+  const restoredInternalEdges = composition.edges.flatMap((edge) => {
+    const sourceNodeId = idByOriginalId.get(edge.sourceNodeId);
+    const targetNodeId = idByOriginalId.get(edge.targetNodeId);
+
+    if (!sourceNodeId || !targetNodeId) {
+      return [];
+    }
+
+    return [
+      createWorkflowEditorReroutedEdge(
+        edge,
+        {
+          sourceNodeId,
+          sourcePortId: edge.sourcePortId,
+          targetNodeId,
+          targetPortId: edge.targetPortId,
+        },
+        usedEdgeIds,
+      ),
+    ];
+  });
+  const restoredExternalEdges = document.edges.flatMap((edge) => {
+    if (edge.targetNodeId === nodeId) {
+      const boundary = inputBoundaryByPort.get(edge.targetPortId);
+      const targetNodeId = boundary ? idByOriginalId.get(boundary.nodeId) : null;
+
+      if (!boundary || !targetNodeId) {
+        return [];
+      }
+
+      return [
+        createWorkflowEditorReroutedEdge(
+          edge,
+          {
+            sourceNodeId: edge.sourceNodeId,
+            sourcePortId: edge.sourcePortId,
+            targetNodeId,
+            targetPortId: boundary.portId,
+          },
+          usedEdgeIds,
+        ),
+      ];
+    }
+
+    if (edge.sourceNodeId === nodeId) {
+      const boundary = outputBoundaryByPort.get(edge.sourcePortId);
+      const sourceNodeId = boundary ? idByOriginalId.get(boundary.nodeId) : null;
+
+      if (!boundary || !sourceNodeId) {
+        return [];
+      }
+
+      return [
+        createWorkflowEditorReroutedEdge(
+          edge,
+          {
+            sourceNodeId,
+            sourcePortId: boundary.portId,
+            targetNodeId: edge.targetNodeId,
+            targetPortId: edge.targetPortId,
+          },
+          usedEdgeIds,
+        ),
+      ];
+    }
+
+    return [];
+  });
+
+  return normalizeWorkflowEditorDocument({
+    ...document,
+    nodes: document.nodes
+      .filter((node) => node.id !== nodeId)
+      .map(cloneWorkflowEditorNode)
+      .concat(restoredNodes),
+    edges: visibleEdges.concat(
+      restoredInternalEdges as Array<WorkflowEditorEdge<TEdgeData>>,
+      restoredExternalEdges,
+    ),
+  });
 }
 
 export function addWorkflowEditorEdge<
@@ -543,6 +849,7 @@ export function fromUiWorkflowBuilderNodes<TData = Record<string, unknown>>(
       outputs: node.outputs,
       data: (node.metadata as TData | undefined) ?? previousNode?.data,
       workflowRef: previousNode?.workflowRef,
+      composition: previousNode?.composition,
     };
   });
 }
@@ -590,6 +897,260 @@ export function toUiWorkflowBuilderViewport(
 
 function normalizePorts(ports: WorkflowEditorPort[] | undefined) {
   return ports?.map((port) => ({ ...port })) ?? [];
+}
+
+function normalizeWorkflowEditorNode<TNodeData = Record<string, unknown>>(
+  node: WorkflowEditorNode<TNodeData>,
+): WorkflowEditorNode<TNodeData> {
+  return {
+    ...node,
+    x: Number.isFinite(node.x) ? node.x : 0,
+    y: Number.isFinite(node.y) ? node.y : 0,
+    inputs: normalizePorts(node.inputs),
+    outputs: normalizePorts(node.outputs),
+    workflowRef: node.workflowRef?.documentId
+      ? { documentId: node.workflowRef.documentId }
+      : undefined,
+    composition: node.composition
+      ? normalizeWorkflowEditorNodeComposition(node.composition)
+      : undefined,
+  };
+}
+
+function normalizeWorkflowEditorNodeComposition<TNodeData = Record<string, unknown>>(
+  composition: WorkflowEditorNodeComposition<TNodeData>,
+): WorkflowEditorNodeComposition<TNodeData> {
+  const normalizedDocument = normalizeWorkflowEditorDocument({
+    nodes: composition.nodes,
+    edges: composition.edges,
+  });
+  const nodeIds = new Set(normalizedDocument.nodes.map((node) => node.id));
+
+  return {
+    nodes: normalizedDocument.nodes,
+    edges: normalizedDocument.edges,
+    inputBoundaries: normalizeCompositionBoundaries(composition.inputBoundaries, nodeIds),
+    outputBoundaries: normalizeCompositionBoundaries(composition.outputBoundaries, nodeIds),
+  };
+}
+
+function normalizeCompositionBoundaries(
+  boundaries: WorkflowEditorCompositionBoundary[],
+  nodeIds: ReadonlySet<string>,
+) {
+  const seen = new Set<string>();
+  const normalized: WorkflowEditorCompositionBoundary[] = [];
+
+  for (const boundary of boundaries) {
+    if (!nodeIds.has(boundary.nodeId) || !boundary.wrapperPortId || !boundary.portId) {
+      continue;
+    }
+
+    const key = `${boundary.wrapperPortId}:${boundary.nodeId}:${boundary.portId}`;
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    normalized.push({ ...boundary });
+  }
+
+  return normalized;
+}
+
+function cloneWorkflowEditorNode<TNodeData = Record<string, unknown>>(
+  node: WorkflowEditorNode<TNodeData>,
+): WorkflowEditorNode<TNodeData> {
+  return normalizeWorkflowEditorNode(node);
+}
+
+function cloneWorkflowEditorEdge<TData = Record<string, unknown>>(
+  edge: WorkflowEditorEdge<TData>,
+): WorkflowEditorEdge<TData> {
+  return { ...edge };
+}
+
+function cloneWorkflowEditorCompositionBoundary(
+  boundary: WorkflowEditorCompositionBoundary,
+): WorkflowEditorCompositionBoundary {
+  return {
+    wrapperPortId: boundary.wrapperPortId,
+    nodeId: boundary.nodeId,
+    portId: boundary.portId,
+  };
+}
+
+function createWorkflowEditorCompositionParts<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+>(document: WorkflowEditorDocument<TNodeData, TEdgeData>, nodeIds: readonly string[]) {
+  const requestedIds = new Set(nodeIds);
+  const nodes = document.nodes.filter((node) => requestedIds.has(node.id));
+
+  if (nodes.length === 0) {
+    return null;
+  }
+
+  const selectedIds = new Set(nodes.map((node) => node.id));
+  const minX = Math.min(...nodes.map((node) => (Number.isFinite(node.x) ? node.x : 0)));
+  const minY = Math.min(...nodes.map((node) => (Number.isFinite(node.y) ? node.y : 0)));
+  const internalEdges = document.edges.filter(
+    (edge) => selectedIds.has(edge.sourceNodeId) && selectedIds.has(edge.targetNodeId),
+  );
+  const incomingEdges = document.edges.filter(
+    (edge) => !selectedIds.has(edge.sourceNodeId) && selectedIds.has(edge.targetNodeId),
+  );
+  const outgoingEdges = document.edges.filter(
+    (edge) => selectedIds.has(edge.sourceNodeId) && !selectedIds.has(edge.targetNodeId),
+  );
+  const inputPorts: WorkflowEditorPort[] = [];
+  const outputPorts: WorkflowEditorPort[] = [];
+  const inputBoundaries: WorkflowEditorCompositionBoundary[] = [];
+  const outputBoundaries: WorkflowEditorCompositionBoundary[] = [];
+  const usedInputPortIds = new Set<string>();
+  const usedOutputPortIds = new Set<string>();
+
+  for (const node of nodes) {
+    for (const input of node.inputs ?? []) {
+      const hasInternalEdge = internalEdges.some(
+        (edge) => edge.targetNodeId === node.id && edge.targetPortId === input.id,
+      );
+      const hasIncomingEdge = incomingEdges.some(
+        (edge) => edge.targetNodeId === node.id && edge.targetPortId === input.id,
+      );
+
+      if (!hasInternalEdge || hasIncomingEdge) {
+        const wrapperPort = compositionBoundaryPort("in", node, input, usedInputPortIds);
+        inputPorts.push(wrapperPort);
+        inputBoundaries.push({
+          wrapperPortId: wrapperPort.id,
+          nodeId: node.id,
+          portId: input.id,
+        });
+      }
+    }
+
+    for (const output of node.outputs ?? []) {
+      const hasInternalEdge = internalEdges.some(
+        (edge) => edge.sourceNodeId === node.id && edge.sourcePortId === output.id,
+      );
+      const hasOutgoingEdge = outgoingEdges.some(
+        (edge) => edge.sourceNodeId === node.id && edge.sourcePortId === output.id,
+      );
+
+      if (!hasInternalEdge || hasOutgoingEdge) {
+        const wrapperPort = compositionBoundaryPort("out", node, output, usedOutputPortIds);
+        outputPorts.push(wrapperPort);
+        outputBoundaries.push({
+          wrapperPortId: wrapperPort.id,
+          nodeId: node.id,
+          portId: output.id,
+        });
+      }
+    }
+  }
+
+  return {
+    nodes,
+    minX,
+    minY,
+    internalEdges,
+    incomingEdges,
+    outgoingEdges,
+    inputPorts,
+    outputPorts,
+    inputBoundaries,
+    outputBoundaries,
+  };
+}
+
+function compositionBoundaryPort(
+  direction: "in" | "out",
+  node: WorkflowEditorNode<unknown>,
+  port: WorkflowEditorPort,
+  usedPortIds: Set<string>,
+): WorkflowEditorPort {
+  const id = createUniqueId(
+    usedPortIds,
+    `${direction}-${safeWorkflowEditorId(node.id)}-${safeWorkflowEditorId(port.id)}`,
+  );
+  usedPortIds.add(id);
+
+  return {
+    ...port,
+    id,
+    label: `${node.label} ${port.label}`.trim(),
+  };
+}
+
+function createWorkflowEditorReroutedEdge<TData = Record<string, unknown>>(
+  edge: WorkflowEditorEdge<TData>,
+  connection: WorkflowEditorConnectionInput,
+  usedEdgeIds: Set<string>,
+): WorkflowEditorEdge<TData> {
+  const id = createUniqueId(
+    usedEdgeIds,
+    `${connection.sourceNodeId}:${connection.sourcePortId}->${connection.targetNodeId}:${connection.targetPortId}`,
+  );
+  usedEdgeIds.add(id);
+
+  return {
+    ...edge,
+    id,
+    ...connection,
+  };
+}
+
+function boundaryKey(nodeId: string, portId: string) {
+  return `${nodeId}:${portId}`;
+}
+
+function safeWorkflowEditorId(value: string) {
+  return (
+    value
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9:_-]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "node"
+  );
+}
+
+function defaultWorkflowEditorComposedNodeLabel<TData = Record<string, unknown>>(
+  nodes: Array<WorkflowEditorNode<TData>>,
+) {
+  if (nodes.length === 1) {
+    return `${nodes[0]!.label} Component`;
+  }
+
+  return `${nodes[0]!.label} + ${nodes.length - 1}`;
+}
+
+function commonWorkflowEditorNodeCategory<TData = Record<string, unknown>>(
+  nodes: Array<WorkflowEditorNode<TData>>,
+) {
+  const categories = nodes.flatMap((node) => (node.category ? [node.category] : []));
+  const uniqueCategories = new Set(categories);
+
+  return uniqueCategories.size === 1 ? categories[0] : undefined;
+}
+
+function commonWorkflowEditorNodeTags<TData = Record<string, unknown>>(
+  nodes: Array<WorkflowEditorNode<TData>>,
+) {
+  const tags = nodes.flatMap((node) => node.tags ?? []);
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+
+  for (const tag of tags) {
+    if (seen.has(tag)) {
+      continue;
+    }
+
+    seen.add(tag);
+    normalized.push(tag);
+  }
+
+  return normalized.length > 0 ? normalized : undefined;
 }
 
 function assertUniqueIds(ids: string[], label: string) {
