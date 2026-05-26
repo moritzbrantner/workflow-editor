@@ -1182,6 +1182,52 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     );
   });
 
+  test("edits built-in JSON source values from the default inspector", () => {
+    const handleDocumentChange = vi.fn();
+    const sourceDocument = normalizeWorkflowEditorDocument({
+      nodes: [
+        {
+          id: "flag",
+          label: "Flag",
+          kind: "json.boolean",
+          category: "JSON",
+          x: 0,
+          y: 0,
+          outputs: [{ id: "value", label: "Value", type: { kind: "boolean" } }],
+          data: { value: false },
+        },
+      ],
+      edges: [],
+    });
+
+    render(
+      <WorkflowWorkbench
+        document={sourceDocument}
+        selectedNodeId="flag"
+        onDocumentChange={handleDocumentChange}
+      />,
+    );
+
+    fireEvent.click(screen.getAllByLabelText("Value")[0]!);
+    fireEvent.click(screen.getByRole("option", { name: "True" }));
+    fireEvent.click(
+      screen
+        .getAllByRole("button", { name: "Apply" })
+        .find((button) => !(button as HTMLButtonElement).disabled)!,
+    );
+
+    expect(handleDocumentChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        nodes: [
+          expect.objectContaining({
+            id: "flag",
+            data: { value: true },
+          }),
+        ],
+      }),
+    );
+  });
+
   test("creates and opens referenced workflows with breadcrumbs in the editor shell", async () => {
     const handlePathChange = vi.fn();
     const storage = {
