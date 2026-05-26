@@ -6,6 +6,7 @@ import {
   WorkflowEditorDocumentValidationError,
   WorkflowWorkbench,
   addWorkflowEditorNode,
+  addWorkflowEditorObjectDecompositionOutput,
   addWorkflowEditorObjectConstructorInput,
   activeWorkflowEditorEntry,
   analyzeWorkflowEditorPortTypes,
@@ -29,15 +30,18 @@ import {
   duplicateWorkflowEditorEntry,
   encodeWorkflowEditorSharePayload,
   findWorkflowEditorNode,
+  formatWorkflowEditorObjectDecompositionExpression,
   formatWorkflowEditorObjectConstructorExpression,
   fromUiWorkflowBuilderEdges,
   fromUiWorkflowBuilderNodes,
   getWorkflowEditorObjectConstructorInputs,
+  getWorkflowEditorObjectDecompositionOutputs,
   getWorkflowEditorReferenceDiagnostics,
   getWorkflowEditorReferencedDocumentIds,
   hasWorkflowEditorNodeComposition,
   hasWorkflowEditorWorkflowReference,
   isWorkflowEditorObjectConstructorNode,
+  isWorkflowEditorObjectDecompositionNode,
   isWorkflowEditorDirectedAcyclicGraph,
   isWorkflowEditorPortTypeAssignable,
   listWorkflowEditorDocumentReferenceOptions,
@@ -69,6 +73,7 @@ import {
   workflowEditorDocumentFileVersion,
   workflowEditorJsonNodeTemplates,
   type WorkflowEditorDocument,
+  type WorkflowEditorPortType,
 } from "@moritzbrantner/workflow-editor";
 
 const document: WorkflowEditorDocument = normalizeWorkflowEditorDocument({
@@ -138,6 +143,9 @@ describe("@moritzbrantner/workflow-editor core", () => {
     const objectTemplate = workflowEditorJsonNodeTemplates.find(
       (template) => template.id === "json-object",
     );
+    const objectDecomposeTemplate = workflowEditorJsonNodeTemplates.find(
+      (template) => template.id === "json-object-decompose",
+    );
 
     expect(new Set(templateIds).size).toBe(templateIds.length);
     expect(templateIds).toEqual(
@@ -153,6 +161,7 @@ describe("@moritzbrantner/workflow-editor core", () => {
         "json-null",
         "json-array",
         "json-object",
+        "json-object-decompose",
       ]),
     );
     expect(branchTemplate?.inputs).toEqual(
@@ -166,6 +175,7 @@ describe("@moritzbrantner/workflow-editor core", () => {
       element: { kind: "any" },
     });
     expect(objectTemplate?.outputs?.[0]?.type).toEqual({ kind: "object" });
+    expect(objectDecomposeTemplate?.inputs?.[0]?.type).toEqual({ kind: "object" });
   });
 
   test("constructs object nodes with expandable named inputs", () => {
@@ -233,6 +243,89 @@ describe("@moritzbrantner/workflow-editor core", () => {
         findWorkflowEditorNode(expanded, "employee-object")!,
       ),
     ).toHaveLength(2);
+  });
+
+  test("decomposes object nodes with expandable named outputs", () => {
+    const decomposeTemplate = workflowEditorJsonNodeTemplates.find(
+      (template) => template.id === "json-object-decompose",
+    )!;
+    const leadType = {
+      kind: "object",
+      properties: {
+        email: { type: { kind: "string" } },
+        score: { type: { kind: "number" } },
+      },
+    } satisfies WorkflowEditorPortType;
+    const decomposeDocument = normalizeWorkflowEditorDocument<Record<string, unknown>>({
+      nodes: [
+        {
+          id: "lead",
+          label: "Lead",
+          x: 0,
+          y: 0,
+          outputs: [{ id: "value", label: "Value", type: leadType }],
+        },
+        {
+          ...decomposeTemplate,
+          id: "split-lead",
+          x: 240,
+          y: 0,
+        },
+        {
+          id: "email-target",
+          label: "Email target",
+          x: 480,
+          y: 0,
+          inputs: [{ id: "email", label: "Email", type: { kind: "string" } }],
+        },
+      ],
+      edges: [],
+    });
+    const withInput = connectWorkflowEditorNodes(decomposeDocument, {
+      sourceNodeId: "lead",
+      sourcePortId: "value",
+      targetNodeId: "split-lead",
+      targetPortId: "object",
+    });
+    const connected = connectWorkflowEditorNodes(withInput, {
+      sourceNodeId: "split-lead",
+      sourcePortId: "property",
+      targetNodeId: "email-target",
+      targetPortId: "email",
+    });
+    const decomposeNode = findWorkflowEditorNode(connected, "split-lead")!;
+
+    expect(isWorkflowEditorObjectDecompositionNode(decomposeNode)).toBe(true);
+    expect(connected.edges[1]).toEqual(
+      expect.objectContaining({
+        sourceNodeId: "split-lead",
+        sourcePortId: "email",
+      }),
+    );
+    expect(getWorkflowEditorObjectDecompositionOutputs(decomposeNode)).toEqual([
+      expect.objectContaining({
+        id: "email",
+        label: "email",
+        badge: "object.email",
+        type: { kind: "string" },
+      }),
+    ]);
+    expect(decomposeNode.outputs?.at(-1)).toEqual(
+      expect.objectContaining({ id: "property", label: "Add property" }),
+    );
+    expect(formatWorkflowEditorObjectDecompositionExpression(decomposeNode)).toBe(
+      "email = object.email",
+    );
+
+    const expanded = addWorkflowEditorObjectDecompositionOutput(connected, "split-lead", {
+      propertyKey: "score",
+    });
+    expect(
+      getWorkflowEditorObjectDecompositionOutputs(findWorkflowEditorNode(expanded, "split-lead")!),
+    ).toEqual([
+      expect.objectContaining({ id: "email", type: { kind: "string" } }),
+      expect.objectContaining({ id: "score", type: { kind: "number" } }),
+    ]);
   });
 
   test("normalizes, mutates, indexes, and roundtrips graph data", () => {

@@ -99,7 +99,7 @@ export function App() {
   ```
 
   Repair mode normalizes node coordinates and viewport values, removes dangling/self/cycle-forming
-  edges, and syncs built-in object-constructor nodes.
+  edges, and syncs built-in object-constructor and object-decomposition nodes.
 
 - Imported workflow JSON files are validated strictly. Malformed workflow documents fail with
   validation diagnostics instead of being silently repaired.

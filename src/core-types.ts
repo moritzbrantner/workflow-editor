@@ -15,6 +15,8 @@ export {
   type WorkflowEditorNode,
   type WorkflowEditorNodeComposition,
   type WorkflowEditorNodeTemplate,
+  type WorkflowEditorObjectDecompositionOutputOptions,
+  type WorkflowEditorObjectDecompositionProperty,
   type WorkflowEditorObjectConstructorInputOptions,
   type WorkflowEditorObjectConstructorProperty,
   type WorkflowEditorPort,

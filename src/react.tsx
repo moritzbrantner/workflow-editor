@@ -22,6 +22,7 @@ import {
 } from "@moritzbrantner/ui/labs";
 
 import {
+  addWorkflowEditorObjectDecompositionOutputToNode,
   addWorkflowEditorObjectConstructorInputToNode,
   connectWorkflowEditorNodes,
   createWorkflowEditorGraphIndex,
@@ -29,10 +30,13 @@ import {
   duplicateWorkflowEditorNode,
   findWorkflowEditorEdge,
   findWorkflowEditorNode,
+  formatWorkflowEditorObjectDecompositionExpression,
   formatWorkflowEditorObjectConstructorExpression,
   fromUiWorkflowBuilderEdges,
   fromUiWorkflowBuilderNodes,
+  getWorkflowEditorObjectDecompositionOutputs,
   getWorkflowEditorObjectConstructorInputs,
+  isWorkflowEditorObjectDecompositionNode,
   isWorkflowEditorObjectConstructorNode,
   normalizeWorkflowEditorDocument,
   removeWorkflowEditorEdge,
@@ -40,6 +44,7 @@ import {
   toUiWorkflowBuilderEdges,
   toUiWorkflowBuilderNodes,
   updateWorkflowEditorNode,
+  updateWorkflowEditorObjectDecompositionPropertiesInNode,
   updateWorkflowEditorObjectConstructorPropertiesInNode,
   updateWorkflowEditorNodeWorkflowReference,
   validateWorkflowEditorConnection,
@@ -542,6 +547,11 @@ function DefaultWorkflowInspector<
     const objectConstructorDefaultValues = Object.fromEntries(
       objectConstructorInputs.map((input) => [`objectProperty:${input.id}`, input.label]),
     );
+    const objectDecompositionOutputs = getWorkflowEditorObjectDecompositionOutputs(node);
+    const objectDecompositionExpression = formatWorkflowEditorObjectDecompositionExpression(node);
+    const objectDecompositionDefaultValues = Object.fromEntries(
+      objectDecompositionOutputs.map((output) => [`objectOutput:${output.id}`, output.label]),
+    );
     const jsonValueField = createWorkflowEditorJsonValueField(node);
     const jsonValueDefault = readWorkflowEditorJsonValueFieldValue(node);
 
@@ -567,8 +577,10 @@ function DefaultWorkflowInspector<
             status: node.status ?? "idle",
             workflowDocumentId: referencedDocumentId,
             objectExpression: objectConstructorExpression,
+            objectDecompositionExpression,
             ...(jsonValueField ? { jsonValue: jsonValueDefault } : {}),
             ...objectConstructorDefaultValues,
+            ...objectDecompositionDefaultValues,
           }}
           sections={[
             {
@@ -634,6 +646,29 @@ function DefaultWorkflowInspector<
                   },
                 ]
               : []),
+            ...(isWorkflowEditorObjectDecompositionNode(node)
+              ? [
+                  {
+                    id: "object-decomposition",
+                    title: "Object decomposition",
+                    description: "Map object properties to output ports.",
+                    fields: [
+                      ...objectDecompositionOutputs.map((output) => ({
+                        id: `objectOutput:${output.id}`,
+                        label: output.badge ? `${output.badge}` : output.label,
+                        type: "text" as const,
+                        placeholder: "propertyName",
+                      })),
+                      {
+                        id: "objectDecompositionExpression",
+                        label: "Expression",
+                        type: "code" as const,
+                        readOnly: true,
+                      },
+                    ],
+                  },
+                ]
+              : []),
           ]}
           onApply={(values) => {
             const patch: Partial<WorkflowEditorNode<TNodeData>> = {
@@ -670,6 +705,23 @@ function DefaultWorkflowInspector<
               patch.data = nextNode.data;
             }
 
+            if (isWorkflowEditorObjectDecompositionNode(node)) {
+              const propertyKeysByPortId = Object.fromEntries(
+                objectDecompositionOutputs.map((output) => [
+                  output.id,
+                  String(values[`objectOutput:${output.id}`] ?? output.label),
+                ]),
+              );
+              const nextNode = updateWorkflowEditorObjectDecompositionPropertiesInNode(
+                node,
+                propertyKeysByPortId,
+              );
+
+              patch.inputs = nextNode.inputs;
+              patch.outputs = nextNode.outputs;
+              patch.data = nextNode.data;
+            }
+
             if (jsonValueField) {
               patch.data = {
                 ...(isRecord(node.data) ? node.data : {}),
@@ -697,6 +749,26 @@ function DefaultWorkflowInspector<
               }}
             >
               Add property input
+            </Button>
+          </div>
+        ) : null}
+        {isWorkflowEditorObjectDecompositionNode(node) ? (
+          <div className="flex flex-wrap gap-2 px-4">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={context.readOnly}
+              onClick={() => {
+                const nextNode = addWorkflowEditorObjectDecompositionOutputToNode(node);
+                context.updateSelectedNode({
+                  inputs: nextNode.inputs,
+                  outputs: nextNode.outputs,
+                  data: nextNode.data,
+                } as Partial<WorkflowEditorNode<TNodeData>>);
+              }}
+            >
+              Add property output
             </Button>
           </div>
         ) : null}
