@@ -429,6 +429,14 @@ export function WorkflowWorkbench<
           }}
           onEdgesChange={(edges) => {
             if (!readOnly) {
+              const hasUiCreatedEdge = edges.some(
+                (edge) => !document.edges.some((currentEdge) => currentEdge.id === edge.id),
+              );
+
+              if (hasUiCreatedEdge) {
+                return;
+              }
+
               commitDocument(
                 normalizeWorkflowEditorDocument({
                   ...document,

@@ -1135,10 +1135,12 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Start Source Out" })[0]!);
     fireEvent.click(screen.getAllByRole("button", { name: "Connect to Target In" })[0]!);
 
+    expect(handleDocumentChange).toHaveBeenCalledTimes(1);
     expect(handleDocumentChange).toHaveBeenCalledWith(
       expect.objectContaining({
         edges: [
           expect.objectContaining({
+            id: "source:out->target:in",
             sourceNodeId: "source",
             sourcePortId: "out",
             targetNodeId: "target",

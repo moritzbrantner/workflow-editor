@@ -1,10 +1,13 @@
 import type {
+  WorkflowBuilderConnection as UiWorkflowBuilderConnection,
   WorkflowBuilderEdge as UiWorkflowBuilderEdge,
+  WorkflowBuilderConnectionValidity as UiWorkflowBuilderConnectionValidity,
   WorkflowBuilderNodeData as UiWorkflowBuilderNodeData,
   WorkflowBuilderViewport as UiWorkflowBuilderViewport,
   WorkflowNodeData as UiWorkflowNodeData,
   WorkflowNodePort as UiWorkflowNodePort,
 } from "@moritzbrantner/ui/labs";
+import { getWorkflowBuilderConnectionValidity } from "@moritzbrantner/ui/labs";
 
 import {
   createWorkflowGraphIndex,
@@ -133,20 +136,12 @@ export type WorkflowEditorDocument<
   viewport?: WorkflowEditorViewport;
 };
 
-export type WorkflowEditorConnectionInput = {
-  sourceNodeId: string;
-  sourcePortId: string;
-  targetNodeId: string;
-  targetPortId: string;
-};
+export type WorkflowEditorConnectionInput = UiWorkflowBuilderConnection;
 
 export type WorkflowEditorConnectionInvalidReason =
+  | NonNullable<UiWorkflowBuilderConnectionValidity["reason"]>
   | "cycle"
-  | "duplicate"
-  | "kind-mismatch"
-  | "missing-node"
-  | "missing-port"
-  | "self-connection";
+  | "missing-node";
 
 export type WorkflowEditorConnectionValidity = {
   valid: boolean;
@@ -964,12 +959,22 @@ export function validateWorkflowEditorConnection<
     return { valid: false, reason: "self-connection" };
   }
 
-  const sourcePort = sourceNode.outputs?.find((port) => port.id === connection.sourcePortId);
-  const targetPort = targetNode.inputs?.find((port) => port.id === connection.targetPortId);
+  const uiConnection = {
+    nodes: toUiWorkflowBuilderNodes(document.nodes),
+    edges: toUiWorkflowBuilderEdges(document.edges),
+    ...connection,
+  };
+  const structuralValidity = getWorkflowBuilderConnectionValidity({
+    ...uiConnection,
+    edges: [],
+  });
 
-  if (!sourcePort || !targetPort) {
-    return { valid: false, reason: "missing-port" };
+  if (!structuralValidity.valid) {
+    return structuralValidity;
   }
+
+  const sourcePort = sourceNode.outputs!.find((port) => port.id === connection.sourcePortId)!;
+  const targetPort = targetNode.inputs!.find((port) => port.id === connection.targetPortId)!;
 
   if (
     !isWorkflowEditorPortTypeAssignable(sourcePort.type, targetPort.type, options.typeDefinitions)
@@ -977,16 +982,10 @@ export function validateWorkflowEditorConnection<
     return { valid: false, reason: "kind-mismatch" };
   }
 
-  const duplicate = document.edges.some(
-    (edge) =>
-      edge.sourceNodeId === connection.sourceNodeId &&
-      edge.sourcePortId === connection.sourcePortId &&
-      edge.targetNodeId === connection.targetNodeId &&
-      edge.targetPortId === connection.targetPortId,
-  );
+  const baseValidity = getWorkflowBuilderConnectionValidity(uiConnection);
 
-  if (duplicate) {
-    return { valid: false, reason: "duplicate" };
+  if (!baseValidity.valid) {
+    return baseValidity;
   }
 
   if (wouldCreateWorkflowEditorCycle(document, connection)) {
