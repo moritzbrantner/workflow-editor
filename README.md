@@ -2,6 +2,8 @@
 
 Node graph workflow document utilities and a controlled React workbench for editing workflow graphs.
 
+[Open the example workbench](https://moritzbrantner.github.io/workflow-editor/)
+
 ## Install
 
 ```sh

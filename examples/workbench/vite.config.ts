@@ -9,6 +9,7 @@ const rootDir = fileURLToPath(new URL("../../", import.meta.url));
 
 export default defineConfig({
   root: exampleDir,
+  base: "./",
   plugins: [tailwindcss()],
   resolve: {
     alias: {
