@@ -22,11 +22,18 @@ async function selectNode(page: Page, label: string) {
 }
 
 test.describe("WorkflowWorkbench", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto("/");
+    await page.evaluate(() => {
+      window.localStorage.clear();
+    });
+  });
+
   test("adds template nodes and keeps controlled document state in sync", async ({ page }) => {
     await page.goto("/");
 
-    await expect(page.getByText("3 nodes")).toBeVisible();
-    await expect(page.getByText("1 edges")).toBeVisible();
+    await expect(page.getByTestId("node-count")).toHaveText("3");
+    await expect(page.getByTestId("edge-count")).toHaveText("1");
     await page
       .getByRole("button", { name: /Decision/ })
       .first()
@@ -52,7 +59,7 @@ test.describe("WorkflowWorkbench", () => {
     await selectNode(page, "Input");
 
     await expect(page.getByTestId("selection-json")).toContainText('"id":"input"');
-    await page.getByRole("button", { name: "Duplicate" }).click();
+    await page.getByRole("button", { name: "Duplicate", exact: true }).click();
     await expect(page.getByTestId("node-count")).toHaveText("4");
     await expect(page.getByTestId("summary-json")).toContainText("input-copy");
 
@@ -98,12 +105,111 @@ test.describe("WorkflowWorkbench", () => {
     await selectNode(page, "Input");
 
     await expect(page.getByRole("button", { name: /Decision/ }).first()).toBeDisabled();
-    await expect(page.getByRole("button", { name: "Duplicate" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Duplicate", exact: true })).toBeDisabled();
     await expect(page.getByRole("button", { name: "Delete", exact: true })).toBeDisabled();
     await expect(page.getByRole("textbox", { name: "Label" }).first()).toBeDisabled();
 
     await page.getByRole("button", { name: "Start Input Out" }).first().click({ force: true });
     await expect(page.getByTestId("node-count")).toHaveText("3");
     await expect(page.getByTestId("edge-count")).toHaveText("1");
+  });
+
+  test("creates, renames, duplicates, deletes, and persists documents", async ({ page }) => {
+    await page.goto("/");
+
+    await page.getByRole("button", { name: "New" }).click();
+    await expect(page.getByTestId("document-count")).toHaveText("2");
+    await expect(page.getByTestId("node-count")).toHaveText("0");
+
+    await page.getByRole("textbox", { name: "Document name" }).fill("Scratch Flow");
+    await page.getByRole("button", { name: "Rename" }).click();
+    await expect(page.getByTestId("active-document-name")).toHaveText("Scratch Flow");
+
+    await page.getByRole("button", { name: "Duplicate document" }).click();
+    await expect(page.getByTestId("document-count")).toHaveText("3");
+    await expect(page.getByTestId("active-document-name")).toHaveText("Scratch Flow Copy");
+
+    await page.getByRole("button", { name: "Delete document" }).click();
+    await expect(page.getByTestId("document-count")).toHaveText("2");
+    await page.waitForFunction(() =>
+      window.localStorage.getItem("workflow-editor-playwright")?.includes("Scratch Flow"),
+    );
+
+    await page.reload();
+    await expect(page.getByTestId("document-count")).toHaveText("2");
+    await expect(page.getByTestId("library-json")).toContainText("Scratch Flow");
+  });
+
+  test("saves and restores explicit versions", async ({ page }) => {
+    await page.goto("/");
+
+    await page.getByRole("button", { name: "Save version" }).click();
+    await expect(page.getByTestId("version-count")).toHaveText("1");
+
+    await page
+      .getByRole("button", { name: /Decision/ })
+      .first()
+      .click();
+    await expect(page.getByTestId("node-count")).toHaveText("4");
+
+    await page.getByRole("button", { name: "Restore version" }).click();
+    await expect(page.getByTestId("node-count")).toHaveText("3");
+    await expect(page.getByTestId("document-json")).not.toContainText('"id":"decision"');
+  });
+
+  test("undoes and redoes document edits", async ({ page }) => {
+    await page.goto("/");
+
+    await page
+      .getByRole("button", { name: /Decision/ })
+      .first()
+      .click();
+    await expect(page.getByTestId("node-count")).toHaveText("4");
+
+    await page.getByRole("button", { name: "Undo", exact: true }).click();
+    await expect(page.getByTestId("node-count")).toHaveText("3");
+
+    await page.getByRole("button", { name: "Redo", exact: true }).click();
+    await expect(page.getByTestId("node-count")).toHaveText("4");
+  });
+
+  test("exports and imports workflow JSON files", async ({ page }) => {
+    await page.goto("/");
+
+    const downloadPromise = page.waitForEvent("download");
+    await page.getByRole("button", { name: "Export JSON" }).click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toMatch(/demo-workflow\.json$/);
+
+    await page.locator('input[aria-label="Import workflow JSON"]').setInputFiles({
+      name: "imported-workflow.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(
+        JSON.stringify({
+          format: "@moritzbrantner/workflow-editor/document",
+          version: 1,
+          exportedAt: "2026-05-26T00:00:00.000Z",
+          documentName: "Imported Flow",
+          document: {
+            nodes: [{ id: "imported", label: "Imported", x: 0, y: 0 }],
+            edges: [],
+          },
+        }),
+      ),
+    });
+
+    await expect(page.getByTestId("active-document-name")).toHaveText("Imported Flow");
+    await expect(page.getByTestId("node-count")).toHaveText("1");
+  });
+
+  test("recovers from corrupt localStorage", async ({ page }) => {
+    await page.addInitScript(() => {
+      window.localStorage.setItem("workflow-editor-playwright", "{");
+    });
+    await page.goto("/");
+
+    await expect(page.getByRole("heading", { name: "Workflow node" })).toHaveCount(0);
+    await expect(page.getByTestId("document-count")).toHaveText("1");
+    await expect(page.getByTestId("node-count")).toHaveText("3");
   });
 });

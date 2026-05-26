@@ -4,9 +4,13 @@ import { StrictMode, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 
 import {
-  WorkflowWorkbench,
+  WorkflowEditor,
+  activeWorkflowEditorEntry,
+  createWorkflowEditorEntry,
+  createWorkflowEditorLibrary,
   normalizeWorkflowEditorDocument,
   type WorkflowEditorDocument,
+  type WorkflowEditorLibrary,
   type WorkflowWorkbenchSelection,
 } from "@moritzbrantner/workflow-editor";
 
@@ -49,6 +53,17 @@ const initialDocument: WorkflowEditorDocument = normalizeWorkflowEditorDocument(
   ],
 });
 
+const initialLibrary = createWorkflowEditorLibrary({
+  activeDocumentId: "demo-workflow",
+  documents: [
+    createWorkflowEditorEntry({
+      id: "demo-workflow",
+      name: "Demo Workflow",
+      document: initialDocument,
+    }),
+  ],
+});
+
 const nodeTemplates = [
   {
     id: "decision",
@@ -72,26 +87,28 @@ const nodeTemplates = [
 
 function App() {
   const readOnly = new URLSearchParams(window.location.search).get("readonly") === "1";
-  const [document, setDocument] = useState(initialDocument);
+  const [library, setLibrary] = useState<WorkflowEditorLibrary>(initialLibrary);
   const [selection, setSelection] = useState<WorkflowWorkbenchSelection>(null);
-
+  const activeEntry = activeWorkflowEditorEntry(library);
+  const document = activeEntry?.document ?? initialDocument;
   const selectedNodeId = selection?.type === "node" ? selection.id : null;
   const selectedEdgeId = selection?.type === "edge" ? selection.id : null;
   const summary = useMemo(
     () => ({
+      activeDocumentId: library.activeDocumentId,
       edges: document.edges.map((edge) => edge.id).sort(),
       nodes: document.nodes.map((node) => node.id).sort(),
       selected: selection ? `${selection.type}:${selection.id}` : "none",
+      versions: activeEntry?.versions.length ?? 0,
     }),
-    [document, selection],
+    [activeEntry?.versions.length, document, library.activeDocumentId, selection],
   );
 
   return (
     <main>
-      <WorkflowWorkbench
-        document={document}
-        selectedNodeId={selectedNodeId}
-        selectedEdgeId={selectedEdgeId}
+      <WorkflowEditor
+        storageKey="workflow-editor-playwright"
+        initialLibrary={initialLibrary}
         readOnly={readOnly}
         nodeTemplates={nodeTemplates}
         renderNodeTemplate={(template) => (
@@ -100,15 +117,21 @@ function App() {
             {template.description ? <span> {template.description}</span> : null}
           </span>
         )}
-        onDocumentChange={setDocument}
+        onLibraryChange={setLibrary}
         onSelectionChange={setSelection}
       />
       <section aria-label="Test state">
+        <div data-testid="active-document-name">{activeEntry?.name ?? ""}</div>
+        <div data-testid="document-count">{library.documents.length}</div>
         <div data-testid="node-count">{document.nodes.length}</div>
         <div data-testid="edge-count">{document.edges.length}</div>
+        <div data-testid="version-count">{activeEntry?.versions.length ?? 0}</div>
         <pre data-testid="summary-json">{JSON.stringify(summary)}</pre>
         <pre data-testid="document-json">{JSON.stringify(document)}</pre>
+        <pre data-testid="library-json">{JSON.stringify(library)}</pre>
         <pre data-testid="selection-json">{JSON.stringify(selection)}</pre>
+        <pre data-testid="selected-node-id">{JSON.stringify(selectedNodeId)}</pre>
+        <pre data-testid="selected-edge-id">{JSON.stringify(selectedEdgeId)}</pre>
       </section>
     </main>
   );

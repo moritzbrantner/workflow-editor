@@ -31,6 +31,22 @@
     "./react": {
       "types": "./dist/react.d.ts",
       "import": "./dist/react.js"
+    },
+    "./editor": {
+      "types": "./dist/editor.d.ts",
+      "import": "./dist/editor.js"
+    },
+    "./history": {
+      "types": "./dist/history.d.ts",
+      "import": "./dist/history.js"
+    },
+    "./persistence": {
+      "types": "./dist/persistence.d.ts",
+      "import": "./dist/persistence.js"
+    },
+    "./share": {
+      "types": "./dist/share.d.ts",
+      "import": "./dist/share.js"
     }
   },
   "peerDependencies": {
@@ -63,7 +79,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsup src/index.ts src/core.ts src/react.tsx --format esm --dts --clean --out-dir dist",
+    "build": "tsup src/index.ts src/core.ts src/react.tsx src/editor.tsx src/history.ts src/persistence.ts src/share.ts --format esm --dts --clean --out-dir dist",
     "changeset": "changeset",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
