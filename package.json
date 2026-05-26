@@ -56,6 +56,7 @@
     "@moritzbrantner/ui": "^0.8.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.11.3",
     "@changesets/changelog-github": "^0.6.0",
     "@changesets/cli": "^2.29.7",
     "@playwright/test": "^1.60.0",
@@ -88,8 +89,9 @@
     "lint": "oxlint --format=github",
     "prepack": "bun run build",
     "check-types": "tsc --noEmit",
+    "smoke:package": "node scripts/smoke-package-exports.mjs",
     "test": "vitest run",
     "test:playwright": "playwright test",
-    "verify": "bun run format:check && bun run lint && bun run check-types && bun run test && bun run test:playwright && bun run build"
+    "verify": "bun run format:check && bun run lint && bun run check-types && bun run test && bun run test:playwright && bun run example:build && bun run build && bun run smoke:package"
   }
 }

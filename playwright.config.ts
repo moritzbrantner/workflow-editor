@@ -3,6 +3,9 @@ import { fileURLToPath } from "node:url";
 
 import { defineConfig, devices } from "@playwright/test";
 
+delete process.env.FORCE_COLOR;
+delete process.env.NO_COLOR;
+
 const rootDir = fileURLToPath(new URL("./", import.meta.url));
 const isCi = Boolean(process.env.CI);
 
@@ -13,19 +16,23 @@ export default defineConfig({
   workers: isCi ? 1 : undefined,
   reporter: [["list"]],
   use: {
-    baseURL: "http://127.0.0.1:4173",
+    baseURL: "http://127.0.0.1:4174",
     trace: "on-first-retry",
   },
   webServer: {
-    command: "bunx vite --host 127.0.0.1 --port 4173 tests/playwright/app",
+    command: "node scripts/playwright-web-server.mjs",
     cwd: rootDir,
-    reuseExistingServer: !isCi,
+    reuseExistingServer: false,
     timeout: 120_000,
   },
   projects: [
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
+    },
+    {
+      name: "mobile-chrome",
+      use: { ...devices["Pixel 5"] },
     },
   ],
   resolveSnapshotPath: (testInfo, snapshotPath) =>

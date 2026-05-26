@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
 
 type WorkflowDocumentSnapshot = {
   nodes: Array<{ id: string; label: string; x: number; y: number }>;
@@ -34,7 +35,22 @@ async function selectInspectorWorkflowReference(page: Page, label: string) {
   await page.getByRole("option", { name: label, exact: true }).click();
 }
 
-test.describe("WorkflowWorkbench", () => {
+async function expectNoAxeViolations(page: Page) {
+  const results = await new AxeBuilder({ page })
+    .disableRules([
+      "landmark-main-is-top-level",
+      "landmark-no-duplicate-main",
+      "landmark-unique",
+      "landmark-complementary-is-top-level",
+    ])
+    .analyze();
+
+  expect(results.violations).toEqual([]);
+}
+
+test.describe("WorkflowWorkbench desktop", () => {
+  test.skip(({ isMobile }) => isMobile, "Desktop-only interaction coverage");
+
   test.beforeEach(async ({ page }) => {
     await page.goto("/");
     await page.evaluate(() => {
@@ -290,5 +306,46 @@ test.describe("WorkflowWorkbench", () => {
     await expect(page.getByRole("heading", { name: "Workflow node" })).toHaveCount(0);
     await expect(page.getByTestId("document-count")).toHaveText("1");
     await expect(page.getByTestId("node-count")).toHaveText("3");
+  });
+});
+
+test.describe("WorkflowWorkbench accessibility and responsive smoke", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto("/");
+    await page.evaluate(() => {
+      window.localStorage.clear();
+    });
+  });
+
+  test("passes automated accessibility checks in the initial and inspector states", async ({
+    page,
+  }) => {
+    await expectNoAxeViolations(page);
+
+    await page.getByRole("button", { name: "Input", exact: true }).click({ force: true });
+    await expect(page.getByRole("heading", { name: "Workflow node" })).toBeVisible();
+    await expectNoAxeViolations(page);
+  });
+
+  test("activates node creation from keyboard focus", async ({ page }) => {
+    const decisionButton = page.getByRole("button", { name: /Decision/ }).first();
+    await decisionButton.focus();
+    await page.keyboard.press("Enter");
+
+    await expect(page.getByTestId("node-count")).toHaveText("4");
+    await expect(page.getByTestId("selection-json")).toContainText('"id":"decision"');
+  });
+
+  test("loads and edits on a mobile viewport", async ({ page, isMobile }) => {
+    test.skip(!isMobile, "Mobile smoke coverage");
+
+    await expect(page.getByTestId("document-count")).toHaveText("1");
+    await expect(page.getByTestId("node-count")).toHaveText("3");
+    await page
+      .getByRole("button", { name: /Decision/ })
+      .first()
+      .click();
+
+    await expect(page.getByTestId("node-count")).toHaveText("4");
   });
 });

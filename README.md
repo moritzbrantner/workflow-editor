@@ -27,6 +27,8 @@ The React workbench expects `react` as a peer dependency and consumes
   `getWorkflowEditorReferencedDocumentIds(...)`, and
   `getWorkflowEditorReferenceDiagnostics(...)` for reference-based nested workflow support.
 - `validateWorkflowEditorConnection(...)`, `detectWorkflowEditorCycles(...)`, `topologicallySortWorkflowEditorNodes(...)`, and UI adapter helpers.
+- `validateWorkflowEditorDocument(...)`, `assertWorkflowEditorDocument(...)`, and
+  `WorkflowEditorDocumentValidationError` for strict document validation diagnostics.
 - `createWorkflowEditorLibrary(...)`, `createLocalStorageWorkflowEditorStorage(...)`,
   `buildWorkflowEditorDocumentFile(...)`, and `parseWorkflowEditorDocumentFile(...)`
   for headless persistence.
@@ -83,6 +85,22 @@ export function App() {
   `@moritzbrantner/workflow-editor/share`, and
   `@moritzbrantner/workflow-editor/editor`.
 - The package owns workflow document state and graph validation; `@moritzbrantner/ui` supplies the generic graph surface and inspector controls.
+- `normalizeWorkflowEditorDocument(...)` validates strictly by default and throws
+  `WorkflowEditorDocumentValidationError` when nodes, edges, ids, endpoints, or graph
+  cycles are invalid. Use `validateWorkflowEditorDocument(...)` to inspect diagnostics
+  without throwing.
+- To accept older or partially invalid graph data and preserve the previous pruning behavior,
+  use repair mode:
+
+  ```ts
+  const document = normalizeWorkflowEditorDocument(importedDocument, { mode: "repair" });
+  ```
+
+  Repair mode normalizes node coordinates and viewport values, removes dangling/self/cycle-forming
+  edges, and syncs built-in object-constructor nodes.
+
+- Imported workflow JSON files are validated strictly. Malformed workflow documents fail with
+  validation diagnostics instead of being silently repaired.
 - Workflow ports use serializable TypeScript-like `type` objects instead of port-level
   `kind` strings. `validateWorkflowEditorConnection(...)` accepts an optional
   `typeDefinitions` registry and allows an output to connect to an input when the
@@ -103,7 +121,7 @@ export function App() {
 - Clipboard copy/paste for selected nodes and connected subgraphs.
 - Selection box and multi-select operations.
 - Automatic graph layout helpers.
-- Optional cycle prevention for new connections.
+- Configurable graph validation policies.
 - Port cardinality rules for single-input and multi-input ports.
 - Typed node template registries with validation.
 - Accessibility coverage for keyboard-only graph editing.

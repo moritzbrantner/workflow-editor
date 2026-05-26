@@ -111,7 +111,20 @@ function App() {
   );
 
   return (
-    <main>
+    <div role="main" aria-label="Workflow editor Playwright fixture">
+      <h1
+        style={{
+          clip: "rect(0 0 0 0)",
+          clipPath: "inset(50%)",
+          height: 1,
+          overflow: "hidden",
+          position: "absolute",
+          whiteSpace: "nowrap",
+          width: 1,
+        }}
+      >
+        Workflow editor Playwright fixture
+      </h1>
       <WorkflowEditor
         storageKey="workflow-editor-playwright"
         initialLibrary={initialLibrary}
@@ -142,7 +155,7 @@ function App() {
         <pre data-testid="selected-node-id">{JSON.stringify(selectedNodeId)}</pre>
         <pre data-testid="selected-edge-id">{JSON.stringify(selectedEdgeId)}</pre>
       </section>
-    </main>
+    </div>
   );
 }
 

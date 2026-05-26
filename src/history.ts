@@ -112,5 +112,31 @@ function documentsEqual<TNodeData = Record<string, unknown>, TEdgeData = Record<
   left: WorkflowEditorDocument<TNodeData, TEdgeData>,
   right: WorkflowEditorDocument<TNodeData, TEdgeData>,
 ) {
-  return JSON.stringify(left) === JSON.stringify(right);
+  return (
+    stableWorkflowEditorDocumentFingerprint(left) === stableWorkflowEditorDocumentFingerprint(right)
+  );
+}
+
+function stableWorkflowEditorDocumentFingerprint(value: unknown): string {
+  return JSON.stringify(sortWorkflowEditorDocumentValue(value));
+}
+
+function sortWorkflowEditorDocumentValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(sortWorkflowEditorDocumentValue);
+  }
+
+  if (!isRecord(value)) {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.keys(value)
+      .sort()
+      .map((key) => [key, sortWorkflowEditorDocumentValue(value[key])]),
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

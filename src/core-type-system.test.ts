@@ -326,7 +326,7 @@ describe("workflow editor type-aware connections", () => {
         type: objectType({ permissions: { type: arrayOf(stringType) } }),
       },
     ] satisfies WorkflowEditorTypeDefinition[];
-    const document = normalizeWorkflowEditorDocument({
+    const document: WorkflowEditorDocument = {
       nodes: [
         {
           id: "admin-source",
@@ -358,7 +358,7 @@ describe("workflow editor type-aware connections", () => {
         },
       ],
       edges: [],
-    });
+    };
 
     expect(
       validateWorkflowEditorConnection(
@@ -547,7 +547,7 @@ describe("workflow editor port type diagnostics", () => {
   });
 
   test("skips edges whose nodes or ports cannot be resolved", () => {
-    const document = normalizeWorkflowEditorDocument({
+    const document: WorkflowEditorDocument = {
       nodes: [
         {
           id: "source",
@@ -580,7 +580,7 @@ describe("workflow editor port type diagnostics", () => {
           targetPortId: "in",
         },
       ],
-    });
+    };
 
     expect(analyzeWorkflowEditorPortTypes(document)).toEqual([]);
   });

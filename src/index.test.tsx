@@ -3,6 +3,7 @@ import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 
 import {
   WorkflowEditor,
+  WorkflowEditorDocumentValidationError,
   WorkflowWorkbench,
   addWorkflowEditorNode,
   addWorkflowEditorObjectConstructorInput,
@@ -61,6 +62,7 @@ import {
   upsertWorkflowEditorEntry,
   updateWorkflowEditorNode,
   updateWorkflowEditorNodeWorkflowReference,
+  validateWorkflowEditorDocument,
   validateWorkflowEditorConnection,
   wouldCreateWorkflowEditorCycle,
   workflowEditorControlFlowNodeTemplates,
@@ -249,11 +251,14 @@ describe("@moritzbrantner/workflow-editor core", () => {
     expect(graphIndex.getNodeById("review")?.label).toBe("Human review");
     expect(duplicated.nodes.some((node) => node.id === "review-copy")).toBe(true);
     expect(
-      normalizeWorkflowEditorDocument({
-        nodes: [{ id: "zoom", label: "Zoom", x: Number.NaN, y: Number.NaN }],
-        edges: [],
-        viewport: { x: Number.NaN, y: Number.NaN, zoom: 10 },
-      }).viewport,
+      normalizeWorkflowEditorDocument(
+        {
+          nodes: [{ id: "zoom", label: "Zoom", x: Number.NaN, y: Number.NaN }],
+          edges: [],
+          viewport: { x: Number.NaN, y: Number.NaN, zoom: 10 },
+        },
+        { mode: "repair" },
+      ).viewport,
     ).toEqual({ x: 0, y: 0, zoom: 4 });
 
     const uiNodes = toUiWorkflowBuilderNodes(duplicated.nodes);
@@ -263,6 +268,106 @@ describe("@moritzbrantner/workflow-editor core", () => {
 
     const removed = removeWorkflowEditorNode(duplicated, "input");
     expect(removed.edges).toHaveLength(0);
+  });
+
+  test("validates workflow documents and supports repair-mode normalization", () => {
+    expect(validateWorkflowEditorDocument(document)).toEqual([]);
+    expect(validateWorkflowEditorDocument(null)).toEqual([
+      expect.objectContaining({ code: "invalid-document" }),
+    ]);
+    expect(validateWorkflowEditorDocument({ edges: [] })).toEqual([
+      expect.objectContaining({ code: "invalid-document", path: "$.nodes" }),
+    ]);
+
+    const invalidDocument = {
+      nodes: [
+        { id: "", label: "Missing id", x: 0, y: 0 },
+        { id: "a", label: "A", x: 0, y: 0 },
+        { id: "a", label: "Duplicate A", x: 0, y: 0 },
+        { id: "b", label: "B", x: 0, y: 0 },
+      ],
+      edges: [
+        {
+          id: "missing-source",
+          sourceNodeId: "missing",
+          sourcePortId: "out",
+          targetNodeId: "a",
+          targetPortId: "in",
+        },
+        {
+          id: "missing-target",
+          sourceNodeId: "a",
+          sourcePortId: "out",
+          targetNodeId: "missing",
+          targetPortId: "in",
+        },
+        {
+          id: "self",
+          sourceNodeId: "b",
+          sourcePortId: "out",
+          targetNodeId: "b",
+          targetPortId: "in",
+        },
+        {
+          id: "duplicate-edge",
+          sourceNodeId: "a",
+          sourcePortId: "out",
+          targetNodeId: "b",
+          targetPortId: "in",
+        },
+        {
+          id: "duplicate-edge",
+          sourceNodeId: "b",
+          sourcePortId: "out",
+          targetNodeId: "a",
+          targetPortId: "in",
+        },
+      ],
+    };
+    const diagnosticCodes = validateWorkflowEditorDocument(invalidDocument).map(
+      (diagnostic) => diagnostic.code,
+    );
+
+    expect(diagnosticCodes).toEqual(
+      expect.arrayContaining([
+        "invalid-node",
+        "duplicate-node-id",
+        "duplicate-edge-id",
+        "missing-edge-node",
+        "self-edge",
+      ]),
+    );
+    expect(() =>
+      normalizeWorkflowEditorDocument(invalidDocument as WorkflowEditorDocument),
+    ).toThrow(WorkflowEditorDocumentValidationError);
+
+    const cyclic = {
+      nodes: [
+        { id: "a", label: "A", x: 0, y: 0 },
+        { id: "b", label: "B", x: 0, y: 0 },
+      ],
+      edges: [
+        {
+          id: "a-b",
+          sourceNodeId: "a",
+          sourcePortId: "out",
+          targetNodeId: "b",
+          targetPortId: "in",
+        },
+        {
+          id: "b-a",
+          sourceNodeId: "b",
+          sourcePortId: "out",
+          targetNodeId: "a",
+          targetPortId: "in",
+        },
+      ],
+    };
+
+    expect(validateWorkflowEditorDocument(cyclic).map((diagnostic) => diagnostic.code)).toContain(
+      "cycle",
+    );
+    expect(normalizeWorkflowEditorDocument(cyclic, { mode: "repair" }).edges).toHaveLength(1);
   });
 
   test("validates connections and detects ordering and cycles", () => {
@@ -525,16 +630,31 @@ describe("@moritzbrantner/workflow-editor core", () => {
     });
     expect(connectWorkflowEditorNodes(dag, cycleConnection).edges).toHaveLength(2);
 
-    const normalized = normalizeWorkflowEditorDocument({
-      ...dag,
-      edges: [
-        ...dag.edges,
-        {
-          id: "c-a",
-          ...cycleConnection,
-        },
-      ],
-    });
+    expect(() =>
+      normalizeWorkflowEditorDocument({
+        ...dag,
+        edges: [
+          ...dag.edges,
+          {
+            id: "c-a",
+            ...cycleConnection,
+          },
+        ],
+      }),
+    ).toThrow(WorkflowEditorDocumentValidationError);
+    const normalized = normalizeWorkflowEditorDocument(
+      {
+        ...dag,
+        edges: [
+          ...dag.edges,
+          {
+            id: "c-a",
+            ...cycleConnection,
+          },
+        ],
+      },
+      { mode: "repair" },
+    );
 
     expect(normalized.edges.map((edge) => edge.id)).toEqual(["a-b", "b-c"]);
     expect(isWorkflowEditorDirectedAcyclicGraph(normalized)).toBe(true);
@@ -765,30 +885,29 @@ describe("@moritzbrantner/workflow-editor persistence", () => {
     ).toThrow("Unsupported workflow document version");
   });
 
-  test("normalizes imported documents and rejects duplicate node IDs", () => {
-    const parsed = parseWorkflowEditorDocumentFile(
-      JSON.stringify({
-        format: "@moritzbrantner/workflow-editor/document",
-        version: 1,
-        exportedAt: "2026-05-26T00:00:00.000Z",
-        document: {
-          nodes: [{ id: "a", label: "A", x: Number.NaN, y: Number.NaN }],
-          edges: [
-            {
-              id: "missing",
-              sourceNodeId: "a",
-              sourcePortId: "out",
-              targetNodeId: "missing",
-              targetPortId: "in",
-            },
-          ],
-          viewport: { x: Number.NaN, y: Number.NaN, zoom: 10 },
-        },
-      }),
-    );
-
-    expect(parsed.document.viewport).toEqual({ x: 0, y: 0, zoom: 4 });
-    expect(parsed.document.edges).toEqual([]);
+  test("strictly validates imported documents", () => {
+    expect(() =>
+      parseWorkflowEditorDocumentFile(
+        JSON.stringify({
+          format: "@moritzbrantner/workflow-editor/document",
+          version: 1,
+          exportedAt: "2026-05-26T00:00:00.000Z",
+          document: {
+            nodes: [{ id: "a", label: "A", x: null, y: null }],
+            edges: [
+              {
+                id: "missing",
+                sourceNodeId: "a",
+                sourcePortId: "out",
+                targetNodeId: "missing",
+                targetPortId: "in",
+              },
+            ],
+            viewport: { x: null, y: null, zoom: 10 },
+          },
+        }),
+      ),
+    ).toThrow(WorkflowEditorDocumentValidationError);
     expect(() =>
       parseWorkflowEditorDocumentFile(
         JSON.stringify({
@@ -803,7 +922,7 @@ describe("@moritzbrantner/workflow-editor persistence", () => {
           },
         }),
       ),
-    ).toThrow("Duplicate workflow node id");
+    ).toThrow(WorkflowEditorDocumentValidationError);
   });
 
   test("creates, mutates, versions, and restores workflow libraries", () => {
@@ -842,7 +961,7 @@ describe("@moritzbrantner/workflow-editor persistence", () => {
     expect(restoreWorkflowEditorVersion(versioned, firstVersionId).document.nodes).toHaveLength(3);
 
     versioned = createWorkflowEditorVersion(
-      { ...versioned, document: { ...versioned.document, nodes: [] } },
+      { ...versioned, document: { ...versioned.document, nodes: [], edges: [] } },
       { maxVersions: 2 },
     );
     versioned = createWorkflowEditorVersion(versioned, { maxVersions: 2 });

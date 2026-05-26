@@ -136,6 +136,46 @@ export type WorkflowEditorDocument<
   viewport?: WorkflowEditorViewport;
 };
 
+export type WorkflowEditorDocumentNormalizationMode = "strict" | "repair";
+
+export type WorkflowEditorDocumentDiagnosticCode =
+  | "invalid-document"
+  | "invalid-node"
+  | "invalid-edge"
+  | "duplicate-node-id"
+  | "duplicate-edge-id"
+  | "missing-edge-node"
+  | "self-edge"
+  | "cycle";
+
+export type WorkflowEditorDocumentDiagnostic = {
+  code: WorkflowEditorDocumentDiagnosticCode;
+  message: string;
+  path: string;
+  nodeId?: string;
+  edgeId?: string;
+  sourceNodeId?: string;
+  targetNodeId?: string;
+};
+
+export type WorkflowEditorDocumentValidationOptions = {
+  allowCycles?: boolean;
+};
+
+export type WorkflowEditorDocumentNormalizationOptions = WorkflowEditorDocumentValidationOptions & {
+  mode?: WorkflowEditorDocumentNormalizationMode;
+};
+
+export class WorkflowEditorDocumentValidationError extends Error {
+  override name = "WorkflowEditorDocumentValidationError" as const;
+  diagnostics: WorkflowEditorDocumentDiagnostic[];
+
+  constructor(diagnostics: WorkflowEditorDocumentDiagnostic[]) {
+    super(formatWorkflowEditorDocumentValidationMessage(diagnostics));
+    this.diagnostics = diagnostics;
+  }
+}
+
 export type WorkflowEditorConnectionInput = UiWorkflowBuilderConnection;
 
 export type WorkflowEditorConnectionInvalidReason =
@@ -332,19 +372,27 @@ export function normalizeWorkflowEditorDocument<
   TEdgeData = Record<string, unknown>,
 >(
   document: WorkflowEditorDocument<TNodeData, TEdgeData>,
+  options: WorkflowEditorDocumentNormalizationOptions = {},
 ): WorkflowEditorDocument<TNodeData, TEdgeData> {
-  assertUniqueIds(
-    document.nodes.map((node) => node.id),
-    "workflow node",
-  );
-  assertUniqueIds(
-    document.edges.map((edge) => edge.id),
-    "workflow edge",
-  );
+  const mode = options.mode ?? "strict";
+  const diagnostics = validateWorkflowEditorDocument(document, options);
 
-  let nodes = document.nodes.map((node) => normalizeWorkflowEditorNode(node));
+  if (mode === "strict" && diagnostics.length > 0) {
+    throw new WorkflowEditorDocumentValidationError(diagnostics);
+  }
+
+  let nodes = Array.isArray(document.nodes)
+    ? document.nodes.flatMap((node) =>
+        isRecord(node) ? [normalizeWorkflowEditorNode(node as WorkflowEditorNode<TNodeData>)] : [],
+      )
+    : [];
   const nodeIds = new Set(nodes.map((node) => node.id));
-  const edges = normalizeWorkflowEditorDagEdges(document.edges, nodeIds);
+  const edges = Array.isArray(document.edges)
+    ? (normalizeWorkflowEditorDagEdges(
+        document.edges.flatMap((edge) => (isRecord(edge) ? [edge as WorkflowEditorEdge] : [])),
+        nodeIds,
+      ) as Array<WorkflowEditorEdge<TEdgeData>>)
+    : [];
   nodes = syncWorkflowEditorObjectConstructorNodes(nodes, edges);
 
   return {
@@ -359,6 +407,222 @@ export function normalizeWorkflowEditorDocument<
         }
       : undefined,
   };
+}
+
+export function validateWorkflowEditorDocument<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+>(
+  value: unknown,
+  options: WorkflowEditorDocumentValidationOptions = {},
+): WorkflowEditorDocumentDiagnostic[] {
+  const diagnostics: WorkflowEditorDocumentDiagnostic[] = [];
+
+  if (!isRecord(value)) {
+    return [
+      {
+        code: "invalid-document",
+        message: "Workflow document must be an object",
+        path: "$",
+      },
+    ];
+  }
+
+  if (!Array.isArray(value.nodes)) {
+    diagnostics.push({
+      code: "invalid-document",
+      message: "Workflow document nodes must be an array",
+      path: "$.nodes",
+    });
+  }
+
+  if (!Array.isArray(value.edges)) {
+    diagnostics.push({
+      code: "invalid-document",
+      message: "Workflow document edges must be an array",
+      path: "$.edges",
+    });
+  }
+
+  if (!Array.isArray(value.nodes) || !Array.isArray(value.edges)) {
+    return diagnostics;
+  }
+
+  const nodeIds = new Set<string>();
+  const duplicateNodeIds = new Set<string>();
+  value.nodes.forEach((node, index) => {
+    const path = `$.nodes[${index}]`;
+
+    if (!isRecord(node)) {
+      diagnostics.push({
+        code: "invalid-node",
+        message: "Workflow node must be an object",
+        path,
+      });
+      return;
+    }
+
+    const nodeId = typeof node.id === "string" ? node.id : undefined;
+    if (!nodeId?.trim()) {
+      diagnostics.push({
+        code: "invalid-node",
+        message: "Workflow node id must be a non-empty string",
+        path: `${path}.id`,
+      });
+    } else if (nodeIds.has(nodeId)) {
+      duplicateNodeIds.add(nodeId);
+      diagnostics.push({
+        code: "duplicate-node-id",
+        message: `Duplicate workflow node id: ${nodeId}`,
+        path: `${path}.id`,
+        nodeId,
+      });
+    } else {
+      nodeIds.add(nodeId);
+    }
+
+    if (typeof node.label !== "string") {
+      diagnostics.push({
+        code: "invalid-node",
+        message: "Workflow node label must be a string",
+        path: `${path}.label`,
+        nodeId,
+      });
+    }
+
+    if (typeof node.x !== "number" || !Number.isFinite(node.x)) {
+      diagnostics.push({
+        code: "invalid-node",
+        message: "Workflow node x must be a finite number",
+        path: `${path}.x`,
+        nodeId,
+      });
+    }
+
+    if (typeof node.y !== "number" || !Number.isFinite(node.y)) {
+      diagnostics.push({
+        code: "invalid-node",
+        message: "Workflow node y must be a finite number",
+        path: `${path}.y`,
+        nodeId,
+      });
+    }
+
+    validateWorkflowEditorPorts(node.inputs, `${path}.inputs`, nodeId, diagnostics);
+    validateWorkflowEditorPorts(node.outputs, `${path}.outputs`, nodeId, diagnostics);
+  });
+
+  const edgeIds = new Set<string>();
+  value.edges.forEach((edge, index) => {
+    const path = `$.edges[${index}]`;
+
+    if (!isRecord(edge)) {
+      diagnostics.push({
+        code: "invalid-edge",
+        message: "Workflow edge must be an object",
+        path,
+      });
+      return;
+    }
+
+    const edgeId = typeof edge.id === "string" ? edge.id : undefined;
+    const sourceNodeId = typeof edge.sourceNodeId === "string" ? edge.sourceNodeId : undefined;
+    const targetNodeId = typeof edge.targetNodeId === "string" ? edge.targetNodeId : undefined;
+
+    if (!edgeId?.trim()) {
+      diagnostics.push({
+        code: "invalid-edge",
+        message: "Workflow edge id must be a non-empty string",
+        path: `${path}.id`,
+      });
+    } else if (edgeIds.has(edgeId)) {
+      diagnostics.push({
+        code: "duplicate-edge-id",
+        message: `Duplicate workflow edge id: ${edgeId}`,
+        path: `${path}.id`,
+        edgeId,
+      });
+    } else {
+      edgeIds.add(edgeId);
+    }
+
+    for (const key of ["sourceNodeId", "sourcePortId", "targetNodeId", "targetPortId"] as const) {
+      if (typeof edge[key] !== "string" || !edge[key].trim()) {
+        diagnostics.push({
+          code: "invalid-edge",
+          message: `Workflow edge ${key} must be a non-empty string`,
+          path: `${path}.${key}`,
+          edgeId,
+          sourceNodeId,
+          targetNodeId,
+        });
+      }
+    }
+
+    if (sourceNodeId && !nodeIds.has(sourceNodeId)) {
+      diagnostics.push({
+        code: "missing-edge-node",
+        message: `Workflow edge source node does not exist: ${sourceNodeId}`,
+        path: `${path}.sourceNodeId`,
+        edgeId,
+        sourceNodeId,
+        targetNodeId,
+      });
+    }
+
+    if (targetNodeId && !nodeIds.has(targetNodeId)) {
+      diagnostics.push({
+        code: "missing-edge-node",
+        message: `Workflow edge target node does not exist: ${targetNodeId}`,
+        path: `${path}.targetNodeId`,
+        edgeId,
+        sourceNodeId,
+        targetNodeId,
+      });
+    }
+
+    if (sourceNodeId && targetNodeId && sourceNodeId === targetNodeId) {
+      diagnostics.push({
+        code: "self-edge",
+        message: `Workflow edge cannot connect node ${sourceNodeId} to itself`,
+        path,
+        edgeId,
+        sourceNodeId,
+        targetNodeId,
+      });
+    }
+  });
+
+  if (!options.allowCycles && diagnostics.length === 0) {
+    const document = value as WorkflowEditorDocument<TNodeData, TEdgeData>;
+    for (const cycle of detectWorkflowEditorCycles(document)) {
+      diagnostics.push({
+        code: "cycle",
+        message: `Workflow document contains a cycle: ${cycle.join(" -> ")}`,
+        path: "$.edges",
+        sourceNodeId: cycle[0],
+        targetNodeId: cycle.at(-1),
+      });
+    }
+  }
+
+  return diagnostics.filter((diagnostic) =>
+    diagnostic.code === "duplicate-node-id" ? duplicateNodeIds.has(diagnostic.nodeId ?? "") : true,
+  );
+}
+
+export function assertWorkflowEditorDocument<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+>(
+  value: unknown,
+  options: WorkflowEditorDocumentValidationOptions = {},
+): asserts value is WorkflowEditorDocument<TNodeData, TEdgeData> {
+  const diagnostics = validateWorkflowEditorDocument<TNodeData, TEdgeData>(value, options);
+
+  if (diagnostics.length > 0) {
+    throw new WorkflowEditorDocumentValidationError(diagnostics);
+  }
 }
 
 export function createWorkflowEditorGraphIndex<
@@ -2029,8 +2293,123 @@ function isGenericWorkflowEditorPortKey(key: string) {
   return ["in", "input", "out", "output", "value"].includes(key);
 }
 
+function formatWorkflowEditorDocumentValidationMessage(
+  diagnostics: WorkflowEditorDocumentDiagnostic[],
+) {
+  if (diagnostics.length === 0) {
+    return "Workflow document is invalid";
+  }
+
+  const [first] = diagnostics;
+  return diagnostics.length === 1
+    ? first!.message
+    : `${first!.message} and ${diagnostics.length - 1} more validation issue${
+        diagnostics.length === 2 ? "" : "s"
+      }`;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function validateWorkflowEditorPorts(
+  ports: unknown,
+  path: string,
+  nodeId: string | undefined,
+  diagnostics: WorkflowEditorDocumentDiagnostic[],
+) {
+  if (ports === undefined) {
+    return;
+  }
+
+  if (!Array.isArray(ports)) {
+    diagnostics.push({
+      code: "invalid-node",
+      message: "Workflow node ports must be an array",
+      path,
+      nodeId,
+    });
+    return;
+  }
+
+  ports.forEach((port, index) => {
+    const portPath = `${path}[${index}]`;
+    if (!isRecord(port)) {
+      diagnostics.push({
+        code: "invalid-node",
+        message: "Workflow node port must be an object",
+        path: portPath,
+        nodeId,
+      });
+      return;
+    }
+
+    if (typeof port.id !== "string" || !port.id.trim()) {
+      diagnostics.push({
+        code: "invalid-node",
+        message: "Workflow node port id must be a non-empty string",
+        path: `${portPath}.id`,
+        nodeId,
+      });
+    }
+
+    if (!isWorkflowEditorPortTypeLike(port.type)) {
+      diagnostics.push({
+        code: "invalid-node",
+        message: "Workflow node port type is invalid",
+        path: `${portPath}.type`,
+        nodeId,
+      });
+    }
+  });
+}
+
+function isWorkflowEditorPortTypeLike(value: unknown, depth = 0): value is WorkflowEditorPortType {
+  if (depth > 100 || !isRecord(value) || typeof value.kind !== "string") {
+    return false;
+  }
+
+  switch (value.kind) {
+    case "any":
+    case "unknown":
+    case "never":
+    case "string":
+    case "number":
+    case "boolean":
+    case "null":
+    case "undefined":
+      return true;
+    case "literal":
+      return (
+        typeof value.value === "string" ||
+        typeof value.value === "number" ||
+        typeof value.value === "boolean" ||
+        value.value === null
+      );
+    case "array":
+      return isWorkflowEditorPortTypeLike(value.element, depth + 1);
+    case "object":
+      return (
+        value.properties === undefined ||
+        (isRecord(value.properties) &&
+          Object.values(value.properties).every(
+            (property) =>
+              isRecord(property) &&
+              isWorkflowEditorPortTypeLike(property.type, depth + 1) &&
+              (property.optional === undefined || typeof property.optional === "boolean"),
+          ))
+      );
+    case "union":
+    case "intersection":
+      return (
+        Array.isArray(value.types) &&
+        value.types.every((type) => isWorkflowEditorPortTypeLike(type, depth + 1))
+      );
+    case "ref":
+      return typeof value.name === "string" && value.name.trim() !== "";
+    default:
+      return false;
+  }
 }
 
 function normalizePorts(ports: WorkflowEditorPort[] | undefined) {
@@ -2040,8 +2419,12 @@ function normalizePorts(ports: WorkflowEditorPort[] | undefined) {
 function normalizeWorkflowEditorNode<TNodeData = Record<string, unknown>>(
   node: WorkflowEditorNode<TNodeData>,
 ): WorkflowEditorNode<TNodeData> {
+  const id = typeof node.id === "string" && node.id.trim() ? node.id : "node";
+
   return {
     ...node,
+    id,
+    label: typeof node.label === "string" ? node.label : id,
     x: Number.isFinite(node.x) ? node.x : 0,
     y: Number.isFinite(node.y) ? node.y : 0,
     inputs: normalizePorts(node.inputs),
@@ -2058,10 +2441,13 @@ function normalizeWorkflowEditorNode<TNodeData = Record<string, unknown>>(
 function normalizeWorkflowEditorNodeComposition<TNodeData = Record<string, unknown>>(
   composition: WorkflowEditorNodeComposition<TNodeData>,
 ): WorkflowEditorNodeComposition<TNodeData> {
-  const normalizedDocument = normalizeWorkflowEditorDocument({
-    nodes: composition.nodes,
-    edges: composition.edges,
-  });
+  const normalizedDocument = normalizeWorkflowEditorDocument(
+    {
+      nodes: composition.nodes,
+      edges: composition.edges,
+    },
+    { mode: "repair" },
+  );
   const nodeIds = new Set(normalizedDocument.nodes.map((node) => node.id));
 
   return {
@@ -2289,18 +2675,6 @@ function commonWorkflowEditorNodeTags<TData = Record<string, unknown>>(
   }
 
   return normalized.length > 0 ? normalized : undefined;
-}
-
-function assertUniqueIds(ids: string[], label: string) {
-  const seen = new Set<string>();
-
-  for (const id of ids) {
-    if (seen.has(id)) {
-      throw new Error(`Duplicate ${label} id: ${id}`);
-    }
-
-    seen.add(id);
-  }
 }
 
 function clampZoom(zoom: number) {

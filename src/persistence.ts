@@ -1,4 +1,5 @@
 import {
+  assertWorkflowEditorDocument,
   normalizeWorkflowEditorDocument,
   type WorkflowEditorDocument,
   type WorkflowEditorWorkflowReference,
@@ -484,9 +485,7 @@ export function parseWorkflowEditorDocumentFile<
     throw new Error(`Unsupported workflow document version ${String(parsed.version)}`);
   }
 
-  if (!isWorkflowEditorDocumentLike(parsed.document)) {
-    throw new Error("Workflow document file is missing a valid document");
-  }
+  assertWorkflowEditorDocument<TNodeData, TEdgeData>(parsed.document);
 
   return {
     format: workflowEditorDocumentFormat,
@@ -497,9 +496,7 @@ export function parseWorkflowEditorDocumentFile<
     documentName: typeof parsed.documentName === "string" ? parsed.documentName : undefined,
     documentVersion:
       typeof parsed.documentVersion === "number" ? parsed.documentVersion : undefined,
-    document: normalizeWorkflowEditorDocument(
-      parsed.document as WorkflowEditorDocument<TNodeData, TEdgeData>,
-    ),
+    document: normalizeWorkflowEditorDocument(parsed.document),
   };
 }
 
@@ -516,6 +513,8 @@ export function restoreWorkflowEditorDocumentFile<
   if (file.version !== workflowEditorDocumentFileVersion) {
     throw new Error(`Unsupported workflow document version ${String(file.version)}`);
   }
+
+  assertWorkflowEditorDocument<TNodeData, TEdgeData>(file.document);
 
   return {
     exportedAt: file.exportedAt,
@@ -662,7 +661,13 @@ function restoreWorkflowEditorEntry<
   TNodeData = Record<string, unknown>,
   TEdgeData = Record<string, unknown>,
 >(value: unknown): WorkflowEditorLibraryEntry<TNodeData, TEdgeData> | null {
-  if (!isRecord(value) || !isWorkflowEditorDocumentLike(value.document)) {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  try {
+    assertWorkflowEditorDocument<TNodeData, TEdgeData>(value.document);
+  } catch {
     return null;
   }
 
@@ -702,7 +707,13 @@ function restoreWorkflowEditorSavedVersion<
   TNodeData = Record<string, unknown>,
   TEdgeData = Record<string, unknown>,
 >(value: unknown): WorkflowEditorSavedVersion<TNodeData, TEdgeData> | null {
-  if (!isRecord(value) || !isWorkflowEditorDocumentLike(value.document)) {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  try {
+    assertWorkflowEditorDocument<TNodeData, TEdgeData>(value.document);
+  } catch {
     return null;
   }
 
@@ -751,10 +762,6 @@ function normalizeWorkflowEditorSavedVersion<
     createdAt: version.createdAt,
     document: normalizeWorkflowEditorDocument(version.document),
   };
-}
-
-function isWorkflowEditorDocumentLike(value: unknown): value is WorkflowEditorDocument {
-  return isRecord(value) && Array.isArray(value.nodes) && Array.isArray(value.edges);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
