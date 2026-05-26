@@ -5,6 +5,7 @@ import {
   WorkflowEditor,
   WorkflowWorkbench,
   addWorkflowEditorNode,
+  addWorkflowEditorObjectConstructorInput,
   activeWorkflowEditorEntry,
   analyzeWorkflowEditorPortTypes,
   buildWorkflowEditorDocumentFile,
@@ -26,12 +27,16 @@ import {
   duplicateWorkflowEditorNode,
   duplicateWorkflowEditorEntry,
   encodeWorkflowEditorSharePayload,
+  findWorkflowEditorNode,
+  formatWorkflowEditorObjectConstructorExpression,
   fromUiWorkflowBuilderEdges,
   fromUiWorkflowBuilderNodes,
+  getWorkflowEditorObjectConstructorInputs,
   getWorkflowEditorReferenceDiagnostics,
   getWorkflowEditorReferencedDocumentIds,
   hasWorkflowEditorNodeComposition,
   hasWorkflowEditorWorkflowReference,
+  isWorkflowEditorObjectConstructorNode,
   isWorkflowEditorDirectedAcyclicGraph,
   isWorkflowEditorPortTypeAssignable,
   listWorkflowEditorDocumentReferenceOptions,
@@ -159,6 +164,73 @@ describe("@moritzbrantner/workflow-editor core", () => {
       element: { kind: "any" },
     });
     expect(objectTemplate?.outputs?.[0]?.type).toEqual({ kind: "object" });
+  });
+
+  test("constructs object nodes with expandable named inputs", () => {
+    const objectTemplate = workflowEditorJsonNodeTemplates.find(
+      (template) => template.id === "json-object",
+    )!;
+    const objectDocument = normalizeWorkflowEditorDocument<Record<string, unknown>>({
+      nodes: [
+        {
+          id: "employee",
+          label: "Employee",
+          x: 0,
+          y: 0,
+          outputs: [{ id: "firstName", label: "First name", type: { kind: "string" } }],
+        },
+        {
+          ...objectTemplate,
+          id: "employee-object",
+          x: 240,
+          y: 0,
+        },
+      ],
+      edges: [],
+    });
+
+    const connected = connectWorkflowEditorNodes(objectDocument, {
+      sourceNodeId: "employee",
+      sourcePortId: "firstName",
+      targetNodeId: "employee-object",
+      targetPortId: "property",
+    });
+    const objectNode = findWorkflowEditorNode(connected, "employee-object")!;
+
+    expect(isWorkflowEditorObjectConstructorNode(objectNode)).toBe(true);
+    expect(connected.edges[0]).toEqual(
+      expect.objectContaining({
+        targetNodeId: "employee-object",
+        targetPortId: "firstname",
+      }),
+    );
+    expect(getWorkflowEditorObjectConstructorInputs(objectNode)).toEqual([
+      expect.objectContaining({
+        id: "firstname",
+        label: "firstName",
+        badge: "employee.firstName",
+        type: { kind: "string" },
+      }),
+    ]);
+    expect(objectNode.inputs?.at(-1)).toEqual(
+      expect.objectContaining({ id: "property", label: "Add property" }),
+    );
+    expect(objectNode.outputs?.[0]?.type).toEqual({
+      kind: "object",
+      properties: { firstName: { type: { kind: "string" } } },
+    });
+    expect(formatWorkflowEditorObjectConstructorExpression(objectNode)).toBe(
+      "{\n  firstName: employee.firstName\n}",
+    );
+
+    const expanded = addWorkflowEditorObjectConstructorInput(connected, "employee-object", {
+      propertyKey: "lastName",
+    });
+    expect(
+      getWorkflowEditorObjectConstructorInputs(
+        findWorkflowEditorNode(expanded, "employee-object")!,
+      ),
+    ).toHaveLength(2);
   });
 
   test("normalizes, mutates, indexes, and roundtrips graph data", () => {

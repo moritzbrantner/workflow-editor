@@ -21,20 +21,25 @@ import {
 } from "@moritzbrantner/ui/labs";
 
 import {
+  addWorkflowEditorObjectConstructorInputToNode,
   connectWorkflowEditorNodes,
   createWorkflowEditorGraphIndex,
   defaultWorkflowEditorNodeTemplates,
   duplicateWorkflowEditorNode,
   findWorkflowEditorEdge,
   findWorkflowEditorNode,
+  formatWorkflowEditorObjectConstructorExpression,
   fromUiWorkflowBuilderEdges,
   fromUiWorkflowBuilderNodes,
+  getWorkflowEditorObjectConstructorInputs,
+  isWorkflowEditorObjectConstructorNode,
   normalizeWorkflowEditorDocument,
   removeWorkflowEditorEdge,
   removeWorkflowEditorNode,
   toUiWorkflowBuilderEdges,
   toUiWorkflowBuilderNodes,
   updateWorkflowEditorNode,
+  updateWorkflowEditorObjectConstructorPropertiesInNode,
   updateWorkflowEditorNodeWorkflowReference,
   validateWorkflowEditorConnection,
   type WorkflowEditorDocument,
@@ -523,6 +528,11 @@ function DefaultWorkflowInspector<
     const referenceMissing =
       referencedDocumentId !== "" &&
       !context.documentReferences?.some((reference) => reference.id === referencedDocumentId);
+    const objectConstructorInputs = getWorkflowEditorObjectConstructorInputs(node);
+    const objectConstructorExpression = formatWorkflowEditorObjectConstructorExpression(node);
+    const objectConstructorDefaultValues = Object.fromEntries(
+      objectConstructorInputs.map((input) => [`objectProperty:${input.id}`, input.label]),
+    );
 
     return (
       <div className="grid gap-3">
@@ -545,6 +555,8 @@ function DefaultWorkflowInspector<
             y: node.y,
             status: node.status ?? "idle",
             workflowDocumentId: referencedDocumentId,
+            objectExpression: objectConstructorExpression,
+            ...objectConstructorDefaultValues,
           }}
           sections={[
             {
@@ -577,6 +589,29 @@ function DefaultWorkflowInspector<
                   },
                 ]
               : []),
+            ...(isWorkflowEditorObjectConstructorNode(node)
+              ? [
+                  {
+                    id: "object-constructor",
+                    title: "Object",
+                    description: "Map input values to object properties.",
+                    fields: [
+                      ...objectConstructorInputs.map((input) => ({
+                        id: `objectProperty:${input.id}`,
+                        label: input.badge ? `${input.badge}` : input.label,
+                        type: "text" as const,
+                        placeholder: "propertyName",
+                      })),
+                      {
+                        id: "objectExpression",
+                        label: "Expression",
+                        type: "code" as const,
+                        readOnly: true,
+                      },
+                    ],
+                  },
+                ]
+              : []),
           ]}
           onApply={(values) => {
             const patch: Partial<WorkflowEditorNode<TNodeData>> = {
@@ -596,9 +631,46 @@ function DefaultWorkflowInspector<
                   : undefined;
             }
 
+            if (isWorkflowEditorObjectConstructorNode(node)) {
+              const propertyKeysByPortId = Object.fromEntries(
+                objectConstructorInputs.map((input) => [
+                  input.id,
+                  String(values[`objectProperty:${input.id}`] ?? input.label),
+                ]),
+              );
+              const nextNode = updateWorkflowEditorObjectConstructorPropertiesInNode(
+                node,
+                propertyKeysByPortId,
+              );
+
+              patch.inputs = nextNode.inputs;
+              patch.outputs = nextNode.outputs;
+              patch.data = nextNode.data;
+            }
+
             context.updateSelectedNode(patch);
           }}
         />
+        {isWorkflowEditorObjectConstructorNode(node) ? (
+          <div className="flex flex-wrap gap-2 px-4">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={context.readOnly}
+              onClick={() => {
+                const nextNode = addWorkflowEditorObjectConstructorInputToNode(node);
+                context.updateSelectedNode({
+                  inputs: nextNode.inputs,
+                  outputs: nextNode.outputs,
+                  data: nextNode.data,
+                } as Partial<WorkflowEditorNode<TNodeData>>);
+              }}
+            >
+              Add property input
+            </Button>
+          </div>
+        ) : null}
         {context.documentReferences ? (
           <div className="flex flex-wrap gap-2 px-4 pb-4">
             {referencedDocumentId ? (
