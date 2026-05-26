@@ -45,6 +45,7 @@ import {
   type WorkflowWorkbenchSelection,
 } from "./react";
 import {
+  defaultWorkflowEditorNodeTemplates,
   updateWorkflowEditorNodeWorkflowReference,
   type WorkflowEditorDocument,
   type WorkflowEditorNode,
@@ -63,7 +64,7 @@ export type WorkflowEditorProps<
   storageKey?: string;
   initialLibrary?: WorkflowEditorLibrary<TNodeData, TEdgeData>;
   storage?: WorkflowEditorStorageAdapter<TNodeData, TEdgeData>;
-  nodeTemplates?: Array<WorkflowWorkbenchPaletteItem<TTemplateData>>;
+  nodeTemplates?: ReadonlyArray<WorkflowWorkbenchPaletteItem<TTemplateData>>;
   readOnly?: boolean;
   className?: string;
   typeDefinitions?: readonly WorkflowEditorTypeDefinition[];
@@ -99,7 +100,9 @@ export function WorkflowEditor<
   storageKey = defaultWorkflowEditorStorageKey,
   initialLibrary,
   storage,
-  nodeTemplates = [],
+  nodeTemplates = defaultWorkflowEditorNodeTemplates as ReadonlyArray<
+    WorkflowWorkbenchPaletteItem<TTemplateData>
+  >,
   readOnly = false,
   className,
   typeDefinitions,

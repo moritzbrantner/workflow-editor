@@ -16,6 +16,9 @@ The React workbench expects `react` as a peer dependency and consumes
 - `WorkflowWorkbench` for a React node graph editor built on `@moritzbrantner/ui`.
 - `WorkflowEditor` for a browser-first workflow editor shell with document library controls,
   local saving/loading, JSON import/export, explicit versions, and undo/redo.
+- `defaultWorkflowEditorNodeTemplates`,
+  `workflowEditorControlFlowNodeTemplates`, and
+  `workflowEditorJsonNodeTemplates` for built-in control-flow and JSON value nodes.
 - `normalizeWorkflowEditorDocument(...)`, `connectWorkflowEditorNodes(...)`, `duplicateWorkflowEditorNode(...)`, and node/edge mutation helpers.
 - `createWorkflowEditorComposedNode(...)`, `composeWorkflowEditorNodes(...)`,
   `restoreWorkflowEditorComposedNode(...)`, and `hasWorkflowEditorNodeComposition(...)`
@@ -42,6 +45,7 @@ import {
   WorkflowEditor,
   createWorkflowEditorEntry,
   createWorkflowEditorLibrary,
+  defaultWorkflowEditorNodeTemplates,
   normalizeWorkflowEditorDocument,
 } from "@moritzbrantner/workflow-editor";
 
@@ -64,14 +68,7 @@ export function App() {
     <WorkflowEditor
       storageKey="my-product.workflow-editor"
       initialLibrary={initialLibrary}
-      nodeTemplates={[
-        {
-          id: "decision",
-          label: "Decision",
-          inputs: [{ id: "in", label: "In", type: { kind: "string" } }],
-          outputs: [{ id: "yes", label: "Yes", type: { kind: "string" } }],
-        },
-      ]}
+      nodeTemplates={defaultWorkflowEditorNodeTemplates}
     />
   );
 }

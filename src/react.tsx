@@ -23,6 +23,7 @@ import {
 import {
   connectWorkflowEditorNodes,
   createWorkflowEditorGraphIndex,
+  defaultWorkflowEditorNodeTemplates,
   duplicateWorkflowEditorNode,
   findWorkflowEditorEdge,
   findWorkflowEditorNode,
@@ -80,7 +81,7 @@ export type WorkflowWorkbenchProps<
   selectedNodeId?: string | null;
   selectedEdgeId?: string | null;
   readOnly?: boolean;
-  nodeTemplates?: Array<WorkflowWorkbenchPaletteItem<TTemplateData>>;
+  nodeTemplates?: ReadonlyArray<WorkflowWorkbenchPaletteItem<TTemplateData>>;
   typeDefinitions?: readonly WorkflowEditorTypeDefinition[];
   documentReferences?: WorkflowEditorDocumentReferenceOption[];
   className?: string;
@@ -115,7 +116,9 @@ export function WorkflowWorkbench<
   selectedNodeId,
   selectedEdgeId,
   readOnly = false,
-  nodeTemplates = [],
+  nodeTemplates = defaultWorkflowEditorNodeTemplates as ReadonlyArray<
+    WorkflowWorkbenchPaletteItem<TTemplateData>
+  >,
   typeDefinitions,
   documentReferences,
   className,

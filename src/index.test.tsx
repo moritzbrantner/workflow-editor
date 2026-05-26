@@ -20,6 +20,7 @@ import {
   createWorkflowEditorHistory,
   createWorkflowEditorLibrary,
   createWorkflowEditorVersion,
+  defaultWorkflowEditorNodeTemplates,
   decodeWorkflowEditorSharePayload,
   detectWorkflowEditorCycles,
   duplicateWorkflowEditorNode,
@@ -57,7 +58,9 @@ import {
   updateWorkflowEditorNodeWorkflowReference,
   validateWorkflowEditorConnection,
   wouldCreateWorkflowEditorCycle,
+  workflowEditorControlFlowNodeTemplates,
   workflowEditorDocumentFileVersion,
+  workflowEditorJsonNodeTemplates,
   type WorkflowEditorDocument,
 } from "@moritzbrantner/workflow-editor";
 
@@ -114,6 +117,50 @@ afterEach(() => {
 });
 
 describe("@moritzbrantner/workflow-editor core", () => {
+  test("provides built-in control flow and JSON node templates", () => {
+    const templateIds = defaultWorkflowEditorNodeTemplates.map((template) => template.id);
+    const branchTemplate = workflowEditorControlFlowNodeTemplates.find(
+      (template) => template.id === "control-flow-if",
+    );
+    const stringTemplate = workflowEditorJsonNodeTemplates.find(
+      (template) => template.id === "json-string",
+    );
+    const arrayTemplate = workflowEditorJsonNodeTemplates.find(
+      (template) => template.id === "json-array",
+    );
+    const objectTemplate = workflowEditorJsonNodeTemplates.find(
+      (template) => template.id === "json-object",
+    );
+
+    expect(new Set(templateIds).size).toBe(templateIds.length);
+    expect(templateIds).toEqual(
+      expect.arrayContaining([
+        "control-flow-start",
+        "control-flow-if",
+        "control-flow-switch",
+        "control-flow-merge",
+        "control-flow-end",
+        "json-string",
+        "json-number",
+        "json-boolean",
+        "json-null",
+        "json-array",
+        "json-object",
+      ]),
+    );
+    expect(branchTemplate?.inputs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "condition", type: { kind: "boolean" } }),
+      ]),
+    );
+    expect(stringTemplate?.outputs?.[0]?.type).toEqual({ kind: "string" });
+    expect(arrayTemplate?.outputs?.[0]?.type).toEqual({
+      kind: "array",
+      element: { kind: "any" },
+    });
+    expect(objectTemplate?.outputs?.[0]?.type).toEqual({ kind: "object" });
+  });
+
   test("normalizes, mutates, indexes, and roundtrips graph data", () => {
     const added = addWorkflowEditorNode(document, {
       id: "review",

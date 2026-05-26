@@ -158,6 +158,131 @@ export type WorkflowEditorNodeTemplate<TData = Record<string, unknown>> = Omit<
   "x" | "y"
 >;
 
+export const workflowEditorControlFlowNodeTemplates = [
+  {
+    id: "control-flow-start",
+    label: "Start",
+    description: "Begin a workflow branch.",
+    kind: "control.start",
+    category: "Control flow",
+    outputs: [{ id: "out", label: "Out", type: { kind: "any" } }],
+  },
+  {
+    id: "control-flow-if",
+    label: "If",
+    description: "Route a value by a boolean condition.",
+    kind: "control.if",
+    category: "Control flow",
+    inputs: [
+      { id: "value", label: "Value", type: { kind: "any" } },
+      { id: "condition", label: "Condition", type: { kind: "boolean" } },
+    ],
+    outputs: [
+      { id: "true", label: "True", type: { kind: "any" } },
+      { id: "false", label: "False", type: { kind: "any" } },
+    ],
+  },
+  {
+    id: "control-flow-switch",
+    label: "Switch",
+    description: "Route a value through a matching case or fallback branch.",
+    kind: "control.switch",
+    category: "Control flow",
+    inputs: [
+      { id: "value", label: "Value", type: { kind: "any" } },
+      { id: "case", label: "Case", type: { kind: "any" } },
+    ],
+    outputs: [
+      { id: "match", label: "Match", type: { kind: "any" } },
+      { id: "default", label: "Default", type: { kind: "any" } },
+    ],
+  },
+  {
+    id: "control-flow-merge",
+    label: "Merge",
+    description: "Join two branches into one value.",
+    kind: "control.merge",
+    category: "Control flow",
+    inputs: [
+      { id: "a", label: "A", type: { kind: "any" } },
+      { id: "b", label: "B", type: { kind: "any" } },
+    ],
+    outputs: [{ id: "out", label: "Out", type: { kind: "any" } }],
+  },
+  {
+    id: "control-flow-end",
+    label: "End",
+    description: "Finish a workflow branch.",
+    kind: "control.end",
+    category: "Control flow",
+    inputs: [{ id: "in", label: "In", type: { kind: "any" } }],
+  },
+] satisfies WorkflowEditorNodeTemplate[];
+
+export const workflowEditorJsonNodeTemplates = [
+  {
+    id: "json-string",
+    label: "String",
+    description: "Create a JSON string value.",
+    kind: "json.string",
+    category: "JSON",
+    outputs: [{ id: "value", label: "Value", type: { kind: "string" } }],
+    data: { value: "" },
+  },
+  {
+    id: "json-number",
+    label: "Number",
+    description: "Create a JSON number value.",
+    kind: "json.number",
+    category: "JSON",
+    outputs: [{ id: "value", label: "Value", type: { kind: "number" } }],
+    data: { value: 0 },
+  },
+  {
+    id: "json-boolean",
+    label: "Boolean",
+    description: "Create a JSON boolean value.",
+    kind: "json.boolean",
+    category: "JSON",
+    outputs: [{ id: "value", label: "Value", type: { kind: "boolean" } }],
+    data: { value: false },
+  },
+  {
+    id: "json-null",
+    label: "Null",
+    description: "Create a JSON null value.",
+    kind: "json.null",
+    category: "JSON",
+    outputs: [{ id: "value", label: "Value", type: { kind: "null" } }],
+    data: { value: null },
+  },
+  {
+    id: "json-array",
+    label: "Array",
+    description: "Create a JSON array value.",
+    kind: "json.array",
+    category: "JSON",
+    inputs: [{ id: "item", label: "Item", type: { kind: "any" } }],
+    outputs: [{ id: "value", label: "Value", type: { kind: "array", element: { kind: "any" } } }],
+    data: { items: [] },
+  },
+  {
+    id: "json-object",
+    label: "Object",
+    description: "Create a JSON object value.",
+    kind: "json.object",
+    category: "JSON",
+    inputs: [{ id: "value", label: "Value", type: { kind: "any" } }],
+    outputs: [{ id: "value", label: "Value", type: { kind: "object" } }],
+    data: { properties: {} },
+  },
+] satisfies WorkflowEditorNodeTemplate[];
+
+export const defaultWorkflowEditorNodeTemplates = [
+  ...workflowEditorControlFlowNodeTemplates,
+  ...workflowEditorJsonNodeTemplates,
+] satisfies WorkflowEditorNodeTemplate[];
+
 export type WorkflowEditorDuplicateNodeOptions = {
   offsetX?: number;
   offsetY?: number;
