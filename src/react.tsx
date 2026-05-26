@@ -12,11 +12,12 @@ import {
   cn,
 } from "@moritzbrantner/ui";
 import {
-  AssetBrowser,
   InspectorPanel,
   WorkflowBuilder,
-  type AssetBrowserItem,
+  WorkflowNode,
+  type WorkflowBuilderConnectionValidity,
   type InspectorFieldValue,
+  type WorkflowNodeData,
 } from "@moritzbrantner/ui/labs";
 
 import {
@@ -27,6 +28,7 @@ import {
   findWorkflowEditorNode,
   fromUiWorkflowBuilderEdges,
   fromUiWorkflowBuilderNodes,
+  normalizeWorkflowEditorDocument,
   removeWorkflowEditorEdge,
   removeWorkflowEditorNode,
   toUiWorkflowBuilderEdges,
@@ -118,23 +120,6 @@ export function WorkflowWorkbench<
     ? findWorkflowEditorEdge(document, selectedEdgeId)
     : undefined;
   const graphIndex = useMemo(() => createWorkflowEditorGraphIndex(document), [document]);
-  const paletteItems = useMemo(
-    () =>
-      nodeTemplates.map(
-        (template): AssetBrowserItem => ({
-          id: template.id,
-          name: template.label,
-          type: "file",
-          description: template.description ?? template.kind,
-          metadata: {
-            Category: template.category ?? "Node",
-            Inputs: template.inputs?.length ?? 0,
-            Outputs: template.outputs?.length ?? 0,
-          },
-        }),
-      ),
-    [nodeTemplates],
-  );
 
   const commitDocument = (nextDocument: WorkflowEditorDocument<TNodeData, TEdgeData>) => {
     onDocumentChange?.(nextDocument);
@@ -182,6 +167,13 @@ export function WorkflowWorkbench<
       description: template.description,
       kind: template.kind,
       category: template.category,
+      eyebrow: template.eyebrow,
+      packageLabel: template.packageLabel,
+      status: template.status,
+      tone: template.tone,
+      variant: template.variant,
+      minimized: template.minimized,
+      tags: template.tags,
       x: 120 + document.nodes.length * 36,
       y: 120 + document.nodes.length * 28,
       inputs: template.inputs,
@@ -248,19 +240,28 @@ export function WorkflowWorkbench<
                 ))}
               </div>
             ) : (
-              <AssetBrowser
-                items={paletteItems}
-                selectionMode="single"
-                showPreview={false}
-                emptyMessage="No node templates"
-                onOpenItem={(item) => {
-                  const template = nodeTemplates.find((candidate) => candidate.id === item.id);
-
-                  if (template) {
-                    addTemplateNode(template);
-                  }
-                }}
-              />
+              <div className="grid gap-2">
+                {nodeTemplates.length > 0 ? (
+                  nodeTemplates.map((template) => (
+                    <WorkflowNode
+                      key={template.id}
+                      node={toUiWorkflowNodeTemplate(template)}
+                      readOnly={readOnly}
+                      inputDisabled
+                      outputDisabled
+                      className={cn(
+                        "cursor-pointer transition-colors hover:border-primary/60",
+                        readOnly && "cursor-not-allowed opacity-60",
+                      )}
+                      onNodeSelect={readOnly ? undefined : () => addTemplateNode(template)}
+                    />
+                  ))
+                ) : (
+                  <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+                    No node templates
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </WorkbenchPanel>
@@ -327,18 +328,22 @@ export function WorkflowWorkbench<
           toolbarLabel="Workflow"
           onNodesChange={(nodes) => {
             if (!readOnly) {
-              commitDocument({
-                ...document,
-                nodes: fromUiWorkflowBuilderNodes(nodes, document.nodes),
-              });
+              commitDocument(
+                normalizeWorkflowEditorDocument({
+                  ...document,
+                  nodes: fromUiWorkflowBuilderNodes(nodes, document.nodes),
+                }),
+              );
             }
           }}
           onEdgesChange={(edges) => {
             if (!readOnly) {
-              commitDocument({
-                ...document,
-                edges: fromUiWorkflowBuilderEdges(edges, document.edges),
-              });
+              commitDocument(
+                normalizeWorkflowEditorDocument({
+                  ...document,
+                  edges: fromUiWorkflowBuilderEdges(edges, document.edges),
+                }),
+              );
             }
           }}
           onViewportChange={(viewport) => {
@@ -365,7 +370,7 @@ export function WorkflowWorkbench<
 
             return {
               valid: validity.valid,
-              reason: validity.reason === "missing-node" ? "missing-port" : validity.reason,
+              reason: toUiConnectionInvalidReason(validity.reason),
             };
           }}
           onConnectionComplete={(connection) => {
@@ -377,6 +382,43 @@ export function WorkflowWorkbench<
       </WorkbenchCanvas>
     </WorkbenchLayout>
   );
+}
+
+function toUiWorkflowNodeTemplate<TData>(template: WorkflowWorkbenchPaletteItem<TData>) {
+  return {
+    id: template.id,
+    label: template.label,
+    description: template.description,
+    kind: template.kind,
+    category: template.category,
+    eyebrow: template.eyebrow,
+    packageLabel: template.packageLabel,
+    status: template.status,
+    tone: template.tone,
+    variant: template.variant ?? "compact",
+    minimized: template.minimized,
+    tags: template.tags,
+    inputs: template.inputs,
+    outputs: template.outputs,
+  } satisfies WorkflowNodeData;
+}
+
+function toUiConnectionInvalidReason(
+  reason: ReturnType<typeof validateWorkflowEditorConnection>["reason"],
+): WorkflowBuilderConnectionValidity["reason"] {
+  if (!reason) {
+    return undefined;
+  }
+
+  if (reason === "missing-node") {
+    return "missing-port";
+  }
+
+  if (reason === "cycle") {
+    return "self-connection";
+  }
+
+  return reason;
 }
 
 function DefaultWorkflowInspector<

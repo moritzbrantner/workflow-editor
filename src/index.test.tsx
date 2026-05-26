@@ -10,6 +10,7 @@ import {
   duplicateWorkflowEditorNode,
   fromUiWorkflowBuilderEdges,
   fromUiWorkflowBuilderNodes,
+  isWorkflowEditorDirectedAcyclicGraph,
   moveWorkflowEditorNode,
   normalizeWorkflowEditorDocument,
   removeWorkflowEditorNode,
@@ -18,6 +19,7 @@ import {
   topologicallySortWorkflowEditorNodes,
   updateWorkflowEditorNode,
   validateWorkflowEditorConnection,
+  wouldCreateWorkflowEditorCycle,
   type WorkflowEditorDocument,
 } from "@moritzbrantner/workflow-editor";
 
@@ -188,6 +190,81 @@ describe("@moritzbrantner/workflow-editor core", () => {
       ],
     };
     expect(detectWorkflowEditorCycles(cyclic)).toHaveLength(1);
+  });
+
+  test("prevents new edges from closing directed cycles", () => {
+    const dag = normalizeWorkflowEditorDocument({
+      nodes: [
+        {
+          id: "a",
+          label: "A",
+          x: 0,
+          y: 0,
+          inputs: [{ id: "in", label: "In", kind: "text" }],
+          outputs: [{ id: "out", label: "Out", kind: "text" }],
+        },
+        {
+          id: "b",
+          label: "B",
+          x: 220,
+          y: 0,
+          inputs: [{ id: "in", label: "In", kind: "text" }],
+          outputs: [{ id: "out", label: "Out", kind: "text" }],
+        },
+        {
+          id: "c",
+          label: "C",
+          x: 440,
+          y: 0,
+          inputs: [{ id: "in", label: "In", kind: "text" }],
+          outputs: [{ id: "out", label: "Out", kind: "text" }],
+        },
+      ],
+      edges: [
+        {
+          id: "a-b",
+          sourceNodeId: "a",
+          sourcePortId: "out",
+          targetNodeId: "b",
+          targetPortId: "in",
+        },
+        {
+          id: "b-c",
+          sourceNodeId: "b",
+          sourcePortId: "out",
+          targetNodeId: "c",
+          targetPortId: "in",
+        },
+      ],
+    });
+    const cycleConnection = {
+      sourceNodeId: "c",
+      sourcePortId: "out",
+      targetNodeId: "a",
+      targetPortId: "in",
+    };
+
+    expect(isWorkflowEditorDirectedAcyclicGraph(dag)).toBe(true);
+    expect(wouldCreateWorkflowEditorCycle(dag, cycleConnection)).toBe(true);
+    expect(validateWorkflowEditorConnection(dag, cycleConnection)).toEqual({
+      valid: false,
+      reason: "cycle",
+    });
+    expect(connectWorkflowEditorNodes(dag, cycleConnection).edges).toHaveLength(2);
+
+    const normalized = normalizeWorkflowEditorDocument({
+      ...dag,
+      edges: [
+        ...dag.edges,
+        {
+          id: "c-a",
+          ...cycleConnection,
+        },
+      ],
+    });
+
+    expect(normalized.edges.map((edge) => edge.id)).toEqual(["a-b", "b-c"]);
+    expect(isWorkflowEditorDirectedAcyclicGraph(normalized)).toBe(true);
   });
 });
 

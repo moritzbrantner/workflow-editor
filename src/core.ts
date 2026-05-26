@@ -2,6 +2,8 @@ import type {
   WorkflowBuilderEdge as UiWorkflowBuilderEdge,
   WorkflowBuilderNodeData as UiWorkflowBuilderNodeData,
   WorkflowBuilderViewport as UiWorkflowBuilderViewport,
+  WorkflowNodeData as UiWorkflowNodeData,
+  WorkflowNodePort as UiWorkflowNodePort,
 } from "@moritzbrantner/ui/labs";
 
 import {
@@ -19,27 +21,14 @@ export type {
   WorkflowEditorSubgraph,
 };
 
-export type WorkflowEditorPort = {
-  id: string;
-  label: string;
-  kind?: string;
-  required?: boolean;
-  description?: string;
-  badge?: string;
-  metadata?: Record<string, unknown>;
-};
+export type WorkflowEditorPort = UiWorkflowNodePort;
 
-export type WorkflowEditorNode<TData = Record<string, unknown>> = {
-  id: string;
-  label: string;
+export type WorkflowEditorNode<TData = Record<string, unknown>> = Omit<
+  UiWorkflowNodeData,
+  "metadata"
+> & {
   x: number;
   y: number;
-  description?: string;
-  kind?: string;
-  category?: string;
-  status?: "idle" | "running" | "success" | "error" | "warning" | string;
-  inputs?: WorkflowEditorPort[];
-  outputs?: WorkflowEditorPort[];
   data?: TData;
 };
 
@@ -76,6 +65,7 @@ export type WorkflowEditorConnectionInput = {
 };
 
 export type WorkflowEditorConnectionInvalidReason =
+  | "cycle"
   | "duplicate"
   | "kind-mismatch"
   | "missing-node"
@@ -103,16 +93,10 @@ export type WorkflowEditorSelection<
     }
   | null;
 
-export type WorkflowEditorNodeTemplate<TData = Record<string, unknown>> = {
-  id: string;
-  label: string;
-  description?: string;
-  kind?: string;
-  category?: string;
-  inputs?: WorkflowEditorPort[];
-  outputs?: WorkflowEditorPort[];
-  data?: TData;
-};
+export type WorkflowEditorNodeTemplate<TData = Record<string, unknown>> = Omit<
+  WorkflowEditorNode<TData>,
+  "x" | "y"
+>;
 
 export type WorkflowEditorDuplicateNodeOptions = {
   offsetX?: number;
@@ -135,20 +119,19 @@ export function normalizeWorkflowEditorDocument<
     "workflow edge",
   );
 
-  const nodeIds = new Set(document.nodes.map((node) => node.id));
+  const nodes = document.nodes.map((node) => ({
+    ...node,
+    x: Number.isFinite(node.x) ? node.x : 0,
+    y: Number.isFinite(node.y) ? node.y : 0,
+    inputs: normalizePorts(node.inputs),
+    outputs: normalizePorts(node.outputs),
+  }));
+  const nodeIds = new Set(nodes.map((node) => node.id));
 
   return {
     ...document,
-    nodes: document.nodes.map((node) => ({
-      ...node,
-      x: Number.isFinite(node.x) ? node.x : 0,
-      y: Number.isFinite(node.y) ? node.y : 0,
-      inputs: normalizePorts(node.inputs),
-      outputs: normalizePorts(node.outputs),
-    })),
-    edges: document.edges.filter(
-      (edge) => nodeIds.has(edge.sourceNodeId) && nodeIds.has(edge.targetNodeId),
-    ),
+    nodes,
+    edges: normalizeWorkflowEditorDagEdges(document.edges, nodeIds),
     viewport: document.viewport
       ? {
           x: Number.isFinite(document.viewport.x) ? document.viewport.x : 0,
@@ -313,6 +296,10 @@ export function validateWorkflowEditorConnection<
     return { valid: false, reason: "duplicate" };
   }
 
+  if (wouldCreateWorkflowEditorCycle(document, connection)) {
+    return { valid: false, reason: "cycle" };
+  }
+
   return { valid: true };
 }
 
@@ -405,6 +392,27 @@ export function detectWorkflowEditorCycles<
   return cycles;
 }
 
+export function wouldCreateWorkflowEditorCycle<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+>(
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>,
+  connection: WorkflowEditorConnectionInput,
+) {
+  if (connection.sourceNodeId === connection.targetNodeId) {
+    return true;
+  }
+
+  return canReachWorkflowEditorNode(document, connection.targetNodeId, connection.sourceNodeId);
+}
+
+export function isWorkflowEditorDirectedAcyclicGraph<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+>(document: WorkflowEditorDocument<TNodeData, TEdgeData>) {
+  return detectWorkflowEditorCycles(document).length === 0;
+}
+
 export function topologicallySortWorkflowEditorNodes<
   TNodeData = Record<string, unknown>,
   TEdgeData = Record<string, unknown>,
@@ -454,6 +462,12 @@ export function toUiWorkflowBuilderNodes<TData = Record<string, unknown>>(
     kind: node.kind,
     category: node.category,
     status: node.status,
+    eyebrow: node.eyebrow,
+    packageLabel: node.packageLabel,
+    tone: node.tone,
+    variant: node.variant,
+    minimized: node.minimized,
+    tags: node.tags,
     x: node.x,
     y: node.y,
     inputs: node.inputs,
@@ -478,6 +492,12 @@ export function fromUiWorkflowBuilderNodes<TData = Record<string, unknown>>(
       kind: node.kind,
       category: node.category,
       status: node.status,
+      eyebrow: node.eyebrow,
+      packageLabel: node.packageLabel,
+      tone: node.tone,
+      variant: node.variant,
+      minimized: node.minimized,
+      tags: node.tags,
       x: node.x,
       y: node.y,
       inputs: node.inputs,
@@ -552,6 +572,31 @@ function clampZoom(zoom: number) {
   return Math.min(Math.max(zoom, 0.1), 4);
 }
 
+function normalizeWorkflowEditorDagEdges<TData = Record<string, unknown>>(
+  edges: Array<WorkflowEditorEdge<TData>>,
+  nodeIds: ReadonlySet<string>,
+) {
+  const acceptedEdges: Array<WorkflowEditorEdge<TData>> = [];
+
+  for (const edge of edges) {
+    if (!nodeIds.has(edge.sourceNodeId) || !nodeIds.has(edge.targetNodeId)) {
+      continue;
+    }
+
+    if (edge.sourceNodeId === edge.targetNodeId) {
+      continue;
+    }
+
+    if (canReachWorkflowEditorNodeInEdges(acceptedEdges, edge.targetNodeId, edge.sourceNodeId)) {
+      continue;
+    }
+
+    acceptedEdges.push(edge);
+  }
+
+  return acceptedEdges;
+}
+
 function createWorkflowEditorEdgeId<
   TNodeData = Record<string, unknown>,
   TEdgeData = Record<string, unknown>,
@@ -595,4 +640,74 @@ function createWorkflowAdjacency<
   }
 
   return adjacency;
+}
+
+function canReachWorkflowEditorNode<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+>(
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>,
+  startNodeId: string,
+  targetNodeId: string,
+) {
+  const adjacency = createWorkflowAdjacency(document);
+  const queue = [startNodeId];
+  const visited = new Set<string>();
+
+  for (let cursor = 0; cursor < queue.length; cursor += 1) {
+    const nodeId = queue[cursor]!;
+
+    if (nodeId === targetNodeId) {
+      return true;
+    }
+
+    if (visited.has(nodeId)) {
+      continue;
+    }
+
+    visited.add(nodeId);
+
+    for (const nextNodeId of adjacency.get(nodeId) ?? []) {
+      queue.push(nextNodeId);
+    }
+  }
+
+  return false;
+}
+
+function canReachWorkflowEditorNodeInEdges<TData = Record<string, unknown>>(
+  edges: Array<WorkflowEditorEdge<TData>>,
+  startNodeId: string,
+  targetNodeId: string,
+) {
+  const adjacency = new Map<string, string[]>();
+
+  for (const edge of edges) {
+    const targets = adjacency.get(edge.sourceNodeId) ?? [];
+    targets.push(edge.targetNodeId);
+    adjacency.set(edge.sourceNodeId, targets);
+  }
+
+  const queue = [startNodeId];
+  const visited = new Set<string>();
+
+  for (let cursor = 0; cursor < queue.length; cursor += 1) {
+    const nodeId = queue[cursor]!;
+
+    if (nodeId === targetNodeId) {
+      return true;
+    }
+
+    if (visited.has(nodeId)) {
+      continue;
+    }
+
+    visited.add(nodeId);
+
+    for (const nextNodeId of adjacency.get(nodeId) ?? []) {
+      queue.push(nextNodeId);
+    }
+  }
+
+  return false;
 }
