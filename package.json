@@ -81,6 +81,8 @@
   "scripts": {
     "build": "tsup src/index.ts src/core.ts src/react.tsx src/editor.tsx src/history.ts src/persistence.ts src/share.ts --format esm --dts --clean --out-dir dist",
     "changeset": "changeset",
+    "example": "vite --host 127.0.0.1 --port 5173 --config examples/workbench/vite.config.ts",
+    "example:build": "vite build --config examples/workbench/vite.config.ts",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "lint": "oxlint --format=github",

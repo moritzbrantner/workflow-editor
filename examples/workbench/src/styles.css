@@ -1,0 +1,174 @@
+@import "@moritzbrantner/ui/styles.css";
+
+:root {
+  color-scheme: light;
+  background: #f6f7f8;
+  color: #17202a;
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background:
+    linear-gradient(180deg, rgba(217, 226, 236, 0.55), rgba(246, 247, 248, 0) 24rem), #f6f7f8;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.example-shell {
+  display: grid;
+  gap: 1rem;
+  min-height: 100vh;
+  padding: clamp(1rem, 2vw, 1.75rem);
+}
+
+.example-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.example-header h1 {
+  margin: 0;
+  color: #111827;
+  font-size: clamp(1.65rem, 2.5vw, 2.45rem);
+  font-weight: 720;
+  letter-spacing: 0;
+  line-height: 1.05;
+}
+
+.example-kicker {
+  margin: 0 0 0.3rem;
+  color: #52606d;
+  font-size: 0.78rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.example-stats,
+.example-active {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.example-stats span,
+.example-active span {
+  min-height: 2rem;
+  border: 1px solid #d5dae1;
+  border-radius: 0.5rem;
+  background: rgba(255, 255, 255, 0.82);
+  padding: 0.42rem 0.72rem;
+  color: #344054;
+  font-size: 0.85rem;
+  font-weight: 580;
+  white-space: nowrap;
+}
+
+.example-stats button {
+  min-height: 2rem;
+  border: 1px solid #aeb9c6;
+  border-radius: 0.5rem;
+  background: #1f2937;
+  padding: 0.42rem 0.78rem;
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 650;
+}
+
+.example-stats button:hover {
+  background: #111827;
+}
+
+.example-active {
+  margin-top: -0.25rem;
+}
+
+.example-active span:first-child {
+  border-color: #8fb4ff;
+  color: #1f4f99;
+}
+
+.example-editor {
+  min-width: 0;
+}
+
+.example-editor [data-testid="workflow-editor"] {
+  min-width: 0;
+}
+
+.template-row {
+  display: grid;
+  gap: 0.3rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.template-row > span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.template-row strong {
+  overflow-wrap: anywhere;
+  color: #17202a;
+  font-size: 0.9rem;
+  font-weight: 680;
+}
+
+.template-row small {
+  flex: none;
+  color: #697586;
+  font-size: 0.74rem;
+}
+
+.template-row em {
+  display: block;
+  overflow-wrap: anywhere;
+  color: #52606d;
+  font-size: 0.78rem;
+  font-style: normal;
+  line-height: 1.3;
+}
+
+@media (max-width: 840px) {
+  .example-header {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .example-stats,
+  .example-active {
+    width: 100%;
+  }
+
+  .example-stats span,
+  .example-active span,
+  .example-stats button {
+    white-space: normal;
+  }
+}
