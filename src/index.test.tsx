@@ -1614,7 +1614,7 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
       />,
     );
 
-    fireEvent.click(screen.getAllByText("Input")[1]!);
+    fireEvent.click(screen.getByRole("button", { name: "Input" }));
     expect(handleSelectionChange).toHaveBeenCalledWith(
       expect.objectContaining({ id: "input", type: "node" }),
     );
@@ -2202,7 +2202,7 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     await waitFor(() =>
       expect(screen.getByTestId("active-node-count").textContent).toBe("3 nodes"),
     );
-    fireEvent.click(screen.getAllByText("Input")[1]!);
+    fireEvent.click(screen.getByRole("button", { name: "Input" }));
     fireEvent.click(
       screen
         .getAllByRole("button", { name: "Create nested workflow" })
@@ -2268,7 +2268,7 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     await waitFor(() =>
       expect(screen.getByTestId("active-node-count").textContent).toBe("1 nodes"),
     );
-    fireEvent.click(screen.getAllByText("Self")[1]!);
+    fireEvent.click(screen.getByRole("button", { name: "Self" }));
     fireEvent.click(
       screen
         .getAllByRole("button", { name: "Open workflow" })
@@ -2277,7 +2277,7 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     await waitFor(() =>
       expect(screen.getAllByRole("button", { name: "Recursive" })).toHaveLength(2),
     );
-    fireEvent.click(screen.getAllByText("Self")[1]!);
+    fireEvent.click(screen.getByRole("button", { name: "Self" }));
     const cappedOpenButtons = screen.queryAllByRole("button", { name: "Open workflow" });
     expect(cappedOpenButtons.every((button) => (button as HTMLButtonElement).disabled)).toBe(true);
   });

@@ -11,15 +11,7 @@ import {
   useState,
 } from "react";
 
-import {
-  Badge,
-  Button,
-  WorkbenchCanvas,
-  WorkbenchLayout,
-  WorkbenchPanel,
-  WorkbenchToolbar,
-  cn,
-} from "@moritzbrantner/ui";
+import { Badge, Button, cn } from "@moritzbrantner/ui";
 import {
   InspectorPanel,
   WorkflowBuilder,
@@ -79,6 +71,9 @@ const emptyWorkflowEditorSelection: WorkflowEditorSelectionState = {
   nodeIds: [],
   edgeIds: [],
 };
+const workflowWorkbenchOverlayInteractionSelector =
+  "[data-slot='workflow-palette-overlay'], [data-slot='workflow-inspector-overlay'], [data-slot='select-content']";
+const workflowWorkbenchOverlaySelectionPreservationMs = 1500;
 
 const workflowEditorPaletteDragType = "application/x-workflow-editor-node-template";
 const workflowEditorSnapDistance = 28;
@@ -188,6 +183,7 @@ export function WorkflowWorkbench<
 }: WorkflowWorkbenchProps<TNodeData, TEdgeData, TTemplateData>) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const connectionInProgressRef = useRef(false);
+  const ignoreSelectionClearUntilRef = useRef(0);
   const marqueeRef = useRef<WorkflowSelectionMarquee | null>(null);
   const pendingNodeSnapRef = useRef<{
     document: WorkflowEditorDocument<TNodeData, TEdgeData>;
@@ -197,6 +193,8 @@ export function WorkflowWorkbench<
   const [internalSelection, setInternalSelection] = useState<WorkflowEditorSelectionState>(
     emptyWorkflowEditorSelection,
   );
+  const [inspectorMinimized, setInspectorMinimized] = useState(false);
+  const [narrowOverlayLayout, setNarrowOverlayLayout] = useState(false);
   const [marquee, setMarquee] = useState<WorkflowSelectionMarquee | null>(null);
   const [paletteMinimized, setPaletteMinimized] = useState(false);
   const documentContext = useMemo(() => createWorkflowEditorDocumentContext(document), [document]);
@@ -262,6 +260,7 @@ export function WorkflowWorkbench<
   const selectedEdge = primarySelectedEdgeId
     ? documentContext.edgeById.get(primarySelectedEdgeId)
     : undefined;
+  const inspectorCollapsed = inspectorMinimized || (!selectedNode && !selectedEdge);
   const selectedNodes = selection.nodeIds.flatMap((id) => {
     const node = documentContext.nodeById.get(id);
     return node ? [node] : [];
@@ -288,6 +287,44 @@ export function WorkflowWorkbench<
       setInternalSelection((current) => normalizeWorkflowEditorSelection(document, current));
     }
   }, [document, externalSelectionProvided]);
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia("(max-width: 767px)");
+    const syncOverlayLayout = () => setNarrowOverlayLayout(mediaQuery.matches);
+
+    syncOverlayLayout();
+    mediaQuery.addEventListener("change", syncOverlayLayout);
+    return () => mediaQuery.removeEventListener("change", syncOverlayLayout);
+  }, []);
+
+  useEffect(() => {
+    const ownerDocument = globalThis.document;
+    if (!ownerDocument) {
+      return;
+    }
+
+    const preservePortalSelection = (event: Event) => {
+      if (isWorkflowWorkbenchOverlayInteractionTarget(event.target)) {
+        ignoreSelectionClearUntilRef.current =
+          Date.now() + workflowWorkbenchOverlaySelectionPreservationMs;
+      }
+    };
+
+    ownerDocument.addEventListener("pointerdown", preservePortalSelection, true);
+    ownerDocument.addEventListener("mousedown", preservePortalSelection, true);
+    ownerDocument.addEventListener("click", preservePortalSelection, true);
+    ownerDocument.addEventListener("focusin", preservePortalSelection, true);
+    return () => {
+      ownerDocument.removeEventListener("pointerdown", preservePortalSelection, true);
+      ownerDocument.removeEventListener("mousedown", preservePortalSelection, true);
+      ownerDocument.removeEventListener("click", preservePortalSelection, true);
+      ownerDocument.removeEventListener("focusin", preservePortalSelection, true);
+    };
+  }, []);
 
   const emitSelectionState = (
     nextSelection: WorkflowEditorSelectionState,
@@ -672,12 +709,17 @@ export function WorkflowWorkbench<
     }
 
     if (!builderSelection) {
+      if (Date.now() < ignoreSelectionClearUntilRef.current) {
+        return;
+      }
+
       if (!pointerModifierRef.current.additive && !marquee) {
         emitSelectionState(emptyWorkflowEditorSelection);
       }
       return;
     }
 
+    ignoreSelectionClearUntilRef.current = 0;
     const item =
       builderSelection.type === "node"
         ? ({ type: "node", id: builderSelection.id } as const)
@@ -698,6 +740,12 @@ export function WorkflowWorkbench<
   const startMarquee = (event: ReactPointerEvent<HTMLDivElement>) => {
     pointerModifierRef.current = { additive: event.shiftKey || event.metaKey || event.ctrlKey };
     const target = event.target;
+    if (target instanceof Element && isWorkflowWorkbenchOverlayInteractionTarget(target)) {
+      ignoreSelectionClearUntilRef.current =
+        Date.now() + workflowWorkbenchOverlaySelectionPreservationMs;
+      return;
+    }
+
     if (
       event.button !== 0 ||
       !(target instanceof Element) ||
@@ -833,91 +881,23 @@ export function WorkflowWorkbench<
     });
   };
 
+  const preserveOverlaySelection = () => {
+    ignoreSelectionClearUntilRef.current =
+      Date.now() + workflowWorkbenchOverlaySelectionPreservationMs;
+  };
+
   return (
-    <WorkbenchLayout
-      className={cn("min-h-[38rem] overflow-hidden border border-border bg-background", className)}
-      leftPanel={
-        <WorkbenchPanel side="left" className={cn(paletteMinimized ? "min-w-16" : "min-w-64")}>
-          <div className="grid gap-3 p-3">
-            <div className="flex items-center justify-between gap-3">
-              {paletteMinimized ? null : <div className="text-sm font-medium">Node palette</div>}
-              <div className="flex items-center gap-2">
-                {paletteMinimized ? null : (
-                  <Badge variant="secondary">{nodeTemplates.length}</Badge>
-                )}
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  variant="ghost"
-                  aria-label={paletteMinimized ? "Expand node palette" : "Minimize node palette"}
-                  aria-pressed={paletteMinimized}
-                  onClick={() => setPaletteMinimized((current) => !current)}
-                >
-                  {paletteMinimized ? "+" : "-"}
-                </Button>
-              </div>
-            </div>
-            {paletteMinimized ? (
-              <Badge variant="secondary" className="justify-center">
-                {nodeTemplates.length}
-              </Badge>
-            ) : renderNodeTemplate ? (
-              <div className="grid gap-2">
-                {nodeTemplates.map((template) => (
-                  <Button
-                    key={template.id}
-                    type="button"
-                    variant="ghost"
-                    className="h-auto justify-start border border-border bg-background px-3 py-2 text-left"
-                    disabled={readOnly}
-                    draggable={!readOnly}
-                    onDragStart={(event) => startTemplateDrag(event, template)}
-                    onClick={() => addTemplateNode(template)}
-                  >
-                    {renderNodeTemplate(template)}
-                  </Button>
-                ))}
-              </div>
-            ) : (
-              <div className="grid gap-2">
-                {nodeTemplates.length > 0 ? (
-                  nodeTemplates.map((template) => (
-                    <WorkflowNode
-                      key={template.id}
-                      node={toUiWorkflowNodeTemplate(template)}
-                      readOnly={readOnly}
-                      inputDisabled
-                      outputDisabled
-                      className={cn(
-                        "cursor-pointer transition-colors hover:border-primary/60",
-                        readOnly && "cursor-not-allowed opacity-60",
-                      )}
-                      draggable={!readOnly}
-                      onDragStart={(event) => startTemplateDrag(event, template)}
-                      onNodeSelect={readOnly ? undefined : () => addTemplateNode(template)}
-                    />
-                  ))
-                ) : (
-                  <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
-                    No node templates
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </WorkbenchPanel>
-      }
-      rightPanel={
-        <WorkbenchPanel side="right" className="min-w-72">
-          {renderInspector ? (
-            renderInspector(inspectorContext)
-          ) : (
-            <DefaultWorkflowInspector context={inspectorContext} />
-          )}
-        </WorkbenchPanel>
-      }
-      toolbar={
-        <WorkbenchToolbar className="flex min-h-10 flex-nowrap items-center justify-between gap-2 overflow-x-auto border-b border-border px-2 py-1">
+    <div
+      className={cn(
+        "grid min-h-[38rem] min-w-0 overflow-hidden rounded-md border border-border bg-background text-foreground",
+        className,
+      )}
+    >
+      <div
+        data-slot="workbench-toolbar"
+        className="flex min-h-10 min-w-0 flex-nowrap items-center gap-2 overflow-x-auto border-b border-border bg-card/75 px-2 py-1"
+      >
+        <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
           <div className="flex min-w-max items-center gap-1.5 whitespace-nowrap">
             {showGraphStats ? (
               <>
@@ -1027,141 +1007,260 @@ export function WorkflowWorkbench<
             </Button>
             {renderToolbarActions?.(inspectorContext)}
           </div>
-        </WorkbenchToolbar>
-      }
-    >
-      <WorkbenchCanvas className="overflow-hidden p-3">
-        <div
-          ref={containerRef}
-          className="relative"
-          onPointerDownCapture={startMarquee}
-          onPointerUpCapture={clearPendingConnectionAfterTargetClick}
-          onPointerMove={updateMarquee}
-          onPointerUp={() => {
-            completeMarquee();
-            completePendingNodeSnap();
-          }}
-          onPointerCancel={() => {
-            marqueeRef.current = null;
-            pendingNodeSnapRef.current = null;
-            setMarquee(null);
-          }}
-          onDragOver={handleTemplateDragOver}
-          onDrop={handleTemplateDrop}
-          onWheelCapture={handleCanvasWheel}
-        >
-          <WorkflowBuilder
-            nodes={uiNodes}
-            edges={uiEdges}
-            selectedNodeId={primarySelectedNodeId}
-            selectedEdgeId={primarySelectedEdgeId}
-            readOnly={readOnly}
-            showMiniMap
-            surfaceHeight="34rem"
-            minZoom={workflowEditorMinZoom}
-            maxZoom={workflowEditorMaxZoom}
-            viewport={document.viewport}
-            toolbarLabel="Workflow"
-            onNodesChange={(nodes) => {
-              if (!readOnly) {
-                const nodeIds = new Set(nodes.map((node) => node.id));
-                const movedNodeIds = nodes
-                  .filter((node) => {
-                    const currentNode = documentContext.nodeById.get(node.id);
-                    return currentNode && (currentNode.x !== node.x || currentNode.y !== node.y);
-                  })
-                  .map((node) => node.id);
-                const nextDocument = normalizeWorkflowEditorDocument({
-                  ...document,
-                  nodes: fromUiWorkflowBuilderNodes(nodes, document.nodes),
-                  edges: document.edges.filter(
-                    (edge) => nodeIds.has(edge.sourceNodeId) && nodeIds.has(edge.targetNodeId),
-                  ),
-                });
-                const snappedDocument = movedNodeIds.reduce(
-                  (currentDocument, nodeId) =>
-                    snapWorkflowEditorNodePositionToCompatiblePort(currentDocument, nodeId, {
-                      typeDefinitions,
-                    }),
-                  nextDocument,
-                );
+        </div>
+      </div>
+      <main data-slot="workbench-canvas" className="relative min-h-0 overflow-hidden bg-background">
+        <div className="p-3">
+          <div
+            ref={containerRef}
+            className="relative"
+            onPointerDownCapture={startMarquee}
+            onPointerUpCapture={clearPendingConnectionAfterTargetClick}
+            onPointerMove={updateMarquee}
+            onPointerUp={() => {
+              completeMarquee();
+              completePendingNodeSnap();
+            }}
+            onPointerCancel={() => {
+              marqueeRef.current = null;
+              pendingNodeSnapRef.current = null;
+              setMarquee(null);
+            }}
+            onDragOver={handleTemplateDragOver}
+            onDrop={handleTemplateDrop}
+            onWheelCapture={handleCanvasWheel}
+          >
+            <WorkflowBuilder
+              nodes={uiNodes}
+              edges={uiEdges}
+              selectedNodeId={primarySelectedNodeId}
+              selectedEdgeId={primarySelectedEdgeId}
+              readOnly={readOnly}
+              showMiniMap
+              surfaceHeight="34rem"
+              minZoom={workflowEditorMinZoom}
+              maxZoom={workflowEditorMaxZoom}
+              viewport={document.viewport}
+              toolbarLabel="Workflow"
+              onNodesChange={(nodes) => {
+                if (!readOnly) {
+                  const nodeIds = new Set(nodes.map((node) => node.id));
+                  const movedNodeIds = nodes
+                    .filter((node) => {
+                      const currentNode = documentContext.nodeById.get(node.id);
+                      return currentNode && (currentNode.x !== node.x || currentNode.y !== node.y);
+                    })
+                    .map((node) => node.id);
+                  const nextDocument = normalizeWorkflowEditorDocument({
+                    ...document,
+                    nodes: fromUiWorkflowBuilderNodes(nodes, document.nodes),
+                    edges: document.edges.filter(
+                      (edge) => nodeIds.has(edge.sourceNodeId) && nodeIds.has(edge.targetNodeId),
+                    ),
+                  });
+                  const snappedDocument = movedNodeIds.reduce(
+                    (currentDocument, nodeId) =>
+                      snapWorkflowEditorNodePositionToCompatiblePort(currentDocument, nodeId, {
+                        typeDefinitions,
+                      }),
+                    nextDocument,
+                  );
 
-                if (movedNodeIds.length > 0) {
-                  const pendingSnap = pendingNodeSnapRef.current ?? {
-                    document: snappedDocument,
-                    nodeIds: new Set<string>(),
-                  };
-                  pendingSnap.document = snappedDocument;
+                  if (movedNodeIds.length > 0) {
+                    const pendingSnap = pendingNodeSnapRef.current ?? {
+                      document: snappedDocument,
+                      nodeIds: new Set<string>(),
+                    };
+                    pendingSnap.document = snappedDocument;
 
-                  for (const nodeId of movedNodeIds) {
-                    pendingSnap.nodeIds.add(nodeId);
+                    for (const nodeId of movedNodeIds) {
+                      pendingSnap.nodeIds.add(nodeId);
+                    }
+
+                    pendingNodeSnapRef.current = pendingSnap;
                   }
 
-                  pendingNodeSnapRef.current = pendingSnap;
+                  commitDocument(snappedDocument);
                 }
+              }}
+              onEdgesChange={(edges) => {
+                if (!readOnly) {
+                  const hasUiCreatedEdge = edges.some(
+                    (edge) => !document.edges.some((currentEdge) => currentEdge.id === edge.id),
+                  );
 
-                commitDocument(snappedDocument);
-              }
-            }}
-            onEdgesChange={(edges) => {
-              if (!readOnly) {
-                const hasUiCreatedEdge = edges.some(
-                  (edge) => !document.edges.some((currentEdge) => currentEdge.id === edge.id),
-                );
+                  if (hasUiCreatedEdge) {
+                    return;
+                  }
 
-                if (hasUiCreatedEdge) {
-                  return;
+                  commitDocument(
+                    normalizeWorkflowEditorDocument({
+                      ...document,
+                      edges: fromUiWorkflowBuilderEdges(edges, document.edges),
+                    }),
+                  );
                 }
+              }}
+              onViewportChange={(viewport) => {
+                commitViewportChange(viewport);
+              }}
+              onSelectionChange={handleBuilderSelection}
+              onConnectionStart={() => {
+                connectionInProgressRef.current = true;
+              }}
+              onConnectionCancel={() => {
+                connectionInProgressRef.current = false;
+              }}
+              isConnectionValid={(connection) => {
+                const validity = validateWorkflowEditorConnection(document, connection, {
+                  typeDefinitions,
+                });
 
-                commitDocument(
-                  normalizeWorkflowEditorDocument({
-                    ...document,
-                    edges: fromUiWorkflowBuilderEdges(edges, document.edges),
-                  }),
-                );
-              }
-            }}
-            onViewportChange={(viewport) => {
-              commitViewportChange(viewport);
-            }}
-            onSelectionChange={handleBuilderSelection}
-            onConnectionStart={() => {
-              connectionInProgressRef.current = true;
-            }}
-            onConnectionCancel={() => {
-              connectionInProgressRef.current = false;
-            }}
-            isConnectionValid={(connection) => {
-              const validity = validateWorkflowEditorConnection(document, connection, {
-                typeDefinitions,
-              });
-
-              return {
-                valid: validity.valid,
-                reason: toUiConnectionInvalidReason(validity.reason),
-              };
-            }}
-            onConnectionComplete={(connection) => {
-              connectionInProgressRef.current = false;
-              if (!readOnly) {
-                commitDocument(
-                  connectWorkflowEditorNodes(document, connection, { typeDefinitions }),
-                );
-              }
-            }}
-            onDoubleClick={() => {
-              openSelectedNodeWorkflow();
-            }}
-          />
-          <WorkflowSelectionOverlay
-            document={document}
-            marquee={marquee}
-            primaryNodeId={primarySelectedNodeId}
-            selection={selection}
-          />
+                return {
+                  valid: validity.valid,
+                  reason: toUiConnectionInvalidReason(validity.reason),
+                };
+              }}
+              onConnectionComplete={(connection) => {
+                connectionInProgressRef.current = false;
+                if (!readOnly) {
+                  commitDocument(
+                    connectWorkflowEditorNodes(document, connection, { typeDefinitions }),
+                  );
+                }
+              }}
+              onDoubleClick={() => {
+                openSelectedNodeWorkflow();
+              }}
+            />
+            <WorkflowSelectionOverlay
+              document={document}
+              marquee={marquee}
+              primaryNodeId={primarySelectedNodeId}
+              selection={selection}
+            />
+            <div
+              data-slot="workflow-palette-overlay"
+              onClickCapture={preserveOverlaySelection}
+              onFocusCapture={preserveOverlaySelection}
+              onMouseDownCapture={preserveOverlaySelection}
+              onPointerDownCapture={preserveOverlaySelection}
+              className={cn(
+                "absolute left-3 z-30 max-h-[calc(100%-5rem)] overflow-auto rounded-md border border-border/70 bg-card/95 text-sm shadow-md supports-backdrop-filter:backdrop-blur-xl",
+                paletteMinimized ? "w-16 p-2" : "w-64 p-3",
+              )}
+              style={narrowOverlayLayout ? { top: "12rem" } : { bottom: "0.75rem" }}
+            >
+              <div className="grid gap-3">
+                <div className="flex items-center justify-between gap-3">
+                  {paletteMinimized ? null : (
+                    <div className="text-sm font-medium">Node palette</div>
+                  )}
+                  <div className="flex items-center gap-2">
+                    {paletteMinimized ? null : (
+                      <Badge variant="secondary">{nodeTemplates.length}</Badge>
+                    )}
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="ghost"
+                      aria-label={
+                        paletteMinimized ? "Expand node palette" : "Minimize node palette"
+                      }
+                      aria-pressed={paletteMinimized}
+                      onClick={() => setPaletteMinimized((current) => !current)}
+                    >
+                      {paletteMinimized ? "+" : "-"}
+                    </Button>
+                  </div>
+                </div>
+                {paletteMinimized ? (
+                  <Badge variant="secondary" className="justify-center">
+                    {nodeTemplates.length}
+                  </Badge>
+                ) : renderNodeTemplate ? (
+                  <div className="grid gap-2">
+                    {nodeTemplates.map((template) => (
+                      <Button
+                        key={template.id}
+                        type="button"
+                        variant="ghost"
+                        className="h-auto justify-start border border-border bg-background px-3 py-2 text-left"
+                        disabled={readOnly}
+                        draggable={!readOnly}
+                        onDragStart={(event) => startTemplateDrag(event, template)}
+                        onClick={() => addTemplateNode(template)}
+                      >
+                        {renderNodeTemplate(template)}
+                      </Button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="grid gap-2">
+                    {nodeTemplates.length > 0 ? (
+                      nodeTemplates.map((template) => (
+                        <WorkflowNode
+                          key={template.id}
+                          node={toUiWorkflowNodeTemplate(template)}
+                          readOnly={readOnly}
+                          inputDisabled
+                          outputDisabled
+                          className={cn(
+                            "cursor-pointer transition-colors hover:border-primary/60",
+                            readOnly && "cursor-not-allowed opacity-60",
+                          )}
+                          draggable={!readOnly}
+                          onDragStart={(event) => startTemplateDrag(event, template)}
+                          onNodeSelect={readOnly ? undefined : () => addTemplateNode(template)}
+                        />
+                      ))
+                    ) : (
+                      <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+                        No node templates
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div
+              data-slot="workflow-inspector-overlay"
+              onClickCapture={preserveOverlaySelection}
+              onFocusCapture={preserveOverlaySelection}
+              onMouseDownCapture={preserveOverlaySelection}
+              onPointerDownCapture={preserveOverlaySelection}
+              className={cn(
+                "absolute right-3 z-30 max-h-[calc(100%-5rem)] overflow-auto rounded-md border border-border/70 bg-card/95 text-sm shadow-md supports-backdrop-filter:backdrop-blur-xl",
+                inspectorCollapsed ? "w-16 p-2" : "w-[min(20rem,calc(100%-1.5rem))] p-3",
+              )}
+              style={{ top: "4rem" }}
+            >
+              <div className="grid gap-3">
+                <div className="flex items-center justify-between gap-3">
+                  {inspectorCollapsed ? null : <div className="text-sm font-medium">Info</div>}
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="ghost"
+                    aria-label={inspectorCollapsed ? "Expand info panel" : "Minimize info panel"}
+                    aria-pressed={inspectorMinimized}
+                    disabled={!selectedNode && !selectedEdge}
+                    onClick={() => setInspectorMinimized((current) => !current)}
+                  >
+                    {inspectorCollapsed ? "+" : "-"}
+                  </Button>
+                </div>
+                {inspectorCollapsed ? null : renderInspector ? (
+                  renderInspector(inspectorContext)
+                ) : (
+                  <DefaultWorkflowInspector context={inspectorContext} />
+                )}
+              </div>
+            </div>
+          </div>
         </div>
-      </WorkbenchCanvas>
-    </WorkbenchLayout>
+      </main>
+    </div>
   );
 }
 
@@ -1542,6 +1641,10 @@ function isEditableEventTarget(target: EventTarget | null) {
     target instanceof HTMLElement &&
     !!target.closest("input, textarea, select, [contenteditable='true'], [role='textbox']")
   );
+}
+
+function isWorkflowWorkbenchOverlayInteractionTarget(target: EventTarget | null) {
+  return target instanceof Element && !!target.closest(workflowWorkbenchOverlayInteractionSelector);
 }
 
 function toUiWorkflowNodeTemplate<TData>(template: WorkflowWorkbenchPaletteItem<TData>) {
