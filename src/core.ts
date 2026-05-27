@@ -2101,7 +2101,7 @@ export function toUiWorkflowBuilderNodes<TData = Record<string, unknown>>(
     return {
       id: node.id,
       label: node.label,
-      description: node.description,
+      description: jsonPrimitiveValue === undefined ? node.description : undefined,
       kind: node.kind,
       category: node.category,
       status: node.status,

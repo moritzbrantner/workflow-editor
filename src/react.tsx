@@ -2101,7 +2101,22 @@ function getWorkflowJsonPrimitiveNodeControlOffset<TNodeData>(node: WorkflowEdit
     return { x: 58, y: 13, width: 112 };
   }
 
-  return { x: 12, y: node.minimized ? 28 : 34, width: 150 };
+  const uiNode = toUiWorkflowBuilderNodes([node])[0]!;
+  const outputIndex = Math.max(
+    0,
+    (node.outputs ?? []).findIndex((output) => output.id === "value"),
+  );
+  const size = getWorkflowNodeSize(uiNode, { showPortColumnHeaders: false });
+  const portCenterY = getWorkflowNodePortCenterOffset(uiNode, outputIndex, {
+    showPortColumnHeaders: false,
+  });
+  const width = Math.min(170, Math.max(112, size.width - 48));
+
+  return {
+    x: Math.max(12, size.width - width - 24),
+    y: Math.max(12, portCenterY - 12),
+    width,
+  };
 }
 
 function WorkflowSelectionOverlay<

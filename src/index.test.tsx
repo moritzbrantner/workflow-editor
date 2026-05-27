@@ -2505,6 +2505,7 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
       {
         id: "flag",
         label: "Flag",
+        description: "Create a JSON boolean value.",
         kind: "json.boolean",
         category: "JSON",
         x: 0,
@@ -2525,6 +2526,7 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     ]);
 
     expect(uiNodes[0]?.packageLabel).toBe("true");
+    expect(uiNodes[0]?.description).toBeUndefined();
     expect(uiNodes[0]?.outputs?.[0]?.badge).toBe("true");
     expect(uiNodes[1]?.packageLabel).toBe('"published"');
     expect(uiNodes[1]?.outputs?.[0]?.badge).toBe('"published"');
