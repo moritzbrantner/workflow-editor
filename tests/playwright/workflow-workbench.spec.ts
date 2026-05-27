@@ -21,22 +21,63 @@ async function readDocument(page: Page) {
 
 async function selectNode(page: Page, label: string) {
   await page
-    .locator(`[data-slot="workflow-node-select"][aria-label="${label}"]:visible`)
+    .locator(
+      `[data-slot="workflow-builder-node"] [data-slot="workflow-node-select"][aria-label="${label}"]:visible`,
+    )
     .first()
-    .click({ force: true });
+    .evaluate(clickElement);
+}
+
+async function addNodeToSelection(page: Page, label: string) {
+  await page
+    .locator(
+      `[data-slot="workflow-builder-node"] [data-slot="workflow-node-select"][aria-label="${label}"]:visible`,
+    )
+    .first()
+    .evaluate((element) => {
+      element.dispatchEvent(
+        new PointerEvent("pointerdown", {
+          bubbles: true,
+          button: 0,
+          buttons: 1,
+          pointerId: 1,
+          pointerType: "mouse",
+          shiftKey: true,
+        }),
+      );
+      element.dispatchEvent(new MouseEvent("click", { bubbles: true, shiftKey: true }));
+      element.dispatchEvent(
+        new PointerEvent("pointerup", {
+          bubbles: true,
+          button: 0,
+          buttons: 0,
+          pointerId: 1,
+          pointerType: "mouse",
+          shiftKey: true,
+        }),
+      );
+    });
 }
 
 async function selectNodeById(page: Page, id: string) {
   await page
     .locator(`[data-slot="workflow-builder-node"][data-node-id="${id}"]:visible`)
     .locator('[data-slot="workflow-node-select"]')
-    .click({ force: true });
+    .evaluate(clickElement);
 }
 
 async function selectEdge(page: Page, id: string) {
-  await page.getByRole("button", { name: `Connection ${id}`, exact: true }).click({
-    force: true,
-  });
+  await page.getByRole("button", { name: `Connection ${id}`, exact: true }).evaluate(clickElement);
+}
+
+async function clickPort(page: Page, name: string) {
+  await page.getByRole("button", { name }).first().evaluate(clickElement);
+}
+
+function clickElement(element: Element) {
+  if (element instanceof HTMLElement) {
+    element.click();
+  }
 }
 
 async function clickAction(page: Page, name: string) {
@@ -190,9 +231,7 @@ test.describe("WorkflowWorkbench desktop", () => {
     await page.goto("/");
 
     await selectNode(page, "Input");
-    await page.getByRole("button", { name: "Transform", exact: true }).click({
-      modifiers: ["Shift"],
-    });
+    await addNodeToSelection(page, "Transform");
     await expect(page.getByTestId("selection-count").first()).toHaveText("2 selected");
 
     await page.getByRole("button", { name: "Duplicate", exact: true }).click();
@@ -215,9 +254,7 @@ test.describe("WorkflowWorkbench desktop", () => {
     await page.goto("/");
 
     await selectNode(page, "Input");
-    await page.getByRole("button", { name: "Transform", exact: true }).click({
-      modifiers: ["Shift"],
-    });
+    await addNodeToSelection(page, "Transform");
     await expect(page.getByTestId("selection-count").first()).toHaveText("2 selected");
 
     await pressShortcut(page, "Mod+D");
@@ -282,7 +319,7 @@ test.describe("WorkflowWorkbench desktop", () => {
     const startY =
       Math.max(inputBox!.y + inputBox!.height, transformBox!.y + transformBox!.height) + 16;
     const endX =
-      Math.max(inputBox!.x + inputBox!.width, transformBox!.x + transformBox!.width) + 16;
+      Math.max(inputBox!.x + inputBox!.width, transformBox!.x + transformBox!.width) - 64;
     const endY = Math.min(inputBox!.y, transformBox!.y) - 16;
 
     const viewport = page.locator('[data-slot="workflow-builder-viewport"]:visible').first();
@@ -294,6 +331,7 @@ test.describe("WorkflowWorkbench desktop", () => {
       clientY: startY,
       pointerId: 1,
       pointerType: "mouse",
+      shiftKey: true,
     });
     await viewport.dispatchEvent("pointermove", {
       bubbles: true,
@@ -303,6 +341,7 @@ test.describe("WorkflowWorkbench desktop", () => {
       clientY: endY,
       pointerId: 1,
       pointerType: "mouse",
+      shiftKey: true,
     });
     await viewport.dispatchEvent("pointerup", {
       bubbles: true,
@@ -312,6 +351,7 @@ test.describe("WorkflowWorkbench desktop", () => {
       clientY: endY,
       pointerId: 1,
       pointerType: "mouse",
+      shiftKey: true,
     });
 
     await expect(page.getByTestId("selection-count").filter({ visible: true }).first()).toHaveText(
@@ -340,9 +380,7 @@ test.describe("WorkflowWorkbench desktop", () => {
   test("arranges all nodes and selected nodes", async ({ page }) => {
     await page.goto("/");
     await selectNode(page, "Input");
-    await page.getByRole("button", { name: "Transform", exact: true }).click({
-      modifiers: ["Shift"],
-    });
+    await addNodeToSelection(page, "Transform");
 
     await page.getByRole("button", { name: "Arrange selection", exact: true }).click();
     const selectionLayout = await readDocument(page);
@@ -376,11 +414,63 @@ test.describe("WorkflowWorkbench desktop", () => {
       .toBeGreaterThan(1);
   });
 
+  test("pans the workflow canvas with drag and wheel", async ({ page }) => {
+    await page.goto("/");
+
+    const surface = page.locator('[data-slot="workflow-builder-surface"]:visible').first();
+    const surfaceBox = await surface.boundingBox();
+    expect(surfaceBox).not.toBeNull();
+
+    const beforeDrag = (await readDocument(page)).viewport ?? { x: 0, y: 0, zoom: 1 };
+    await page.mouse.move(surfaceBox!.x + surfaceBox!.width / 2, surfaceBox!.y + 340);
+    await page.mouse.down();
+    await page.mouse.move(surfaceBox!.x + surfaceBox!.width / 2 + 90, surfaceBox!.y + 400, {
+      steps: 6,
+    });
+    await page.mouse.up();
+
+    await expect
+      .poll(async () => ((await readDocument(page)).viewport ?? { x: 0, y: 0, zoom: 1 }).x)
+      .toBeGreaterThan(beforeDrag.x + 60);
+    await expect
+      .poll(async () => ((await readDocument(page)).viewport ?? { x: 0, y: 0, zoom: 1 }).y)
+      .toBeGreaterThan(beforeDrag.y + 40);
+    const afterDrag = (await readDocument(page)).viewport ?? { x: 0, y: 0, zoom: 1 };
+
+    await page.mouse.move(surfaceBox!.x + surfaceBox!.width / 2, surfaceBox!.y + 340);
+    await page.mouse.wheel(0, 120);
+    await expect
+      .poll(async () => ((await readDocument(page)).viewport ?? { x: 0, y: 0, zoom: 1 }).x)
+      .toBeLessThan(afterDrag.x);
+    const afterHorizontalWheel = (await readDocument(page)).viewport ?? { x: 0, y: 0, zoom: 1 };
+
+    await page.keyboard.down("Shift");
+    await page.mouse.wheel(0, 140);
+    await page.keyboard.up("Shift");
+    await expect
+      .poll(async () => ((await readDocument(page)).viewport ?? { x: 0, y: 0, zoom: 1 }).y)
+      .toBeLessThan(afterHorizontalWheel.y);
+    const afterVerticalWheel = (await readDocument(page)).viewport ?? { x: 0, y: 0, zoom: 1 };
+    expect(afterVerticalWheel.x).toBe(afterHorizontalWheel.x);
+
+    await page.evaluate(() => {
+      document.body.style.minHeight = "3000px";
+      window.scrollTo(0, 180);
+    });
+    await expect.poll(async () => page.evaluate(() => window.scrollY)).toBe(180);
+    const scrolledSurfaceBox = await surface.boundingBox();
+    expect(scrolledSurfaceBox).not.toBeNull();
+
+    await page.mouse.move(scrolledSurfaceBox!.x + scrolledSurfaceBox!.width / 2, 420);
+    await page.mouse.wheel(0, 160);
+    await expect.poll(async () => page.evaluate(() => window.scrollY)).toBe(180);
+  });
+
   test("creates a valid edge through port interactions", async ({ page }) => {
     await page.goto("/");
 
-    await page.getByRole("button", { name: "Start Input Out" }).first().click();
-    await page.getByRole("button", { name: "Connect to Output In" }).first().click();
+    await clickPort(page, "Start Input Out");
+    await clickPort(page, "Connect to Output In");
 
     await expect(page.getByTestId("edge-count")).toHaveText("2");
     await expect(page.getByTestId("summary-json")).toContainText("input:out->output:in");
@@ -439,8 +529,8 @@ test.describe("WorkflowWorkbench desktop", () => {
     await page.goto("/");
     await selectNode(page, "Input");
 
-    await page.getByRole("button", { name: "Start Input Out" }).first().click();
-    await page.getByRole("button", { name: "Connect to Transform In" }).first().click();
+    await clickPort(page, "Start Input Out");
+    await clickPort(page, "Connect to Transform In");
 
     await expectEdgeCount(page, 1);
     await expect(page.getByTestId("selected-node-id")).toHaveText('"input"');

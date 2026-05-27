@@ -75,6 +75,7 @@ const workflowWorkbenchOverlayInteractionSelector =
 const workflowWorkbenchOverlaySelectionPreservationMs = 1500;
 
 const workflowEditorPaletteDragType = "application/x-workflow-editor-node-template";
+const workflowEditorPanActivationDistance = 3;
 const workflowEditorSnapDistance = 28;
 const workflowEditorMinZoom = 0.5;
 const workflowEditorMaxZoom = 1.75;
@@ -250,6 +251,7 @@ export function WorkflowWorkbench<
   const connectionInProgressRef = useRef(false);
   const ignoreSelectionClearUntilRef = useRef(0);
   const marqueeRef = useRef<WorkflowSelectionMarquee | null>(null);
+  const canvasPanRef = useRef<WorkflowCanvasPanState | null>(null);
   const pendingNodeSnapRef = useRef<{
     document: WorkflowEditorDocument<TNodeData, TEdgeData>;
     nodeIds: Set<string>;
@@ -812,7 +814,7 @@ export function WorkflowWorkbench<
     emitSelectionState(toggleWorkflowEditorSelectionItem(selection, item));
   };
 
-  const startMarquee = (event: ReactPointerEvent<HTMLDivElement>) => {
+  const startCanvasPointerInteraction = (event: ReactPointerEvent<HTMLDivElement>) => {
     pointerModifierRef.current = { additive: event.shiftKey || event.metaKey || event.ctrlKey };
     const target = event.target;
     if (target instanceof Element && isWorkflowWorkbenchOverlayInteractionTarget(target)) {
@@ -831,6 +833,22 @@ export function WorkflowWorkbench<
       return;
     }
 
+    if (!event.shiftKey && !event.metaKey && !event.ctrlKey) {
+      const currentViewport = normalizeWorkflowEditorViewport(document.viewport);
+      canvasPanRef.current = {
+        pointerId: event.pointerId,
+        startClientX: event.clientX,
+        startClientY: event.clientY,
+        viewport: currentViewport,
+        panning: false,
+      };
+      return;
+    }
+
+    startMarquee(event);
+  };
+
+  const startMarquee = (event: ReactPointerEvent<HTMLDivElement>) => {
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) {
       return;
@@ -844,6 +862,33 @@ export function WorkflowWorkbench<
     };
     marqueeRef.current = nextMarquee;
     setMarquee(nextMarquee);
+  };
+
+  const updateCanvasPointerInteraction = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const pan = canvasPanRef.current;
+    if (pan && pan.pointerId === event.pointerId) {
+      const dx = event.clientX - pan.startClientX;
+      const dy = event.clientY - pan.startClientY;
+
+      if (!pan.panning && Math.hypot(dx, dy) < workflowEditorPanActivationDistance) {
+        return;
+      }
+
+      if (!pan.panning) {
+        event.currentTarget.setPointerCapture?.(event.pointerId);
+        pan.panning = true;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      commitViewportChange({
+        x: Math.round(pan.viewport.x + dx),
+        y: Math.round(pan.viewport.y + dy),
+        zoom: pan.viewport.zoom,
+      });
+      return;
+    }
+
+    updateMarquee(event);
   };
 
   const updateMarquee = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -866,6 +911,42 @@ export function WorkflowWorkbench<
     setMarquee(nextMarquee);
   };
 
+  const completeCanvasPointerInteraction = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const pan = canvasPanRef.current;
+
+    if (!pan || pan.pointerId !== event.pointerId) {
+      return false;
+    }
+
+    canvasPanRef.current = null;
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+    }
+
+    if (!pan.panning) {
+      if (!pointerModifierRef.current.additive) {
+        emitSelectionState(emptyWorkflowEditorSelection);
+      }
+      return false;
+    }
+
+    ignoreSelectionClearUntilRef.current =
+      Date.now() + workflowWorkbenchOverlaySelectionPreservationMs;
+    event.preventDefault();
+    event.stopPropagation();
+    return true;
+  };
+
+  const cancelCanvasPointerInteraction = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const pan = canvasPanRef.current;
+    if (pan?.pointerId === event.pointerId) {
+      canvasPanRef.current = null;
+      if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+        event.currentTarget.releasePointerCapture?.(event.pointerId);
+      }
+    }
+  };
+
   const clearPendingConnectionAfterTargetClick = (event: ReactPointerEvent<HTMLDivElement>) => {
     const target = event.target;
     if (
@@ -882,7 +963,33 @@ export function WorkflowWorkbench<
   };
 
   const handleCanvasWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
+    const target = event.target;
+    if (target instanceof Element && isWorkflowWorkbenchOverlayInteractionTarget(target)) {
+      event.stopPropagation();
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
     if (!event.ctrlKey) {
+      const currentViewport = normalizeWorkflowEditorViewport(document.viewport);
+      const delta = getWorkflowEditorWheelDelta(event);
+      const nextViewport = event.shiftKey
+        ? {
+            ...currentViewport,
+            y: Math.round(currentViewport.y - (delta.y || delta.x)),
+          }
+        : {
+            ...currentViewport,
+            x: Math.round(currentViewport.x - (delta.x || delta.y)),
+          };
+
+      if (nextViewport.x === currentViewport.x && nextViewport.y === currentViewport.y) {
+        return;
+      }
+
+      commitViewportChange(nextViewport);
       return;
     }
 
@@ -895,12 +1002,11 @@ export function WorkflowWorkbench<
       return;
     }
 
-    event.preventDefault();
-    event.stopPropagation();
-
-    const currentViewport = document.viewport ?? { x: 0, y: 0, zoom: 1 };
-    const currentZoom = clampWorkflowEditorZoom(currentViewport.zoom);
-    const nextZoom = clampWorkflowEditorZoom(currentZoom * Math.exp(-event.deltaY * 0.002));
+    const currentViewport = normalizeWorkflowEditorViewport(document.viewport);
+    const currentZoom = currentViewport.zoom;
+    const nextZoom = clampWorkflowEditorZoom(
+      currentZoom * Math.exp(-getWorkflowEditorWheelDelta(event).y * 0.002),
+    );
 
     if (nextZoom === currentZoom) {
       return;
@@ -1167,14 +1273,19 @@ export function WorkflowWorkbench<
           <div
             ref={containerRef}
             className="relative min-h-0 min-w-0"
-            onPointerDownCapture={startMarquee}
-            onPointerUpCapture={clearPendingConnectionAfterTargetClick}
-            onPointerMove={updateMarquee}
+            onPointerDownCapture={startCanvasPointerInteraction}
+            onPointerMoveCapture={updateCanvasPointerInteraction}
+            onPointerUpCapture={(event) => {
+              if (!completeCanvasPointerInteraction(event)) {
+                clearPendingConnectionAfterTargetClick(event);
+              }
+            }}
             onPointerUp={() => {
               completeMarquee();
               completePendingNodeSnap();
             }}
-            onPointerCancel={() => {
+            onPointerCancel={(event) => {
+              cancelCanvasPointerInteraction(event);
               marqueeRef.current = null;
               pendingNodeSnapRef.current = null;
               setMarquee(null);
@@ -1394,6 +1505,14 @@ type WorkflowSelectionMarquee = {
   startY: number;
   currentX: number;
   currentY: number;
+};
+
+type WorkflowCanvasPanState = {
+  pointerId: number;
+  startClientX: number;
+  startClientY: number;
+  viewport: WorkflowEditorViewport;
+  panning: boolean;
 };
 
 type WorkflowEditorPoint = {
@@ -1637,6 +1756,27 @@ function clampWorkflowEditorZoom(zoom: number) {
   }
 
   return Math.min(Math.max(zoom, workflowEditorMinZoom), workflowEditorMaxZoom);
+}
+
+function normalizeWorkflowEditorViewport(viewport: WorkflowEditorViewport | undefined) {
+  const x = viewport?.x;
+  const y = viewport?.y;
+  const zoom = viewport?.zoom;
+
+  return {
+    x: typeof x === "number" && Number.isFinite(x) ? x : 0,
+    y: typeof y === "number" && Number.isFinite(y) ? y : 0,
+    zoom: clampWorkflowEditorZoom(zoom ?? 1),
+  };
+}
+
+function getWorkflowEditorWheelDelta(event: ReactWheelEvent<HTMLElement>) {
+  const multiplier = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 600 : 1;
+
+  return {
+    x: event.deltaX * multiplier,
+    y: event.deltaY * multiplier,
+  };
 }
 
 function WorkflowSelectionOverlay<
