@@ -917,8 +917,8 @@ export function WorkflowWorkbench<
         </WorkbenchPanel>
       }
       toolbar={
-        <WorkbenchToolbar className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-3 py-2">
-          <div className="flex flex-wrap items-center gap-2">
+        <WorkbenchToolbar className="flex min-h-10 flex-nowrap items-center justify-between gap-2 overflow-x-auto border-b border-border px-2 py-1">
+          <div className="flex min-w-max items-center gap-1.5 whitespace-nowrap">
             {showGraphStats ? (
               <>
                 <Badge variant="outline">{document.nodes.length} nodes</Badge>
@@ -938,12 +938,12 @@ export function WorkflowWorkbench<
               </Badge>
             ) : null}
             {showShortcutHint ? (
-              <span className="text-xs text-muted-foreground">
+              <span className="hidden text-xs text-muted-foreground sm:inline">
                 Duplicate {formatShortcutLabel(defaultWorkflowWorkbenchHotkeys.duplicateNode)}
               </span>
             ) : null}
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex min-w-max items-center gap-1.5 whitespace-nowrap">
             <Button
               type="button"
               size="sm"
@@ -1078,13 +1078,20 @@ export function WorkflowWorkbench<
                     (edge) => nodeIds.has(edge.sourceNodeId) && nodeIds.has(edge.targetNodeId),
                   ),
                 });
+                const snappedDocument = movedNodeIds.reduce(
+                  (currentDocument, nodeId) =>
+                    snapWorkflowEditorNodePositionToCompatiblePort(currentDocument, nodeId, {
+                      typeDefinitions,
+                    }),
+                  nextDocument,
+                );
 
                 if (movedNodeIds.length > 0) {
                   const pendingSnap = pendingNodeSnapRef.current ?? {
-                    document: nextDocument,
+                    document: snappedDocument,
                     nodeIds: new Set<string>(),
                   };
-                  pendingSnap.document = nextDocument;
+                  pendingSnap.document = snappedDocument;
 
                   for (const nodeId of movedNodeIds) {
                     pendingSnap.nodeIds.add(nodeId);
@@ -1093,7 +1100,7 @@ export function WorkflowWorkbench<
                   pendingNodeSnapRef.current = pendingSnap;
                 }
 
-                commitDocument(nextDocument);
+                commitDocument(snappedDocument);
               }
             }}
             onEdgesChange={(edges) => {
@@ -1178,25 +1185,64 @@ function snapWorkflowEditorNodeToCompatiblePort<
   nodeId: string,
   options: { typeDefinitions?: readonly WorkflowEditorTypeDefinition[] } = {},
 ) {
-  const movedNode = document.nodes.find((node) => node.id === nodeId);
+  const snapCandidate = findWorkflowEditorNodeSnapCandidate(document, nodeId, options);
 
-  if (!movedNode) {
+  if (!snapCandidate) {
     return document;
   }
 
-  let bestCandidate:
-    | {
-        connection: {
-          sourceNodeId: string;
-          sourcePortId: string;
-          targetNodeId: string;
-          targetPortId: string;
-        };
-        distance: number;
-        dx: number;
-        dy: number;
-      }
-    | undefined;
+  const snappedDocument = applyWorkflowEditorNodeSnap(document, nodeId, snapCandidate);
+  const validity = validateWorkflowEditorConnection(
+    snappedDocument,
+    snapCandidate.connection,
+    options,
+  );
+
+  return validity.valid
+    ? connectWorkflowEditorNodes(snappedDocument, snapCandidate.connection, options)
+    : snappedDocument;
+}
+
+function snapWorkflowEditorNodePositionToCompatiblePort<
+  TNodeData extends Record<string, unknown>,
+  TEdgeData extends Record<string, unknown>,
+>(
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>,
+  nodeId: string,
+  options: { typeDefinitions?: readonly WorkflowEditorTypeDefinition[] } = {},
+) {
+  const snapCandidate = findWorkflowEditorNodeSnapCandidate(document, nodeId, options);
+
+  return snapCandidate ? applyWorkflowEditorNodeSnap(document, nodeId, snapCandidate) : document;
+}
+
+type WorkflowEditorNodeSnapCandidate = {
+  connection: {
+    sourceNodeId: string;
+    sourcePortId: string;
+    targetNodeId: string;
+    targetPortId: string;
+  };
+  distance: number;
+  dx: number;
+  dy: number;
+};
+
+function findWorkflowEditorNodeSnapCandidate<
+  TNodeData extends Record<string, unknown>,
+  TEdgeData extends Record<string, unknown>,
+>(
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>,
+  nodeId: string,
+  options: { typeDefinitions?: readonly WorkflowEditorTypeDefinition[] } = {},
+) {
+  const movedNode = document.nodes.find((node) => node.id === nodeId);
+
+  if (!movedNode) {
+    return undefined;
+  }
+
+  let bestCandidate: WorkflowEditorNodeSnapCandidate | undefined;
 
   const addCandidate = (
     connection: {
@@ -1216,13 +1262,14 @@ function snapWorkflowEditorNodeToCompatiblePort<
     const dy = otherPortCenter.y - movedPortCenter.y;
     const distance = Math.hypot(dx, dy);
 
-    if (Math.abs(dx) > workflowEditorSnapDistance || Math.abs(dy) > workflowEditorSnapDistance) {
+    if (distance > workflowEditorSnapDistance) {
       return;
     }
 
-    const validity = validateWorkflowEditorConnection(document, connection, options);
-
-    if (!validity.valid || (bestCandidate && bestCandidate.distance <= distance)) {
+    if (
+      !canSnapWorkflowEditorConnection(document, connection, options) ||
+      (bestCandidate && bestCandidate.distance <= distance)
+    ) {
       return;
     }
 
@@ -1265,25 +1312,55 @@ function snapWorkflowEditorNodeToCompatiblePort<
     }
   }
 
-  if (!bestCandidate) {
+  return bestCandidate;
+}
+
+function canSnapWorkflowEditorConnection<
+  TNodeData extends Record<string, unknown>,
+  TEdgeData extends Record<string, unknown>,
+>(
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>,
+  connection: WorkflowEditorNodeSnapCandidate["connection"],
+  options: { typeDefinitions?: readonly WorkflowEditorTypeDefinition[] },
+) {
+  const validity = validateWorkflowEditorConnection(document, connection, options);
+
+  return validity.valid || validity.reason === "duplicate" || validity.reason === "cycle";
+}
+
+function applyWorkflowEditorNodeSnap<
+  TNodeData extends Record<string, unknown>,
+  TEdgeData extends Record<string, unknown>,
+>(
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>,
+  nodeId: string,
+  snapCandidate: WorkflowEditorNodeSnapCandidate,
+): WorkflowEditorDocument<TNodeData, TEdgeData> {
+  const movedNode = document.nodes.find((node) => node.id === nodeId);
+
+  if (!movedNode) {
     return document;
   }
 
-  const snapCandidate = bestCandidate;
-  const snappedDocument = {
+  const nextX = Math.round(movedNode.x + snapCandidate.dx);
+  const nextY = Math.round(movedNode.y + snapCandidate.dy);
+
+  if (movedNode.x === nextX && movedNode.y === nextY) {
+    return document;
+  }
+
+  return {
     ...document,
     nodes: document.nodes.map((node) =>
-      node.id === movedNode.id
+      node.id === nodeId
         ? {
             ...node,
-            x: Math.round(node.x + snapCandidate.dx),
-            y: Math.round(node.y + snapCandidate.dy),
+            x: nextX,
+            y: nextY,
           }
         : node,
     ),
   };
-
-  return connectWorkflowEditorNodes(snappedDocument, snapCandidate.connection, options);
 }
 
 function getWorkflowEditorPortCenter<TNodeData extends Record<string, unknown>>(

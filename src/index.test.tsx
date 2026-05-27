@@ -1723,6 +1723,40 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     expect(handleDocumentChange).toHaveBeenCalled();
   });
 
+  test("snaps dragged nodes to compatible ports even when the edge already exists", () => {
+    const handleDocumentChange = vi.fn();
+    render(<WorkflowWorkbench document={document} onDocumentChange={handleDocumentChange} />);
+
+    const inputWidth = getWorkflowNodeSize(document.nodes[0]!).width;
+    const transformNode = globalThis.document.querySelector<HTMLElement>(
+      "[data-slot='workflow-builder-node'][data-node-id='transform']",
+    )!;
+    const surface = globalThis.document.querySelector<HTMLElement>(
+      "[data-slot='workflow-builder-surface']",
+    )!;
+
+    fireEvent.mouseDown(transformNode, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(surface, {
+      clientX: inputWidth + 20 - document.nodes[1]!.x,
+      clientY: 0,
+    });
+
+    expect(handleDocumentChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        nodes: expect.arrayContaining([
+          expect.objectContaining({ id: "transform", x: inputWidth, y: 0 }),
+        ]),
+        edges: expect.arrayContaining([
+          expect.objectContaining({
+            id: "input-transform",
+            sourceNodeId: "input",
+            targetNodeId: "transform",
+          }),
+        ]),
+      }),
+    );
+  });
+
   test("uses type definitions for workbench connection validation", () => {
     const handleDocumentChange = vi.fn();
     const typedDocument = normalizeWorkflowEditorDocument({
