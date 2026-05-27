@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { getWorkflowNodeSize } from "@moritzbrantner/ui/labs";
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 
 import {
@@ -668,6 +669,47 @@ describe("@moritzbrantner/workflow-editor core", () => {
     const cyclicLayout = layoutWorkflowEditorDocument(cyclic);
     expect(cyclicLayout.cycles).toHaveLength(1);
     expect(cyclicLayout.document.nodes.every((node) => Number.isFinite(node.x))).toBe(true);
+  });
+
+  test("uses rendered node dimensions when laying out sibling nodes", () => {
+    const tallDocument = normalizeWorkflowEditorDocument({
+      nodes: [
+        {
+          id: "wide-ports-a",
+          label: "Wide Ports A",
+          x: 0,
+          y: 0,
+          outputs: Array.from({ length: 8 }, (_, index) => ({
+            id: `out-${index}`,
+            label: `Out ${index}`,
+            type: { kind: "string" as const },
+          })),
+        },
+        {
+          id: "wide-ports-b",
+          label: "Wide Ports B",
+          x: 0,
+          y: 0,
+          outputs: Array.from({ length: 8 }, (_, index) => ({
+            id: `out-${index}`,
+            label: `Out ${index}`,
+            type: { kind: "string" as const },
+          })),
+        },
+      ],
+      edges: [],
+    });
+
+    const result = layoutWorkflowEditorDocument(tallDocument, { nodeSeparation: 0 });
+    const first = result.document.nodes.find((node) => node.id === "wide-ports-a")!;
+    const second = result.document.nodes.find((node) => node.id === "wide-ports-b")!;
+    const firstSize = getWorkflowNodeSize(first);
+    const secondSize = getWorkflowNodeSize(second);
+    const verticalGap =
+      Math.max(first.y, second.y) -
+      Math.min(first.y + firstSize.height, second.y + secondSize.height);
+
+    expect(verticalGap).toBeGreaterThanOrEqual(0);
   });
 
   test("validates workflow documents and supports repair-mode normalization", () => {

@@ -1,4 +1,5 @@
 import { graphlib, layout } from "@dagrejs/dagre";
+import { getWorkflowNodeSize } from "@moritzbrantner/ui/labs";
 
 import {
   detectWorkflowEditorCycles,
@@ -33,8 +34,8 @@ export type WorkflowEditorLayoutResult<
   cycles: string[][];
 };
 
-const defaultNodeWidth = 220;
-const defaultNodeHeight = 120;
+const defaultNodeWidth = 248;
+const defaultNodeHeight = 124;
 
 export function layoutWorkflowEditorDocument<
   TNodeData = Record<string, unknown>,
@@ -66,9 +67,10 @@ export function layoutWorkflowEditorDocument<
   graph.setDefaultEdgeLabel(() => ({}));
 
   for (const node of nodes) {
+    const size = getWorkflowNodeSize(node);
     graph.setNode(node.id, {
-      width: resolveLayoutDimension(options.nodeWidth, node, defaultNodeWidth),
-      height: resolveLayoutDimension(options.nodeHeight, node, defaultNodeHeight),
+      width: resolveLayoutDimension(options.nodeWidth, node, size.width, defaultNodeWidth),
+      height: resolveLayoutDimension(options.nodeHeight, node, size.height, defaultNodeHeight),
     });
   }
 
@@ -156,10 +158,15 @@ export function layoutWorkflowEditorDocument<
 function resolveLayoutDimension<TNodeData = Record<string, unknown>>(
   value: number | ((node: WorkflowEditorNode<TNodeData>) => number) | undefined,
   node: WorkflowEditorNode<TNodeData>,
+  measured: number,
   fallback: number,
 ) {
   const resolved = typeof value === "function" ? value(node) : value;
-  return Number.isFinite(resolved) && Number(resolved) > 0 ? Number(resolved) : fallback;
+  if (Number.isFinite(resolved) && Number(resolved) > 0) {
+    return Number(resolved);
+  }
+
+  return Number.isFinite(measured) && measured > 0 ? measured : fallback;
 }
 
 function workflowEditorNodeBounds<TNodeData = Record<string, unknown>>(

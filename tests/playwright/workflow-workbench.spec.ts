@@ -10,6 +10,7 @@ type WorkflowDocumentSnapshot = {
     targetNodeId: string;
     targetPortId: string;
   }>;
+  viewport?: { x: number; y: number; zoom: number };
 };
 
 async function readDocument(page: Page) {
@@ -344,6 +345,23 @@ test.describe("WorkflowWorkbench desktop", () => {
     const input = fullLayout.nodes.find((node) => node.id === "input")!;
     const transform = fullLayout.nodes.find((node) => node.id === "transform")!;
     expect(transform.x).toBeGreaterThan(input.x);
+  });
+
+  test("zooms the workflow canvas with control wheel", async ({ page }) => {
+    await page.goto("/");
+
+    const surface = page.locator('[data-slot="workflow-builder-surface"]:visible').first();
+    const surfaceBox = await surface.boundingBox();
+    expect(surfaceBox).not.toBeNull();
+
+    await page.mouse.move(surfaceBox!.x + surfaceBox!.width / 2, surfaceBox!.y + 160);
+    await page.keyboard.down("Control");
+    await page.mouse.wheel(0, -320);
+    await page.keyboard.up("Control");
+
+    await expect
+      .poll(async () => (await readDocument(page)).viewport?.zoom ?? 1)
+      .toBeGreaterThan(1);
   });
 
   test("creates a valid edge through port interactions", async ({ page }) => {

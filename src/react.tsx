@@ -4,6 +4,7 @@ import {
   type DragEvent as ReactDragEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
+  type WheelEvent as ReactWheelEvent,
   useEffect,
   useMemo,
   useRef,
@@ -81,6 +82,8 @@ const emptyWorkflowEditorSelection: WorkflowEditorSelectionState = {
 
 const workflowEditorPaletteDragType = "application/x-workflow-editor-node-template";
 const workflowEditorSnapDistance = 28;
+const workflowEditorMinZoom = 0.5;
+const workflowEditorMaxZoom = 1.75;
 
 let workflowEditorMemoryClipboard: string | null = null;
 
@@ -273,6 +276,11 @@ export function WorkflowWorkbench<
 
   const commitDocument = (nextDocument: WorkflowEditorDocument<TNodeData, TEdgeData>) => {
     onDocumentChange?.(nextDocument);
+  };
+
+  const commitViewportChange = (viewport: WorkflowEditorViewport) => {
+    onViewportChange?.(viewport);
+    commitDocument({ ...document, viewport });
   };
 
   useEffect(() => {
@@ -494,6 +502,17 @@ export function WorkflowWorkbench<
       commitDocument(nextDocument);
     }
   };
+
+  useEffect(() => {
+    const completeSnap = () => completePendingNodeSnap();
+
+    window.addEventListener("pointerup", completeSnap);
+    window.addEventListener("mouseup", completeSnap);
+    return () => {
+      window.removeEventListener("pointerup", completeSnap);
+      window.removeEventListener("mouseup", completeSnap);
+    };
+  });
 
   const deleteSelection = () => {
     if (readOnly) {
@@ -737,6 +756,44 @@ export function WorkflowWorkbench<
     window.setTimeout(() => {
       connectionInProgressRef.current = false;
     }, 0);
+  };
+
+  const handleCanvasWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
+    if (!event.ctrlKey) {
+      return;
+    }
+
+    const surface = containerRef.current?.querySelector<HTMLElement>(
+      "[data-slot='workflow-builder-surface']",
+    );
+    const rect = surface?.getBoundingClientRect();
+
+    if (!rect) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const currentViewport = document.viewport ?? { x: 0, y: 0, zoom: 1 };
+    const currentZoom = clampWorkflowEditorZoom(currentViewport.zoom);
+    const nextZoom = clampWorkflowEditorZoom(currentZoom * Math.exp(-event.deltaY * 0.002));
+
+    if (nextZoom === currentZoom) {
+      return;
+    }
+
+    const localX = event.clientX - rect.left;
+    const localY = event.clientY - rect.top;
+    const canvasX = (localX - currentViewport.x) / currentZoom;
+    const canvasY = (localY - currentViewport.y) / currentZoom;
+    const nextViewport = {
+      x: Math.round(localX - canvasX * nextZoom),
+      y: Math.round(localY - canvasY * nextZoom),
+      zoom: nextZoom,
+    };
+
+    commitViewportChange(nextViewport);
   };
 
   const completeMarquee = () => {
@@ -991,6 +1048,7 @@ export function WorkflowWorkbench<
           }}
           onDragOver={handleTemplateDragOver}
           onDrop={handleTemplateDrop}
+          onWheelCapture={handleCanvasWheel}
         >
           <WorkflowBuilder
             nodes={uiNodes}
@@ -1000,6 +1058,8 @@ export function WorkflowWorkbench<
             readOnly={readOnly}
             showMiniMap
             surfaceHeight="34rem"
+            minZoom={workflowEditorMinZoom}
+            maxZoom={workflowEditorMaxZoom}
             viewport={document.viewport}
             toolbarLabel="Workflow"
             onNodesChange={(nodes) => {
@@ -1055,8 +1115,7 @@ export function WorkflowWorkbench<
               }
             }}
             onViewportChange={(viewport) => {
-              onViewportChange?.(viewport);
-              commitDocument({ ...document, viewport });
+              commitViewportChange(viewport);
             }}
             onSelectionChange={handleBuilderSelection}
             onConnectionStart={() => {
@@ -1157,7 +1216,7 @@ function snapWorkflowEditorNodeToCompatiblePort<
     const dy = otherPortCenter.y - movedPortCenter.y;
     const distance = Math.hypot(dx, dy);
 
-    if (distance > workflowEditorSnapDistance) {
+    if (Math.abs(dx) > workflowEditorSnapDistance || Math.abs(dy) > workflowEditorSnapDistance) {
       return;
     }
 
@@ -1264,6 +1323,14 @@ function getWorkflowEditorPointFromClient(
     x: (clientX - rect.left) / zoom,
     y: (clientY - rect.top) / zoom,
   };
+}
+
+function clampWorkflowEditorZoom(zoom: number) {
+  if (!Number.isFinite(zoom)) {
+    return 1;
+  }
+
+  return Math.min(Math.max(zoom, workflowEditorMinZoom), workflowEditorMaxZoom);
 }
 
 function WorkflowSelectionOverlay<
