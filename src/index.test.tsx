@@ -39,6 +39,7 @@ import {
   fromUiWorkflowBuilderNodes,
   getWorkflowEditorArrayConstructorInputs,
   getWorkflowEditorObjectConstructorInputs,
+  getWorkflowEditorObjectConstructorSchema,
   getWorkflowEditorObjectDecompositionOutputs,
   getWorkflowEditorReferenceDiagnostics,
   getWorkflowEditorReferencedDocumentIds,
@@ -55,6 +56,7 @@ import {
   moveWorkflowEditorNode,
   normalizeWorkflowEditorDocument,
   normalizeWorkflowEditorSelection,
+  parseWorkflowEditorObjectConstructorExpression,
   pasteWorkflowEditorClipboardPayload,
   parseWorkflowEditorDocumentFile,
   removeWorkflowEditorArrayConstructorInput,
@@ -79,7 +81,11 @@ import {
   updateWorkflowEditorNode,
   updateWorkflowEditorNodeWorkflowReference,
   updateWorkflowEditorObjectDecompositionPropertiesInNode,
+  updateWorkflowEditorObjectConstructorExpression,
+  updateWorkflowEditorObjectConstructorExpressionInNode,
   updateWorkflowEditorObjectConstructorPropertiesInNode,
+  updateWorkflowEditorObjectConstructorSchema,
+  updateWorkflowEditorObjectConstructorSchemaInNode,
   validateWorkflowEditorDocument,
   validateWorkflowEditorConnection,
   wouldCreateWorkflowEditorCycle,
@@ -379,6 +385,10 @@ describe("@moritzbrantner/workflow-editor core", () => {
       kind: "object",
       properties: { givenName: { type: { kind: "string" } } },
     });
+    expect(getWorkflowEditorObjectConstructorSchema(renamedObjectNode)).toEqual({
+      kind: "object",
+      properties: { givenName: { type: { kind: "string" } } },
+    });
 
     const expanded = addWorkflowEditorObjectConstructorInput(connected, "employee-object", {
       propertyKey: "lastName",
@@ -388,6 +398,13 @@ describe("@moritzbrantner/workflow-editor core", () => {
         findWorkflowEditorNode(expanded, "employee-object")!,
       ),
     ).toHaveLength(2);
+    expect(
+      getWorkflowEditorObjectConstructorSchema(findWorkflowEditorNode(expanded, "employee-object")!)
+        .properties,
+    ).toEqual({
+      firstName: { type: { kind: "string" } },
+      lastName: { type: { kind: "any" } },
+    });
 
     const explicitPortId = addWorkflowEditorObjectConstructorInput(connected, "employee-object", {
       portId: "trialDays",
@@ -422,6 +439,246 @@ describe("@moritzbrantner/workflow-editor core", () => {
       kind: "object",
       properties: {},
     });
+  });
+
+  test("syncs object constructor inputs from schema", () => {
+    const objectTemplate = workflowEditorJsonNodeTemplates.find(
+      (template) => template.id === "json-object",
+    )!;
+    const schema = {
+      kind: "object",
+      properties: {
+        firstName: { type: { kind: "string" } },
+        age: { type: { kind: "number" }, optional: true },
+      },
+    } satisfies Extract<WorkflowEditorPortType, { kind: "object" }>;
+    const objectNode = updateWorkflowEditorObjectConstructorSchemaInNode(
+      {
+        ...objectTemplate,
+        id: "employee-object",
+        x: 240,
+        y: 0,
+      } as WorkflowEditorDocument["nodes"][number],
+      schema,
+    );
+
+    expect(getWorkflowEditorObjectConstructorInputs(objectNode)).toEqual([
+      expect.objectContaining({ id: "firstname", label: "firstName", type: { kind: "string" } }),
+      expect.objectContaining({ id: "age", label: "age", type: { kind: "number" } }),
+    ]);
+    expect(objectNode.outputs?.[0]?.type).toEqual(schema);
+    expect(getWorkflowEditorObjectConstructorSchema(objectNode)).toEqual(schema);
+  });
+
+  test("updates object constructor schema exactly and removes deleted property edges", () => {
+    const objectTemplate = workflowEditorJsonNodeTemplates.find(
+      (template) => template.id === "json-object",
+    )!;
+    const objectNode = updateWorkflowEditorObjectConstructorSchemaInNode(
+      {
+        ...objectTemplate,
+        id: "employee-object",
+        x: 240,
+        y: 0,
+      } as WorkflowEditorDocument["nodes"][number],
+      {
+        kind: "object",
+        properties: {
+          firstName: { type: { kind: "string" } },
+          age: { type: { kind: "number" }, optional: true },
+        },
+      },
+    );
+    const objectDocument = normalizeWorkflowEditorDocument<Record<string, unknown>>({
+      nodes: [
+        {
+          id: "employee",
+          label: "Employee",
+          x: 0,
+          y: 0,
+          outputs: [
+            { id: "firstName", label: "First name", type: { kind: "string" } },
+            { id: "age", label: "Age", type: { kind: "number" } },
+          ],
+        },
+        objectNode,
+      ],
+      edges: [
+        {
+          id: "employee:firstName->employee-object:firstname",
+          sourceNodeId: "employee",
+          sourcePortId: "firstName",
+          targetNodeId: "employee-object",
+          targetPortId: "firstname",
+        },
+        {
+          id: "employee:age->employee-object:age",
+          sourceNodeId: "employee",
+          sourcePortId: "age",
+          targetNodeId: "employee-object",
+          targetPortId: "age",
+        },
+      ],
+    });
+    const nextDocument = updateWorkflowEditorObjectConstructorSchema(
+      objectDocument,
+      "employee-object",
+      {
+        kind: "object",
+        properties: {
+          firstName: { type: { kind: "string" } },
+          active: { type: { kind: "boolean" } },
+        },
+      },
+    );
+    const nextObjectNode = findWorkflowEditorNode(nextDocument, "employee-object")!;
+
+    expect(
+      getWorkflowEditorObjectConstructorInputs(nextObjectNode).map((input) => input.label),
+    ).toEqual(["firstName", "active"]);
+    expect(nextDocument.edges).toEqual([
+      expect.objectContaining({
+        targetNodeId: "employee-object",
+        targetPortId: "firstname",
+      }),
+    ]);
+    expect(getWorkflowEditorObjectConstructorInputs(nextObjectNode)[0]).toEqual(
+      expect.objectContaining({ badge: "employee.firstName" }),
+    );
+    expect(nextObjectNode.outputs?.[0]?.type).toEqual({
+      kind: "object",
+      properties: {
+        firstName: { type: { kind: "string" } },
+        active: { type: { kind: "boolean" } },
+      },
+    });
+  });
+
+  test("leaves non-object-constructor nodes unchanged when applying object schemas", () => {
+    const node = {
+      id: "input",
+      label: "Input",
+      x: 0,
+      y: 0,
+      outputs: [{ id: "out", label: "Out", type: { kind: "string" } }],
+    } satisfies WorkflowEditorDocument["nodes"][number];
+
+    expect(
+      updateWorkflowEditorObjectConstructorSchemaInNode(node, {
+        kind: "object",
+        properties: { name: { type: { kind: "string" } } },
+      }),
+    ).toBe(node);
+  });
+
+  test("updates object constructor nodes from object expressions", () => {
+    const objectTemplate = workflowEditorJsonNodeTemplates.find(
+      (template) => template.id === "json-object",
+    )!;
+    const parsedExpression = parseWorkflowEditorObjectConstructorExpression(
+      "{ firstName: employee.firstName, age: employee.age }",
+    );
+
+    expect(parsedExpression).toEqual([
+      { key: "firstName", sourceExpression: "employee.firstName" },
+      { key: "age", sourceExpression: "employee.age" },
+    ]);
+
+    const objectNode = updateWorkflowEditorObjectConstructorExpressionInNode(
+      {
+        ...objectTemplate,
+        id: "employee-object",
+        x: 240,
+        y: 0,
+      } as WorkflowEditorDocument["nodes"][number],
+      "{ firstName: employee.firstName, age: employee.age }",
+    );
+
+    expect(getWorkflowEditorObjectConstructorInputs(objectNode)).toEqual([
+      expect.objectContaining({
+        id: "firstname",
+        label: "firstName",
+        badge: "employee.firstName",
+        type: { kind: "any" },
+      }),
+      expect.objectContaining({
+        id: "age",
+        label: "age",
+        badge: "employee.age",
+        type: { kind: "any" },
+      }),
+    ]);
+    expect(formatWorkflowEditorObjectConstructorExpression(objectNode)).toBe(
+      "{\n  firstName: employee.firstName,\n  age: employee.age\n}",
+    );
+  });
+
+  test("updates object constructor expressions and removes stale edges", () => {
+    const objectTemplate = workflowEditorJsonNodeTemplates.find(
+      (template) => template.id === "json-object",
+    )!;
+    const objectDocument = normalizeWorkflowEditorDocument<Record<string, unknown>>({
+      nodes: [
+        {
+          id: "employee",
+          label: "Employee",
+          x: 0,
+          y: 0,
+          outputs: [
+            { id: "firstName", label: "First name", type: { kind: "string" } },
+            { id: "age", label: "Age", type: { kind: "number" } },
+          ],
+        },
+        {
+          ...objectTemplate,
+          id: "employee-object",
+          x: 240,
+          y: 0,
+        },
+      ],
+      edges: [],
+    });
+    const withFirstName = connectWorkflowEditorNodes(objectDocument, {
+      sourceNodeId: "employee",
+      sourcePortId: "firstName",
+      targetNodeId: "employee-object",
+      targetPortId: "property",
+    });
+    const nextDocument = updateWorkflowEditorObjectConstructorExpression(
+      withFirstName,
+      "employee-object",
+      "{ givenName: employee.firstName, age: employee.age }",
+    );
+    const nextObjectNode = findWorkflowEditorNode(nextDocument, "employee-object")!;
+
+    expect(getWorkflowEditorObjectConstructorInputs(nextObjectNode)).toEqual([
+      expect.objectContaining({
+        id: "firstname",
+        label: "givenName",
+        badge: "employee.firstName",
+        type: { kind: "string" },
+      }),
+      expect.objectContaining({
+        id: "age",
+        label: "age",
+        badge: "employee.age",
+        type: { kind: "any" },
+      }),
+    ]);
+    expect(nextDocument.edges).toEqual([
+      expect.objectContaining({
+        targetNodeId: "employee-object",
+        targetPortId: "firstname",
+      }),
+    ]);
+
+    const changedSourceDocument = updateWorkflowEditorObjectConstructorExpression(
+      nextDocument,
+      "employee-object",
+      "{ givenName: employee.age }",
+    );
+
+    expect(changedSourceDocument.edges).toEqual([]);
   });
 
   test("decomposes object nodes with expandable named outputs", () => {

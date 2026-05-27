@@ -58,6 +58,7 @@ import {
   toUiWorkflowBuilderNodes,
   updateWorkflowEditorNode,
   updateWorkflowEditorObjectDecompositionPropertiesInNode,
+  updateWorkflowEditorObjectConstructorExpression,
   updateWorkflowEditorObjectConstructorPropertiesInNode,
   updateWorkflowEditorNodeWorkflowReference,
   validateWorkflowEditorConnection,
@@ -66,6 +67,7 @@ import {
   type WorkflowEditorEdge,
   type WorkflowEditorNode,
   type WorkflowEditorNodeTemplate,
+  type WorkflowEditorPortType,
   type WorkflowEditorSelection,
   type WorkflowEditorSelectionState,
   type WorkflowEditorTypeDefinition,
@@ -80,7 +82,7 @@ const emptyWorkflowEditorSelection: WorkflowEditorSelectionState = {
   edgeIds: [],
 };
 const workflowWorkbenchOverlayInteractionSelector =
-  "[data-slot='workflow-palette-overlay'], [data-slot='workflow-inspector-overlay'], [data-slot='workflow-json-primitive-node-control'], [data-slot='select-content']";
+  "[data-slot='workflow-palette-overlay'], [data-slot='workflow-inspector-overlay'], [data-slot='workflow-json-primitive-node-control'], [data-slot='workflow-object-constructor-node-control'], [data-slot='select-content']";
 const workflowWorkbenchOverlaySelectionPreservationMs = 1500;
 
 const workflowEditorPaletteDragType = "application/x-workflow-editor-node-template";
@@ -90,6 +92,8 @@ const workflowEditorMinZoom = 0.5;
 const workflowEditorMaxZoom = 1.75;
 const workflowEditorMinimizedNodeWidth = 176;
 const workflowEditorMinimizedNodeHeight = 36;
+const workflowEditorObjectConstructorMinNodeWidth = 460;
+const workflowEditorObjectConstructorMaxNodeWidth = 640;
 let workflowEditorMemoryClipboard: string | null = null;
 
 export type WorkflowWorkbenchPaletteItem<TData = Record<string, unknown>> =
@@ -587,6 +591,14 @@ export function WorkflowWorkbench<
         } as unknown as TNodeData,
       }),
     );
+  };
+
+  const updateWorkflowObjectConstructorExpressionValue = (nodeId: string, expression: string) => {
+    if (readOnly) {
+      return;
+    }
+
+    commitDocument(updateWorkflowEditorObjectConstructorExpression(document, nodeId, expression));
   };
 
   const selectWorkflowJsonPrimitiveNode = (nodeId: string) => {
@@ -1502,6 +1514,7 @@ export function WorkflowWorkbench<
               surfaceHeight="auto"
               minZoom={workflowEditorMinZoom}
               maxZoom={workflowEditorMaxZoom}
+              measurePorts="dom"
               viewport={document.viewport}
               toolbarLabel="Workflow"
               onNodesChange={(nodes) => {
@@ -1609,6 +1622,14 @@ export function WorkflowWorkbench<
               surfaceLayout={builderSurfaceLayout}
               onFocusNode={selectWorkflowJsonPrimitiveNode}
               onValueChange={updateWorkflowJsonPrimitiveNodeValue}
+            />
+            <WorkflowObjectConstructorNodeControls
+              document={document}
+              primaryNodeId={primarySelectedNodeId}
+              readOnly={readOnly}
+              surfaceLayout={builderSurfaceLayout}
+              onFocusNode={selectWorkflowJsonPrimitiveNode}
+              onValueChange={updateWorkflowObjectConstructorExpressionValue}
             />
             <div
               data-slot="workflow-palette-overlay"
@@ -1959,7 +1980,16 @@ function getWorkflowEditorRenderedNodeSize(
     };
   }
 
-  return getWorkflowNodeSize(node, { showPortColumnHeaders: false });
+  const size = getWorkflowNodeSize(node, { showPortColumnHeaders: false });
+
+  if (node.kind === "json.object") {
+    return {
+      ...size,
+      width: Math.max(size.width, getWorkflowEditorObjectConstructorRenderedWidth(node)),
+    };
+  }
+
+  return size;
 }
 
 function getWorkflowEditorPortCenterOffset(
@@ -1976,6 +2006,45 @@ function getWorkflowEditorPortCenterOffset(
   return getWorkflowNodePortCenterOffset(node, portIndex, {
     showPortColumnHeaders: false,
   });
+}
+
+function getWorkflowEditorObjectConstructorRenderedWidth(
+  node: ReturnType<typeof toUiWorkflowBuilderNodes>[number],
+) {
+  const expression = formatWorkflowEditorObjectConstructorExpression({
+    id: node.id,
+    label: node.label,
+    kind: node.kind,
+    x: node.x,
+    y: node.y,
+    inputs: node.inputs?.map((input) => ({
+      ...input,
+      type: getWorkflowEditorPortTypeFromMetadata(input) ?? { kind: "any" },
+    })),
+    outputs: node.outputs?.map((output) => ({
+      ...output,
+      type: getWorkflowEditorPortTypeFromMetadata(output) ?? { kind: "any" },
+    })),
+    data: node.metadata,
+  });
+  const longestLine = Math.max(...expression.split("\n").map((line) => line.length), 0);
+  const expressionWidth = 260 + Math.max(0, longestLine - 24) * 6;
+
+  return Math.min(
+    workflowEditorObjectConstructorMaxNodeWidth,
+    Math.max(workflowEditorObjectConstructorMinNodeWidth, expressionWidth),
+  );
+}
+
+function getWorkflowEditorPortTypeFromMetadata(
+  port: NonNullable<ReturnType<typeof toUiWorkflowBuilderNodes>[number]["inputs"]>[number],
+): WorkflowEditorPortType | null {
+  const metadataType =
+    typeof port.type === "object" && port.type ? port.type.metadata?.workflowEditorType : undefined;
+
+  return metadataType && typeof metadataType === "object" && "kind" in metadataType
+    ? (metadataType as WorkflowEditorPortType)
+    : null;
 }
 
 function getWorkflowEditorPointFromClient(
@@ -2042,6 +2111,15 @@ function WorkflowWorkbenchNodeLayerStyles<TNodeData extends Record<string, unkno
       if (isWorkflowEditorJsonPrimitiveNode(node)) {
         rules.push(
           `${selector} [data-slot="workflow-node"][data-minimized="true"] [data-slot="workflow-node-select"] > div { visibility: hidden; }`,
+        );
+      }
+
+      if (isWorkflowEditorObjectConstructorNode(node) && node.minimized !== true) {
+        const width = getWorkflowEditorObjectConstructorRenderedWidth(
+          toUiWorkflowBuilderNodes([node])[0]!,
+        );
+        rules.push(
+          `${selector}, ${selector} > [data-slot="workflow-node"] { width: ${width}px !important; }`,
         );
       }
 
@@ -2283,6 +2361,163 @@ function getWorkflowJsonPrimitiveNodeControlOffset<TNodeData>(node: WorkflowEdit
   return {
     x: Math.max(12, size.width - width - 24),
     y: Math.max(12, portCenterY - 12),
+    width,
+  };
+}
+
+function WorkflowObjectConstructorNodeControls<
+  TNodeData extends Record<string, unknown>,
+  TEdgeData extends Record<string, unknown>,
+>({
+  document,
+  onFocusNode,
+  onValueChange,
+  primaryNodeId,
+  readOnly,
+  surfaceLayout,
+}: {
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>;
+  onFocusNode: (nodeId: string) => void;
+  onValueChange: (nodeId: string, value: string) => void;
+  primaryNodeId?: string;
+  readOnly: boolean;
+  surfaceLayout: WorkflowBuilderSurfaceLayout | null;
+}) {
+  if (!surfaceLayout) {
+    return null;
+  }
+
+  const viewport = normalizeWorkflowEditorViewport(document.viewport);
+  const objectNodes = document.nodes.filter(isWorkflowEditorObjectConstructorNode);
+  const nodeIndexes = new Map(document.nodes.map((node, index) => [node.id, index]));
+
+  if (objectNodes.length === 0) {
+    return null;
+  }
+
+  return (
+    <div
+      className="pointer-events-none absolute overflow-hidden"
+      style={{
+        height: surfaceLayout.height,
+        left: surfaceLayout.left,
+        top: surfaceLayout.top,
+        width: surfaceLayout.width,
+      }}
+    >
+      {objectNodes.map((node) => {
+        const offset = getWorkflowObjectConstructorNodeControlOffset(node);
+        const left = viewport.x + (node.x + offset.x) * viewport.zoom - surfaceLayout.scrollLeft;
+        const top = viewport.y + (node.y + offset.y) * viewport.zoom - surfaceLayout.scrollTop;
+        const layer = getWorkflowEditorNodeLayerIndex(
+          nodeIndexes.get(node.id) ?? 0,
+          node.id,
+          primaryNodeId,
+        );
+
+        return (
+          <div
+            key={node.id}
+            className="pointer-events-auto absolute"
+            style={{
+              left,
+              top,
+              transform: `scale(${viewport.zoom})`,
+              transformOrigin: "top left",
+              width: offset.width,
+              zIndex: layer + 1,
+            }}
+          >
+            <WorkflowObjectConstructorExpressionControl
+              node={node}
+              readOnly={readOnly}
+              onFocusNode={onFocusNode}
+              onValueChange={onValueChange}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function WorkflowObjectConstructorExpressionControl<TNodeData extends Record<string, unknown>>({
+  node,
+  onFocusNode,
+  onValueChange,
+  readOnly,
+}: {
+  node: WorkflowEditorNode<TNodeData>;
+  onFocusNode: (nodeId: string) => void;
+  onValueChange: (nodeId: string, value: string) => void;
+  readOnly: boolean;
+}) {
+  const expression = formatWorkflowEditorObjectConstructorExpression(node);
+  const [draft, setDraft] = useState(expression);
+
+  useEffect(() => {
+    setDraft(expression);
+  }, [node.id, expression]);
+
+  const handleInteractionStart = (event: ReactPointerEvent<HTMLDivElement>) => {
+    event.stopPropagation();
+    onFocusNode(node.id);
+  };
+  const stopInteractionPropagation = (event: SyntheticEvent) => {
+    event.stopPropagation();
+  };
+  const commitDraft = () => {
+    if (draft !== expression) {
+      onValueChange(node.id, draft);
+    }
+  };
+
+  return (
+    <div
+      data-slot="workflow-object-constructor-node-control"
+      onPointerDownCapture={handleInteractionStart}
+      onMouseDownCapture={stopInteractionPropagation}
+      onClick={stopInteractionPropagation}
+    >
+      <textarea
+        aria-label={`${node.label} object expression`}
+        className="h-16 w-full resize-none rounded border border-zinc-300 bg-white/95 px-2 py-1.5 font-mono text-[11px] leading-4 text-zinc-950 shadow-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-zinc-950/35 disabled:cursor-not-allowed disabled:opacity-70"
+        disabled={readOnly}
+        spellCheck={false}
+        value={draft}
+        onBlur={commitDraft}
+        onChange={(event) => setDraft(event.currentTarget.value)}
+        onKeyDown={(event) => {
+          if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+            event.preventDefault();
+            commitDraft();
+          }
+        }}
+      />
+    </div>
+  );
+}
+
+function getWorkflowObjectConstructorNodeControlOffset<TNodeData>(
+  node: WorkflowEditorNode<TNodeData>,
+) {
+  const uiNode = toUiWorkflowBuilderNodes([node])[0]!;
+  const size = getWorkflowEditorRenderedNodeSize(uiNode);
+
+  if (uiNode.minimized === true) {
+    return { x: 10, y: 6, width: Math.min(156, Math.max(112, size.width - 20)) };
+  }
+
+  const outputIndex = Math.max(
+    0,
+    (node.outputs ?? []).findIndex((output) => output.id === "value"),
+  );
+  const portCenterY = getWorkflowEditorPortCenterOffset(uiNode, "output", outputIndex);
+  const width = Math.min(220, Math.max(132, size.width - 48));
+
+  return {
+    x: Math.max(12, size.width - width - 24),
+    y: Math.max(12, portCenterY - 32),
     width,
   };
 }
@@ -2602,7 +2837,7 @@ function DefaultWorkflowInspector<
                       ...objectConstructorInputs.map((input) =>
                         createWorkflowEditorRemovableInspectorField({
                           id: `objectProperty:${input.id}`,
-                          label: input.badge ? `${input.badge}` : input.label,
+                          label: input.label,
                           placeholder: "propertyName",
                           readOnly: context.readOnly,
                           removeLabel: `Remove property input ${input.label}`,

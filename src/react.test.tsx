@@ -6,8 +6,11 @@ import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import {
   WorkflowWorkbench,
   connectWorkflowEditorNodes,
+  findWorkflowEditorNode,
+  getWorkflowEditorObjectConstructorInputs,
   normalizeWorkflowEditorDocument,
   toUiWorkflowBuilderNodes,
+  workflowEditorJsonNodeTemplates,
   type WorkflowEditorDocument,
   type WorkflowEditorSelectionState,
   type WorkflowEditorTypeDefinition,
@@ -461,6 +464,106 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
 
     expect(inputNode?.label).toBe("Source");
     expect(inputNode?.kind).toBeUndefined();
+  });
+
+  test("uses object property keys instead of source expressions as inspector labels", () => {
+    const objectTemplate = workflowEditorJsonNodeTemplates.find(
+      (template) => template.id === "json-object",
+    )!;
+    const objectDocument = normalizeWorkflowEditorDocument<Record<string, unknown>>({
+      nodes: [
+        {
+          id: "employee",
+          label: "Employee",
+          x: 0,
+          y: 0,
+          outputs: [{ id: "firstName", label: "First name", type: { kind: "string" } }],
+        },
+        {
+          ...objectTemplate,
+          id: "employee-object",
+          x: 240,
+          y: 0,
+        },
+      ],
+      edges: [],
+    });
+    const connectedDocument = connectWorkflowEditorNodes(objectDocument, {
+      sourceNodeId: "employee",
+      sourcePortId: "firstName",
+      targetNodeId: "employee-object",
+      targetPortId: "property",
+    });
+
+    render(<WorkflowWorkbench document={connectedDocument} selectedNodeId="employee-object" />);
+
+    expect(screen.getByLabelText("firstName")).not.toBeNull();
+    expect(screen.queryByLabelText("employee.firstName")).toBeNull();
+  });
+
+  test("does not show object constructor schema in the default inspector", () => {
+    const handleDocumentChange = vi.fn();
+    const objectTemplate = workflowEditorJsonNodeTemplates.find(
+      (template) => template.id === "json-object",
+    )!;
+    const objectDocument = normalizeWorkflowEditorDocument<Record<string, unknown>>({
+      nodes: [{ ...objectTemplate, id: "profile", x: 0, y: 0 }],
+      edges: [],
+    });
+
+    render(
+      <WorkflowWorkbench
+        document={objectDocument}
+        selectedNodeId="profile"
+        onDocumentChange={handleDocumentChange}
+      />,
+    );
+
+    expect(screen.queryByLabelText("Schema")).toBeNull();
+  });
+
+  test("edits object constructor expressions from rendered workflow nodes", () => {
+    const handleDocumentChange = vi.fn();
+    const objectTemplate = workflowEditorJsonNodeTemplates.find(
+      (template) => template.id === "json-object",
+    )!;
+    const objectDocument = normalizeWorkflowEditorDocument<Record<string, unknown>>({
+      nodes: [{ ...objectTemplate, id: "profile", x: 0, y: 0 }],
+      edges: [],
+    });
+
+    render(
+      <WorkflowWorkbench
+        document={objectDocument}
+        selectedNodeId="profile"
+        onDocumentChange={handleDocumentChange}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Object object expression"), {
+      target: { value: "{ name: profile.name, age: profile.age }" },
+    });
+    fireEvent.blur(screen.getByLabelText("Object object expression"));
+
+    const nextDocument = handleDocumentChange.mock.calls.at(-1)?.[0] as WorkflowEditorDocument;
+    const profileNode = findWorkflowEditorNode(nextDocument, "profile")!;
+
+    expect(
+      getWorkflowEditorObjectConstructorInputs(profileNode).map((input) => [
+        input.label,
+        input.badge,
+      ]),
+    ).toEqual([
+      ["name", "profile.name"],
+      ["age", "profile.age"],
+    ]);
+    expect(profileNode.outputs?.[0]?.type).toEqual({
+      kind: "object",
+      properties: {
+        name: { type: { kind: "any" } },
+        age: { type: { kind: "any" } },
+      },
+    });
   });
 
   test("edits JSON string and number source values and keeps null read-only", () => {
