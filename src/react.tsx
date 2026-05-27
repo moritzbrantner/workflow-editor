@@ -4,6 +4,7 @@ import {
   type DragEvent as ReactDragEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
+  type SyntheticEvent,
   useEffect,
   useMemo,
   useRef,
@@ -77,7 +78,7 @@ const emptyWorkflowEditorSelection: WorkflowEditorSelectionState = {
   edgeIds: [],
 };
 const workflowWorkbenchOverlayInteractionSelector =
-  "[data-slot='workflow-palette-overlay'], [data-slot='workflow-inspector-overlay'], [data-slot='select-content']";
+  "[data-slot='workflow-palette-overlay'], [data-slot='workflow-inspector-overlay'], [data-slot='workflow-json-primitive-node-control'], [data-slot='select-content']";
 const workflowWorkbenchOverlaySelectionPreservationMs = 1500;
 
 const workflowEditorPaletteDragType = "application/x-workflow-editor-node-template";
@@ -271,6 +272,8 @@ export function WorkflowWorkbench<
   const [narrowOverlayLayout, setNarrowOverlayLayout] = useState(false);
   const [marquee, setMarquee] = useState<WorkflowSelectionMarquee | null>(null);
   const [paletteMinimized, setPaletteMinimized] = useState(false);
+  const [builderSurfaceLayout, setBuilderSurfaceLayout] =
+    useState<WorkflowBuilderSurfaceLayout | null>(null);
   const documentContext = useMemo(() => createWorkflowEditorDocumentContext(document), [document]);
   const externalSelectionProvided =
     selectedNodeIds !== undefined ||
@@ -407,6 +410,55 @@ export function WorkflowWorkbench<
     };
   }, []);
 
+  useEffect(() => {
+    const container = containerRef.current;
+    const surface = container?.querySelector<HTMLElement>("[data-slot='workflow-builder-surface']");
+
+    if (!container || !surface) {
+      return;
+    }
+
+    const syncSurfaceLayout = () => {
+      const containerRect = container.getBoundingClientRect();
+      const surfaceRect = surface.getBoundingClientRect();
+      const nextLayout: WorkflowBuilderSurfaceLayout = {
+        height: surfaceRect.height,
+        left: surfaceRect.left - containerRect.left,
+        scrollLeft: surface.scrollLeft,
+        scrollTop: surface.scrollTop,
+        top: surfaceRect.top - containerRect.top,
+        width: surfaceRect.width,
+      };
+
+      setBuilderSurfaceLayout((current) =>
+        current &&
+        current.height === nextLayout.height &&
+        current.left === nextLayout.left &&
+        current.scrollLeft === nextLayout.scrollLeft &&
+        current.scrollTop === nextLayout.scrollTop &&
+        current.top === nextLayout.top &&
+        current.width === nextLayout.width
+          ? current
+          : nextLayout,
+      );
+    };
+
+    syncSurfaceLayout();
+    surface.addEventListener("scroll", syncSurfaceLayout, { passive: true });
+    window.addEventListener("resize", syncSurfaceLayout);
+
+    const resizeObserver =
+      typeof ResizeObserver === "function" ? new ResizeObserver(syncSurfaceLayout) : null;
+    resizeObserver?.observe(container);
+    resizeObserver?.observe(surface);
+
+    return () => {
+      surface.removeEventListener("scroll", syncSurfaceLayout);
+      window.removeEventListener("resize", syncSurfaceLayout);
+      resizeObserver?.disconnect();
+    };
+  }, []);
+
   const emitSelectionState = (
     nextSelection: WorkflowEditorSelectionState,
     selectionDocument: WorkflowEditorDocument<TNodeData, TEdgeData> = document,
@@ -427,6 +479,37 @@ export function WorkflowWorkbench<
     }
 
     commitDocument(updateWorkflowEditorNode(document, selectedNode.id, patch));
+  };
+
+  const updateWorkflowJsonPrimitiveNodeValue = (
+    nodeId: string,
+    value: string | number | boolean | null,
+  ) => {
+    if (readOnly) {
+      return;
+    }
+
+    const node = documentContext.nodeById.get(nodeId);
+    if (!node || !isWorkflowEditorJsonPrimitiveNode(node)) {
+      return;
+    }
+
+    commitDocument(
+      updateWorkflowEditorNode(document, nodeId, {
+        data: {
+          ...(isRecord(node.data) ? node.data : {}),
+          value,
+        } as unknown as TNodeData,
+      }),
+    );
+  };
+
+  const selectWorkflowJsonPrimitiveNode = (nodeId: string) => {
+    emitSelectionState({
+      nodeIds: [nodeId],
+      edgeIds: [],
+      primary: { type: "node", id: nodeId },
+    });
   };
 
   const updateSelectedEdge = (patch: Partial<WorkflowEditorEdge<TEdgeData>>) => {
@@ -1431,6 +1514,13 @@ export function WorkflowWorkbench<
               primaryNodeId={primarySelectedNodeId}
               selection={selection}
             />
+            <WorkflowJsonPrimitiveNodeControls
+              document={document}
+              readOnly={readOnly}
+              surfaceLayout={builderSurfaceLayout}
+              onFocusNode={selectWorkflowJsonPrimitiveNode}
+              onValueChange={updateWorkflowJsonPrimitiveNodeValue}
+            />
             <div
               data-slot="workflow-palette-overlay"
               onClickCapture={preserveOverlaySelection}
@@ -1539,6 +1629,15 @@ type WorkflowCanvasPanState = {
   startClientY: number;
   viewport: WorkflowEditorViewport;
   panning: boolean;
+};
+
+type WorkflowBuilderSurfaceLayout = {
+  height: number;
+  left: number;
+  scrollLeft: number;
+  scrollTop: number;
+  top: number;
+  width: number;
 };
 
 type WorkflowEditorPoint = {
@@ -1805,6 +1904,206 @@ function getWorkflowEditorWheelDelta(event: WheelEvent) {
   };
 }
 
+function WorkflowJsonPrimitiveNodeControls<
+  TNodeData extends Record<string, unknown>,
+  TEdgeData extends Record<string, unknown>,
+>({
+  document,
+  onFocusNode,
+  onValueChange,
+  readOnly,
+  surfaceLayout,
+}: {
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>;
+  onFocusNode: (nodeId: string) => void;
+  onValueChange: (nodeId: string, value: string | number | boolean | null) => void;
+  readOnly: boolean;
+  surfaceLayout: WorkflowBuilderSurfaceLayout | null;
+}) {
+  if (!surfaceLayout) {
+    return null;
+  }
+
+  const viewport = normalizeWorkflowEditorViewport(document.viewport);
+  const primitiveNodes = document.nodes.filter(isWorkflowEditorJsonPrimitiveNode);
+
+  if (primitiveNodes.length === 0) {
+    return null;
+  }
+
+  return (
+    <div
+      className="pointer-events-none absolute z-20 overflow-hidden"
+      style={{
+        height: surfaceLayout.height,
+        left: surfaceLayout.left,
+        top: surfaceLayout.top,
+        width: surfaceLayout.width,
+      }}
+    >
+      {primitiveNodes.map((node) => {
+        const offset = getWorkflowJsonPrimitiveNodeControlOffset(node);
+        const left = viewport.x + (node.x + offset.x) * viewport.zoom - surfaceLayout.scrollLeft;
+        const top = viewport.y + (node.y + offset.y) * viewport.zoom - surfaceLayout.scrollTop;
+
+        return (
+          <div
+            key={node.id}
+            className="pointer-events-auto absolute"
+            style={{
+              left,
+              top,
+              transform: `scale(${viewport.zoom})`,
+              transformOrigin: "top left",
+              width: offset.width,
+            }}
+          >
+            <WorkflowJsonPrimitiveNodeValueControl
+              node={node}
+              readOnly={readOnly}
+              onFocusNode={onFocusNode}
+              onValueChange={onValueChange}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function WorkflowJsonPrimitiveNodeValueControl<TNodeData extends Record<string, unknown>>({
+  node,
+  onFocusNode,
+  onValueChange,
+  readOnly,
+}: {
+  node: WorkflowEditorNode<TNodeData>;
+  onFocusNode: (nodeId: string) => void;
+  onValueChange: (nodeId: string, value: string | number | boolean | null) => void;
+  readOnly: boolean;
+}) {
+  const value = readWorkflowEditorJsonPrimitiveNodeValue(node);
+  const label = `${node.label} JSON value`;
+  const numberValue = typeof value === "number" && Number.isFinite(value) ? value : 0;
+  const [numberDraft, setNumberDraft] = useState(String(numberValue));
+
+  useEffect(() => {
+    setNumberDraft(String(numberValue));
+  }, [node.id, numberValue]);
+
+  const handleInteractionStart = (event: ReactPointerEvent<HTMLDivElement>) => {
+    event.stopPropagation();
+    onFocusNode(node.id);
+  };
+  const stopInteractionPropagation = (event: SyntheticEvent) => {
+    event.stopPropagation();
+  };
+  const controlClassName =
+    "h-6 w-full rounded border border-zinc-300 bg-white/95 px-2 text-[11px] font-medium text-zinc-950 shadow-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-zinc-950/35 disabled:cursor-not-allowed disabled:opacity-70";
+
+  switch (node.kind) {
+    case "json.string":
+      return (
+        <div
+          data-slot="workflow-json-primitive-node-control"
+          onPointerDownCapture={handleInteractionStart}
+          onMouseDownCapture={stopInteractionPropagation}
+          onClick={stopInteractionPropagation}
+        >
+          <input
+            aria-label={label}
+            className={controlClassName}
+            disabled={readOnly}
+            value={typeof value === "string" ? value : ""}
+            onChange={(event) => onValueChange(node.id, event.currentTarget.value)}
+          />
+        </div>
+      );
+    case "json.number":
+      return (
+        <div
+          data-slot="workflow-json-primitive-node-control"
+          onPointerDownCapture={handleInteractionStart}
+          onMouseDownCapture={stopInteractionPropagation}
+          onClick={stopInteractionPropagation}
+        >
+          <input
+            aria-label={label}
+            className={controlClassName}
+            disabled={readOnly}
+            inputMode="decimal"
+            type="number"
+            value={numberDraft}
+            onBlur={() => setNumberDraft(String(numberValue))}
+            onChange={(event) => {
+              const nextValue = event.currentTarget.value;
+              const parsedValue = Number(nextValue);
+              setNumberDraft(nextValue);
+
+              if (nextValue.trim() !== "" && Number.isFinite(parsedValue)) {
+                onValueChange(node.id, parsedValue);
+              }
+            }}
+          />
+        </div>
+      );
+    case "json.boolean": {
+      const booleanValue = value === true;
+      return (
+        <div
+          data-slot="workflow-json-primitive-node-control"
+          role="group"
+          aria-label={label}
+          className="inline-flex h-6 w-full overflow-hidden rounded border border-zinc-300 bg-white/95 text-[11px] font-semibold shadow-sm"
+          onPointerDownCapture={handleInteractionStart}
+          onMouseDownCapture={stopInteractionPropagation}
+          onClick={stopInteractionPropagation}
+        >
+          {[false, true].map((option) => (
+            <button
+              key={String(option)}
+              type="button"
+              aria-label={`Set ${node.label} to ${option ? "true" : "false"}`}
+              aria-pressed={booleanValue === option}
+              className={cn(
+                "min-w-0 flex-1 px-2 uppercase outline-none transition-colors focus-visible:ring-2 focus-visible:ring-zinc-950/35 disabled:cursor-not-allowed",
+                booleanValue === option
+                  ? "bg-zinc-950 text-white"
+                  : "bg-white text-zinc-700 hover:bg-zinc-100",
+              )}
+              disabled={readOnly}
+              onClick={() => onValueChange(node.id, option)}
+            >
+              {option ? "true" : "false"}
+            </button>
+          ))}
+        </div>
+      );
+    }
+    case "json.null":
+      return (
+        <div
+          data-slot="workflow-json-primitive-node-control"
+          onPointerDownCapture={handleInteractionStart}
+          onMouseDownCapture={stopInteractionPropagation}
+          onClick={stopInteractionPropagation}
+        >
+          <input aria-label={label} className={controlClassName} disabled value="null" readOnly />
+        </div>
+      );
+    default:
+      return null;
+  }
+}
+
+function getWorkflowJsonPrimitiveNodeControlOffset<TNodeData>(node: WorkflowEditorNode<TNodeData>) {
+  if (node.variant === "compact") {
+    return { x: 58, y: 13, width: 112 };
+  }
+
+  return { x: 12, y: node.minimized ? 28 : 34, width: 150 };
+}
+
 function WorkflowSelectionOverlay<
   TNodeData extends Record<string, unknown>,
   TEdgeData extends Record<string, unknown>,
@@ -1937,7 +2236,9 @@ function rectsIntersect(
 function isEditableEventTarget(target: EventTarget | null) {
   return (
     target instanceof HTMLElement &&
-    !!target.closest("input, textarea, select, [contenteditable='true'], [role='textbox']")
+    !!target.closest(
+      "input, textarea, select, [contenteditable='true'], [role='textbox'], [data-slot='workflow-json-primitive-node-control']",
+    )
   );
 }
 
@@ -2042,7 +2343,7 @@ function DefaultWorkflowInspector<
               fields: [
                 { id: "label", label: "Label", type: "text" },
                 { id: "description", label: "Description", type: "textarea" },
-                { id: "kind", label: "Kind", type: "text" },
+                { id: "kind", label: "Kind", type: "text", readOnly: true },
                 { id: "category", label: "Category", type: "text" },
                 { id: "x", label: "X", type: "number", step: 10 },
                 { id: "y", label: "Y", type: "number", step: 10 },
@@ -2185,7 +2486,6 @@ function DefaultWorkflowInspector<
             const patch: Partial<WorkflowEditorNode<TNodeData>> = {
               label: String(values.label ?? node.label),
               description: String(values.description ?? "") || undefined,
-              kind: String(values.kind ?? "") || undefined,
               category: String(values.category ?? "") || undefined,
               x: toNumber(values.x, node.x),
               y: toNumber(values.y, node.y),
@@ -2422,6 +2722,38 @@ function createWorkflowEditorRemovableInspectorField({
 function toNumber(value: InspectorFieldValue, fallback: number) {
   const nextValue = typeof value === "number" ? value : Number(value);
   return Number.isFinite(nextValue) ? nextValue : fallback;
+}
+
+function isWorkflowEditorJsonPrimitiveNode<TData>(
+  node: WorkflowEditorNode<TData>,
+): node is WorkflowEditorNode<TData> & {
+  kind: "json.string" | "json.number" | "json.boolean" | "json.null";
+} {
+  return (
+    node.kind === "json.string" ||
+    node.kind === "json.number" ||
+    node.kind === "json.boolean" ||
+    node.kind === "json.null"
+  );
+}
+
+function readWorkflowEditorJsonPrimitiveNodeValue<TData>(
+  node: WorkflowEditorNode<TData>,
+): string | number | boolean | null {
+  const value = isRecord(node.data) ? node.data.value : undefined;
+
+  switch (node.kind) {
+    case "json.string":
+      return typeof value === "string" ? value : "";
+    case "json.number":
+      return typeof value === "number" && Number.isFinite(value) ? value : 0;
+    case "json.boolean":
+      return value === true;
+    case "json.null":
+      return null;
+    default:
+      return null;
+  }
 }
 
 function createWorkflowEditorJsonValueField<TData>(

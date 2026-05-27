@@ -2299,6 +2299,37 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     );
   });
 
+  test("keeps node kind read-only in the default inspector", () => {
+    const handleDocumentChange = vi.fn();
+
+    render(
+      <WorkflowWorkbench
+        document={document}
+        selectedNodeId="input"
+        onDocumentChange={handleDocumentChange}
+      />,
+    );
+
+    const labelField = screen.getAllByLabelText("Label")[0] as HTMLInputElement;
+    const kindField = screen.getAllByLabelText("Kind")[0] as HTMLInputElement;
+
+    expect(kindField.disabled || kindField.readOnly).toBe(true);
+
+    fireEvent.change(labelField, { target: { value: "Source" } });
+    fireEvent.change(kindField, { target: { value: "json.boolean" } });
+    fireEvent.click(
+      screen
+        .getAllByRole("button", { name: "Apply" })
+        .find((button) => !(button as HTMLButtonElement).disabled)!,
+    );
+
+    const nextDocument = handleDocumentChange.mock.calls.at(-1)?.[0] as WorkflowEditorDocument;
+    const inputNode = nextDocument.nodes.find((node) => node.id === "input");
+
+    expect(inputNode?.label).toBe("Source");
+    expect(inputNode?.kind).toBeUndefined();
+  });
+
   test("edits JSON string and number source values and keeps null read-only", () => {
     const stringChange = vi.fn();
     const stringDocument = normalizeWorkflowEditorDocument({
@@ -2392,6 +2423,111 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
 
     expect(nullValue.disabled).toBe(true);
     expect(nullValue.value).toBe("null");
+  });
+
+  test("edits JSON primitive source values from rendered workflow nodes", async () => {
+    const primitiveDocument = normalizeWorkflowEditorDocument({
+      nodes: [
+        {
+          id: "flag",
+          label: "Flag",
+          kind: "json.boolean",
+          category: "JSON",
+          x: 0,
+          y: 0,
+          outputs: [{ id: "value", label: "Value", type: { kind: "boolean" } }],
+          data: { value: false },
+        },
+        {
+          id: "title",
+          label: "Title",
+          kind: "json.string",
+          category: "JSON",
+          x: 360,
+          y: 0,
+          outputs: [{ id: "value", label: "Value", type: { kind: "string" } }],
+          data: { value: "draft" },
+        },
+        {
+          id: "count",
+          label: "Count",
+          kind: "json.number",
+          category: "JSON",
+          x: 720,
+          y: 0,
+          outputs: [{ id: "value", label: "Value", type: { kind: "number" } }],
+          data: { value: 1 },
+        },
+        {
+          id: "nothing",
+          label: "Nothing",
+          kind: "json.null",
+          category: "JSON",
+          x: 1080,
+          y: 0,
+          outputs: [{ id: "value", label: "Value", type: { kind: "null" } }],
+          data: { value: null },
+        },
+      ],
+      edges: [],
+    });
+
+    render(<StatefulWorkbench initialDocument={primitiveDocument} />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Set Flag to true" })).toBeTruthy(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Set Flag to true" }));
+    expect(readStatefulDocument().nodes.find((node) => node.id === "flag")?.data).toEqual({
+      value: true,
+    });
+
+    fireEvent.change(screen.getByLabelText("Title JSON value"), {
+      target: { value: "published" },
+    });
+    expect(readStatefulDocument().nodes.find((node) => node.id === "title")?.data).toEqual({
+      value: "published",
+    });
+
+    fireEvent.change(screen.getByLabelText("Count JSON value"), { target: { value: "42" } });
+    expect(readStatefulDocument().nodes.find((node) => node.id === "count")?.data).toEqual({
+      value: 42,
+    });
+
+    const nullValue = screen.getByLabelText("Nothing JSON value") as HTMLInputElement;
+    expect(nullValue.disabled).toBe(true);
+    expect(nullValue.value).toBe("null");
+  });
+
+  test("indicates JSON primitive source values on workflow nodes", () => {
+    const uiNodes = toUiWorkflowBuilderNodes([
+      {
+        id: "flag",
+        label: "Flag",
+        kind: "json.boolean",
+        category: "JSON",
+        x: 0,
+        y: 0,
+        outputs: [{ id: "value", label: "Value", type: { kind: "boolean" } }],
+        data: { value: true },
+      },
+      {
+        id: "title",
+        label: "Title",
+        kind: "json.string",
+        category: "JSON",
+        x: 0,
+        y: 0,
+        outputs: [{ id: "value", label: "Value", type: { kind: "string" } }],
+        data: { value: "published" },
+      },
+    ]);
+
+    expect(uiNodes[0]?.packageLabel).toBe("true");
+    expect(uiNodes[0]?.outputs?.[0]?.badge).toBe("true");
+    expect(uiNodes[1]?.packageLabel).toBe('"published"');
+    expect(uiNodes[1]?.outputs?.[0]?.badge).toBe('"published"');
   });
 
   test("handles keyboard mutation shortcuts, clipboard shortcuts, and escape", async () => {

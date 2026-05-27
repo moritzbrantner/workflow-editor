@@ -2095,25 +2095,34 @@ export function topologicallySortWorkflowEditorNodes<
 export function toUiWorkflowBuilderNodes<TData = Record<string, unknown>>(
   nodes: Array<WorkflowEditorNode<TData>>,
 ): UiWorkflowBuilderNodeData[] {
-  return nodes.map((node) => ({
-    id: node.id,
-    label: node.label,
-    description: node.description,
-    kind: node.kind,
-    category: node.category,
-    status: node.status,
-    eyebrow: node.eyebrow,
-    packageLabel: node.packageLabel,
-    tone: node.tone,
-    variant: node.variant,
-    minimized: node.minimized,
-    tags: node.tags,
-    x: node.x,
-    y: node.y,
-    inputs: node.inputs?.map(toUiWorkflowEditorPort),
-    outputs: node.outputs?.map(toUiWorkflowEditorPort),
-    metadata: node.data as Record<string, unknown> | undefined,
-  }));
+  return nodes.map((node) => {
+    const jsonPrimitiveValue = formatWorkflowEditorJsonPrimitiveNodeValue(node);
+
+    return {
+      id: node.id,
+      label: node.label,
+      description: node.description,
+      kind: node.kind,
+      category: node.category,
+      status: node.status,
+      eyebrow: node.eyebrow,
+      packageLabel: node.packageLabel ?? jsonPrimitiveValue,
+      tone: node.tone,
+      variant: node.variant,
+      minimized: node.minimized,
+      tags: node.tags,
+      x: node.x,
+      y: node.y,
+      inputs: node.inputs?.map(toUiWorkflowEditorPort),
+      outputs: node.outputs?.map((port) =>
+        toUiWorkflowEditorPort({
+          ...port,
+          badge: port.badge ?? (port.id === "value" ? jsonPrimitiveValue : undefined),
+        }),
+      ),
+      metadata: node.data as Record<string, unknown> | undefined,
+    };
+  });
 }
 
 function toUiWorkflowBuilderStructuralNodes<TData = Record<string, unknown>>(
@@ -2315,6 +2324,25 @@ function getWorkflowEditorPortTypeColor(type: WorkflowEditorPortType): string {
       return "#a1a1aa";
     default:
       return workflowEditorPortTypeFallbackColor(getWorkflowEditorPortTypeSignature(type));
+  }
+}
+
+function formatWorkflowEditorJsonPrimitiveNodeValue<TData>(
+  node: WorkflowEditorNode<TData>,
+): string | undefined {
+  const value = isRecord(node.data) ? node.data.value : undefined;
+
+  switch (node.kind) {
+    case "json.string":
+      return JSON.stringify(typeof value === "string" ? value : "");
+    case "json.number":
+      return String(typeof value === "number" && Number.isFinite(value) ? value : 0);
+    case "json.boolean":
+      return value === true ? "true" : "false";
+    case "json.null":
+      return "null";
+    default:
+      return undefined;
   }
 }
 
