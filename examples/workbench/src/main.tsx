@@ -669,12 +669,12 @@ function App() {
   };
 
   return (
-    <main className="example-shell">
+    <main className="grid h-screen min-h-0 min-w-80 overflow-hidden bg-[#f6f7f8] bg-[linear-gradient(180deg,rgba(217,226,236,0.55),rgba(246,247,248,0)_24rem)] p-[0.45rem] font-sans text-[#17202a]">
       <WorkflowEditor
         key={resetToken}
         storageKey={storageKey}
         initialLibrary={initialLibrary}
-        className="example-editor"
+        className="grid h-full min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] gap-[0.35rem] [&_[data-slot='workbench-layout']]:min-h-0 [&_[data-slot='workbench-layout']>div]:min-h-0"
         nodeTemplates={nodeTemplates}
         typeDefinitions={typeDefinitions}
         compactControls
@@ -682,17 +682,29 @@ function App() {
         showDocumentStats={false}
         showWorkbenchStats={false}
         renderCompactMenuActions={() => (
-          <button type="button" className="example-menu-button" onClick={resetExamples}>
+          <button
+            type="button"
+            className="min-h-8 w-full cursor-pointer rounded-[0.4rem] border border-[#aeb9c6] bg-[#1f2937] px-[0.62rem] py-[0.36rem] text-[0.82rem] font-[650] text-white hover:bg-[#111827]"
+            onClick={resetExamples}
+          >
             Reset examples
           </button>
         )}
         renderNodeTemplate={(template) => (
-          <span className="template-row">
-            <span>
-              <strong>{template.label}</strong>
-              <small>{template.category ?? template.kind ?? "Node"}</small>
+          <span className="grid w-full min-w-0 gap-[0.3rem]">
+            <span className="flex min-w-0 items-center justify-between gap-3">
+              <strong className="[overflow-wrap:anywhere] text-[0.9rem] font-[680] text-[#17202a]">
+                {template.label}
+              </strong>
+              <small className="flex-none text-[0.74rem] text-[#697586]">
+                {template.category ?? template.kind ?? "Node"}
+              </small>
             </span>
-            {template.description ? <em>{template.description}</em> : null}
+            {template.description ? (
+              <em className="block [overflow-wrap:anywhere] text-[0.78rem] leading-[1.3] text-[#52606d] not-italic">
+                {template.description}
+              </em>
+            ) : null}
           </span>
         )}
       />

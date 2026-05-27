@@ -120,8 +120,20 @@ test.describe("WorkflowWorkbench desktop", () => {
   test("minimizes the node palette and adds template nodes by dragging", async ({ page }) => {
     await page.goto("/");
 
+    const palette = page.locator('[data-slot="workflow-palette-overlay"]').first();
+    await expect(palette).toContainText("Logic");
+    await expect(palette).toContainText("Branches");
+    const expandedPaletteBox = await palette.boundingBox();
+    expect(expandedPaletteBox?.width).toBeGreaterThan(300);
+
     await page.getByRole("button", { name: "Minimize node palette", exact: true }).click();
     await expect(page.getByRole("button", { name: /Decision/ })).toHaveCount(0);
+    const canvasBox = await page.locator('[data-slot="workbench-canvas"]').first().boundingBox();
+    const minimizedPaletteBox = await palette.boundingBox();
+    expect(minimizedPaletteBox).not.toBeNull();
+    expect(canvasBox).not.toBeNull();
+    expect(minimizedPaletteBox!.x - canvasBox!.x).toBeLessThan(32);
+    expect(minimizedPaletteBox!.y - canvasBox!.y).toBeLessThan(32);
     await page.getByRole("button", { name: "Expand node palette", exact: true }).click();
     await expect(page.getByRole("button", { name: /Decision/ }).first()).toBeVisible();
 

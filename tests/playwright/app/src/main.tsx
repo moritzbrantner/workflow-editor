@@ -71,6 +71,7 @@ const nodeTemplates = [
     label: "Decision",
     description: "Route a workflow by condition.",
     category: "Logic",
+    categoryPath: ["Logic", "Branches"],
     inputs: [{ id: "in", label: "In", type: { kind: "string" } }],
     outputs: [
       { id: "yes", label: "Yes", type: { kind: "string" } },
@@ -82,6 +83,7 @@ const nodeTemplates = [
     label: "Webhook",
     description: "Send workflow data to an HTTP endpoint.",
     category: "Integration",
+    categoryPath: ["Integration", "Outbound"],
     inputs: [{ id: "in", label: "In", type: { kind: "string" } }],
   },
 ];

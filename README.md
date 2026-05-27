@@ -93,6 +93,8 @@ export function App() {
   `@moritzbrantner/workflow-editor/share`, and
   `@moritzbrantner/workflow-editor/editor`.
 - The package owns workflow document state and graph validation; `@moritzbrantner/ui` supplies the generic graph surface and inspector controls.
+- Node templates can set `category` or `categoryPath` to group the node palette into flat
+  categories or nested category trees.
 - `normalizeWorkflowEditorDocument(...)` validates strictly by default and throws
   `WorkflowEditorDocumentValidationError` when nodes, edges, ids, endpoints, or graph
   cycles are invalid. Use `validateWorkflowEditorDocument(...)` to inspect diagnostics

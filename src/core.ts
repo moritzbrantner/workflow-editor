@@ -120,6 +120,7 @@ export type WorkflowEditorNode<TData = Record<string, unknown>> = Omit<
   UiWorkflowNodeData,
   "inputs" | "metadata" | "outputs"
 > & {
+  categoryPath?: readonly string[];
   x: number;
   y: number;
   inputs?: WorkflowEditorPort[];
@@ -486,6 +487,7 @@ export type WorkflowEditorComposeNodesOptions<TNodeData = Record<string, unknown
   description?: string;
   kind?: string;
   category?: string;
+  categoryPath?: readonly string[];
   eyebrow?: string;
   packageLabel?: string;
   status?: "idle" | "running" | "success" | "error" | "warning" | string;
@@ -1220,6 +1222,7 @@ export function createWorkflowEditorComposedNode<
       options.description ?? `${parts.nodes.length} workflow nodes composed behind boundary ports.`,
     kind: options.kind ?? "composed",
     category: options.category ?? commonWorkflowEditorNodeCategory(parts.nodes),
+    categoryPath: options.categoryPath ?? commonWorkflowEditorNodeCategoryPath(parts.nodes),
     eyebrow: options.eyebrow,
     packageLabel: options.packageLabel,
     status: options.status,
@@ -1825,6 +1828,7 @@ export function fromUiWorkflowBuilderNodes<TData = Record<string, unknown>>(
       description: node.description,
       kind: node.kind,
       category: node.category,
+      categoryPath: previousNode?.categoryPath ? [...previousNode.categoryPath] : undefined,
       status: node.status,
       eyebrow: node.eyebrow,
       packageLabel: node.packageLabel,
@@ -2871,6 +2875,23 @@ function normalizePorts(ports: WorkflowEditorPort[] | undefined) {
   return ports?.map((port) => ({ ...port })) ?? [];
 }
 
+function normalizeWorkflowEditorCategoryPath(categoryPath: unknown) {
+  if (!Array.isArray(categoryPath)) {
+    return undefined;
+  }
+
+  const normalized = categoryPath.flatMap((part) => {
+    if (typeof part !== "string") {
+      return [];
+    }
+
+    const segment = part.trim();
+    return segment ? [segment] : [];
+  });
+
+  return normalized.length > 0 ? normalized : undefined;
+}
+
 function normalizeWorkflowEditorNode<TNodeData = Record<string, unknown>>(
   node: WorkflowEditorNode<TNodeData>,
 ): WorkflowEditorNode<TNodeData> {
@@ -2880,6 +2901,7 @@ function normalizeWorkflowEditorNode<TNodeData = Record<string, unknown>>(
     ...node,
     id,
     label: typeof node.label === "string" ? node.label : id,
+    categoryPath: normalizeWorkflowEditorCategoryPath(node.categoryPath),
     x: Number.isFinite(node.x) ? node.x : 0,
     y: Number.isFinite(node.y) ? node.y : 0,
     inputs: normalizePorts(node.inputs),
@@ -3109,6 +3131,10 @@ function safeWorkflowEditorId(value: string) {
   );
 }
 
+function areStringArraysEqual(left: readonly string[], right: readonly string[]) {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
 function defaultWorkflowEditorComposedNodeLabel<TData = Record<string, unknown>>(
   nodes: Array<WorkflowEditorNode<TData>>,
 ) {
@@ -3126,6 +3152,24 @@ function commonWorkflowEditorNodeCategory<TData = Record<string, unknown>>(
   const uniqueCategories = new Set(categories);
 
   return uniqueCategories.size === 1 ? categories[0] : undefined;
+}
+
+function commonWorkflowEditorNodeCategoryPath<TData = Record<string, unknown>>(
+  nodes: Array<WorkflowEditorNode<TData>>,
+) {
+  const categoryPaths = nodes.flatMap((node) => {
+    const normalized = normalizeWorkflowEditorCategoryPath(node.categoryPath);
+    return normalized ? [normalized] : [];
+  });
+  const firstPath = categoryPaths[0];
+
+  if (!firstPath) {
+    return undefined;
+  }
+
+  return categoryPaths.every((path) => areStringArraysEqual(path, firstPath))
+    ? firstPath
+    : undefined;
 }
 
 function commonWorkflowEditorNodeTags<TData = Record<string, unknown>>(

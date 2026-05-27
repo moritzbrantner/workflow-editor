@@ -78,11 +78,17 @@ const workflowEditorPaletteDragType = "application/x-workflow-editor-node-templa
 const workflowEditorSnapDistance = 28;
 const workflowEditorMinZoom = 0.5;
 const workflowEditorMaxZoom = 1.75;
-
 let workflowEditorMemoryClipboard: string | null = null;
 
 export type WorkflowWorkbenchPaletteItem<TData = Record<string, unknown>> =
   WorkflowEditorNodeTemplate<TData>;
+
+type WorkflowWorkbenchPaletteCategoryGroup<TData = Record<string, unknown>> = {
+  id: string;
+  label: string;
+  templates: Array<WorkflowWorkbenchPaletteItem<TData>>;
+  children: Array<WorkflowWorkbenchPaletteCategoryGroup<TData>>;
+};
 
 export type WorkflowWorkbenchSelection<
   TNodeData extends Record<string, unknown> = Record<string, unknown>,
@@ -150,6 +156,66 @@ export const defaultWorkflowWorkbenchHotkeys = {
   nudgeRight: "ArrowRight",
   nudgeUp: "ArrowUp",
 };
+
+function createWorkflowWorkbenchPaletteCategoryGroups<TData>(
+  templates: ReadonlyArray<WorkflowWorkbenchPaletteItem<TData>>,
+) {
+  const groups: Array<WorkflowWorkbenchPaletteCategoryGroup<TData>> = [];
+
+  for (const template of templates) {
+    const categoryPath = getWorkflowWorkbenchPaletteCategoryPath(template);
+    let level = groups;
+
+    categoryPath.forEach((label, index) => {
+      const id = categoryPath.slice(0, index + 1).join("\u001f");
+      let group = level.find((candidate) => candidate.id === id);
+
+      if (!group) {
+        group = { id, label, templates: [], children: [] };
+        level.push(group);
+      }
+
+      if (index === categoryPath.length - 1) {
+        group.templates.push(template);
+      } else {
+        level = group.children;
+      }
+    });
+  }
+
+  return groups;
+}
+
+function getWorkflowWorkbenchPaletteCategoryPath<TData>(
+  template: WorkflowWorkbenchPaletteItem<TData>,
+) {
+  const categoryPath = Array.isArray(template.categoryPath)
+    ? template.categoryPath.flatMap((part) => {
+        if (typeof part !== "string") {
+          return [];
+        }
+
+        const segment = part.trim();
+        return segment ? [segment] : [];
+      })
+    : undefined;
+
+  if (categoryPath && categoryPath.length > 0) {
+    return categoryPath;
+  }
+
+  const category = template.category?.trim();
+  if (!category) {
+    return ["Uncategorized"];
+  }
+
+  const categorySegments = category
+    .split(/[/>]/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  return categorySegments.length > 0 ? categorySegments : [category];
+}
 
 export function WorkflowWorkbench<
   TNodeData extends Record<string, unknown> = Record<string, unknown>,
@@ -273,6 +339,10 @@ export function WorkflowWorkbench<
   const uiEdges = useMemo(
     () => toUiWorkflowBuilderEdges(document.edges, document.nodes),
     [document.edges, document.nodes],
+  );
+  const paletteGroups = useMemo(
+    () => createWorkflowWorkbenchPaletteCategoryGroups(nodeTemplates),
+    [nodeTemplates],
   );
 
   const commitDocument = (nextDocument: WorkflowEditorDocument<TNodeData, TEdgeData>) => {
@@ -429,6 +499,7 @@ export function WorkflowWorkbench<
       description: template.description,
       kind: template.kind,
       category: template.category,
+      categoryPath: template.categoryPath ? [...template.categoryPath] : undefined,
       eyebrow: template.eyebrow,
       packageLabel: template.packageLabel,
       status: template.status,
@@ -890,6 +961,72 @@ export function WorkflowWorkbench<
       Date.now() + workflowWorkbenchOverlaySelectionPreservationMs;
   };
 
+  const renderPaletteTemplate = (template: WorkflowWorkbenchPaletteItem<TTemplateData>) =>
+    renderNodeTemplate ? (
+      <Button
+        key={template.id}
+        type="button"
+        variant="ghost"
+        className="h-auto w-full min-w-0 justify-start border border-border bg-background px-3 py-2 text-left"
+        disabled={readOnly}
+        draggable={!readOnly}
+        onDragStart={(event) => startTemplateDrag(event, template)}
+        onClick={() => addTemplateNode(template)}
+      >
+        {renderNodeTemplate(template)}
+      </Button>
+    ) : (
+      <WorkflowNode
+        key={template.id}
+        node={toUiWorkflowNodeTemplate(template)}
+        readOnly={readOnly}
+        inputDisabled
+        outputDisabled
+        className={cn(
+          "cursor-pointer transition-colors hover:border-primary/60",
+          readOnly && "cursor-not-allowed opacity-60",
+        )}
+        draggable={!readOnly}
+        onDragStart={(event) => startTemplateDrag(event, template)}
+        onNodeSelect={readOnly ? undefined : () => addTemplateNode(template)}
+      />
+    );
+
+  const renderPaletteCategoryGroup = (
+    group: WorkflowWorkbenchPaletteCategoryGroup<TTemplateData>,
+    depth = 0,
+  ): ReactNode => (
+    <section key={group.id} aria-label={group.label} className="grid gap-2">
+      <div
+        className={cn(
+          "flex items-center justify-between gap-3 text-[0.68rem] font-semibold uppercase text-muted-foreground",
+          depth > 0 && "pl-1",
+        )}
+      >
+        <span className="min-w-0 truncate">{group.label}</span>
+        {group.templates.length > 0 ? (
+          <Badge variant="secondary" className="flex-none">
+            {group.templates.length}
+          </Badge>
+        ) : null}
+      </div>
+      {group.templates.length > 0 ? (
+        <div className="grid gap-2">{group.templates.map(renderPaletteTemplate)}</div>
+      ) : null}
+      {group.children.length > 0 ? (
+        <div className={cn("grid gap-3", depth > 0 ? "pl-3" : "border-l border-border/60 pl-3")}>
+          {group.children.map((child) => renderPaletteCategoryGroup(child, depth + 1))}
+        </div>
+      ) : null}
+    </section>
+  );
+
+  const paletteOverlayPosition = paletteMinimized
+    ? { top: "0.75rem" }
+    : narrowOverlayLayout
+      ? { top: "12rem" }
+      : { top: "0.75rem" };
+
   return (
     <div
       data-slot="workbench-layout"
@@ -900,9 +1037,9 @@ export function WorkflowWorkbench<
     >
       <div
         data-slot="workbench-toolbar"
-        className="flex min-h-10 min-w-0 flex-nowrap items-center gap-2 overflow-x-auto border-b border-border bg-card/75 px-2 py-1"
+        className="flex min-h-0 min-w-0 flex-nowrap items-center gap-1 overflow-x-auto border-b border-border bg-card/75 px-2 py-0"
       >
-        <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
+        <div className="flex min-w-0 flex-1 items-center justify-between gap-1">
           <div className="flex min-w-max items-center gap-1.5 whitespace-nowrap">
             {showGraphStats ? (
               <>
@@ -933,6 +1070,7 @@ export function WorkflowWorkbench<
               type="button"
               size="sm"
               variant="outline"
+              className="!h-6 !min-h-6 !px-2 !text-xs"
               disabled={
                 readOnly || (selection.nodeIds.length === 0 && selection.edgeIds.length === 0)
               }
@@ -944,6 +1082,7 @@ export function WorkflowWorkbench<
               type="button"
               size="sm"
               variant="outline"
+              className="!h-6 !min-h-6 !px-2 !text-xs"
               disabled={selection.nodeIds.length === 0 && selection.edgeIds.length === 0}
               onClick={copySelection}
             >
@@ -953,6 +1092,7 @@ export function WorkflowWorkbench<
               type="button"
               size="sm"
               variant="outline"
+              className="!h-6 !min-h-6 !px-2 !text-xs"
               disabled={readOnly}
               onClick={() => void pasteSelection()}
             >
@@ -962,6 +1102,7 @@ export function WorkflowWorkbench<
               type="button"
               size="sm"
               variant="outline"
+              className="!h-6 !min-h-6 !px-2 !text-xs"
               disabled={readOnly || selection.nodeIds.length === 0}
               onClick={arrangeSelection}
             >
@@ -971,6 +1112,7 @@ export function WorkflowWorkbench<
               type="button"
               size="sm"
               variant="outline"
+              className="!h-6 !min-h-6 !px-2 !text-xs"
               disabled={readOnly || document.nodes.length === 0}
               onClick={arrangeAll}
             >
@@ -982,6 +1124,7 @@ export function WorkflowWorkbench<
                   type="button"
                   size="sm"
                   variant="outline"
+                  className="!h-6 !min-h-6 !px-2 !text-xs"
                   disabled={!selectedNodeWorkflowReferenceValid || !onOpenWorkflowReference}
                   onClick={openSelectedNodeWorkflow}
                 >
@@ -992,6 +1135,7 @@ export function WorkflowWorkbench<
                   type="button"
                   size="sm"
                   variant="outline"
+                  className="!h-6 !min-h-6 !px-2 !text-xs"
                   disabled={readOnly || !selectedNode || !onCreateWorkflowReference}
                   onClick={createSelectedNodeWorkflow}
                 >
@@ -1003,6 +1147,7 @@ export function WorkflowWorkbench<
               type="button"
               size="sm"
               variant="outline"
+              className="!h-6 !min-h-6 !px-2 !text-xs"
               disabled={
                 readOnly || (selection.nodeIds.length === 0 && selection.edgeIds.length === 0)
               }
@@ -1156,13 +1301,13 @@ export function WorkflowWorkbench<
               onMouseDownCapture={preserveOverlaySelection}
               onPointerDownCapture={preserveOverlaySelection}
               className={cn(
-                "absolute left-3 z-30 max-h-[calc(100%-5rem)] overflow-auto rounded-md border border-border/70 bg-card/95 text-sm shadow-md supports-backdrop-filter:backdrop-blur-xl",
-                paletteMinimized ? "w-16 p-2" : "w-64 p-3",
+                "absolute left-3 z-30 flex max-h-[calc(100%-5rem)] max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-md border border-border/70 bg-card/95 text-sm shadow-md supports-backdrop-filter:backdrop-blur-xl",
+                paletteMinimized ? "w-16 p-2" : "w-96 p-3",
               )}
-              style={narrowOverlayLayout ? { top: "12rem" } : { bottom: "0.75rem" }}
+              style={paletteOverlayPosition}
             >
-              <div className="grid gap-3">
-                <div className="flex items-center justify-between gap-3">
+              <div className="flex min-h-0 flex-col gap-3">
+                <div className="flex flex-none items-center justify-between gap-3">
                   {paletteMinimized ? null : (
                     <div className="text-sm font-medium">Node palette</div>
                   )}
@@ -1188,42 +1333,12 @@ export function WorkflowWorkbench<
                   <Badge variant="secondary" className="justify-center">
                     {nodeTemplates.length}
                   </Badge>
-                ) : renderNodeTemplate ? (
-                  <div className="grid gap-2">
-                    {nodeTemplates.map((template) => (
-                      <Button
-                        key={template.id}
-                        type="button"
-                        variant="ghost"
-                        className="h-auto justify-start border border-border bg-background px-3 py-2 text-left"
-                        disabled={readOnly}
-                        draggable={!readOnly}
-                        onDragStart={(event) => startTemplateDrag(event, template)}
-                        onClick={() => addTemplateNode(template)}
-                      >
-                        {renderNodeTemplate(template)}
-                      </Button>
-                    ))}
-                  </div>
                 ) : (
-                  <div className="grid gap-2">
+                  <div className="min-h-0 overflow-y-auto pr-1">
                     {nodeTemplates.length > 0 ? (
-                      nodeTemplates.map((template) => (
-                        <WorkflowNode
-                          key={template.id}
-                          node={toUiWorkflowNodeTemplate(template)}
-                          readOnly={readOnly}
-                          inputDisabled
-                          outputDisabled
-                          className={cn(
-                            "cursor-pointer transition-colors hover:border-primary/60",
-                            readOnly && "cursor-not-allowed opacity-60",
-                          )}
-                          draggable={!readOnly}
-                          onDragStart={(event) => startTemplateDrag(event, template)}
-                          onNodeSelect={readOnly ? undefined : () => addTemplateNode(template)}
-                        />
-                      ))
+                      <div className="grid gap-3">
+                        {paletteGroups.map((group) => renderPaletteCategoryGroup(group))}
+                      </div>
                     ) : (
                       <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
                         No node templates
