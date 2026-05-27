@@ -34,88 +34,68 @@ textarea {
 
 .example-shell {
   display: grid;
-  gap: 1rem;
   min-height: 100vh;
-  padding: clamp(1rem, 2vw, 1.75rem);
-}
-
-.example-header {
-  display: flex;
-  align-items: end;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.example-header h1 {
-  margin: 0;
-  color: #111827;
-  font-size: clamp(1.65rem, 2.5vw, 2.45rem);
-  font-weight: 720;
-  letter-spacing: 0;
-  line-height: 1.05;
-}
-
-.example-kicker {
-  margin: 0 0 0.3rem;
-  color: #52606d;
-  font-size: 0.78rem;
-  font-weight: 650;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.example-stats,
-.example-active {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.example-stats span,
-.example-active span {
-  min-height: 2rem;
-  border: 1px solid #d5dae1;
-  border-radius: 0.5rem;
-  background: rgba(255, 255, 255, 0.82);
-  padding: 0.42rem 0.72rem;
-  color: #344054;
-  font-size: 0.85rem;
-  font-weight: 580;
-  white-space: nowrap;
-}
-
-.example-stats button {
-  min-height: 2rem;
-  border: 1px solid #aeb9c6;
-  border-radius: 0.5rem;
-  background: #1f2937;
-  padding: 0.42rem 0.78rem;
-  color: #ffffff;
-  cursor: pointer;
-  font-size: 0.85rem;
-  font-weight: 650;
-}
-
-.example-stats button:hover {
-  background: #111827;
-}
-
-.example-active {
-  margin-top: -0.25rem;
-}
-
-.example-active span:first-child {
-  border-color: #8fb4ff;
-  color: #1f4f99;
+  padding: 0.45rem;
 }
 
 .example-editor {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   min-width: 0;
+  min-height: calc(100vh - 0.9rem);
+  gap: 0.35rem;
 }
 
 .example-editor [data-testid="workflow-editor"] {
   min-width: 0;
+}
+
+.example-editor [data-slot="workbench-layout"] {
+  min-height: 0;
+}
+
+.example-editor [data-slot="workbench-layout"] > div {
+  min-height: 0;
+}
+
+.example-editor [data-slot="workbench-toolbar"] {
+  min-height: 2rem;
+  gap: 0.4rem;
+  padding: 0.25rem 0.45rem;
+}
+
+.example-editor [data-slot="workbench-toolbar"] > div {
+  gap: 0.35rem;
+}
+
+.example-editor [data-slot="workbench-toolbar"] button,
+.example-editor [data-slot="workbench-toolbar"] input,
+.example-editor [data-slot="workbench-toolbar"] select {
+  min-height: 1.85rem;
+  height: 1.85rem;
+  padding-inline: 0.48rem;
+  font-size: 0.78rem;
+}
+
+.example-editor [data-slot="workbench-toolbar"] input {
+  min-width: 10rem;
+}
+
+.example-menu-button {
+  min-height: 2rem;
+  width: 100%;
+  border: 1px solid #aeb9c6;
+  border-radius: 0.4rem;
+  background: #1f2937;
+  padding: 0.36rem 0.62rem;
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+
+.example-menu-button:hover {
+  background: #111827;
 }
 
 .template-row {
@@ -153,22 +133,4 @@ textarea {
   font-size: 0.78rem;
   font-style: normal;
   line-height: 1.3;
-}
-
-@media (max-width: 840px) {
-  .example-header {
-    align-items: start;
-    flex-direction: column;
-  }
-
-  .example-stats,
-  .example-active {
-    width: 100%;
-  }
-
-  .example-stats span,
-  .example-active span,
-  .example-stats button {
-    white-space: normal;
-  }
 }

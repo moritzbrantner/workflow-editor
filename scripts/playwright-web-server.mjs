@@ -6,7 +6,7 @@ delete env.FORCE_COLOR;
 const command = process.platform === "win32" ? "bunx.cmd" : "bunx";
 const child = spawn(
   command,
-  ["vite", "--host", "127.0.0.1", "--port", "4174", "tests/playwright/app"],
+  ["vite", "--host", "127.0.0.1", "--port", "4174", "--strictPort", "tests/playwright/app"],
   {
     env,
     stdio: "inherit",

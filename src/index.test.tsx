@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 
@@ -82,6 +83,7 @@ import {
   workflowEditorJsonNodeTemplates,
   type WorkflowEditorDocument,
   type WorkflowEditorPortType,
+  type WorkflowEditorSelectionState,
 } from "@moritzbrantner/workflow-editor";
 
 const document: WorkflowEditorDocument = normalizeWorkflowEditorDocument({
@@ -119,6 +121,49 @@ const document: WorkflowEditorDocument = normalizeWorkflowEditorDocument({
     },
   ],
 });
+
+function StatefulWorkbench({
+  initialDocument = document,
+  initialSelection = { nodeIds: [], edgeIds: [] },
+  readOnly = false,
+  documentReferences,
+}: {
+  initialDocument?: WorkflowEditorDocument;
+  initialSelection?: WorkflowEditorSelectionState;
+  readOnly?: boolean;
+  documentReferences?: Array<{ id: string; name: string }>;
+}) {
+  const [currentDocument, setCurrentDocument] = useState(initialDocument);
+  const [selection, setSelection] = useState(initialSelection);
+
+  return (
+    <>
+      <WorkflowWorkbench
+        document={currentDocument}
+        selectedNodeIds={selection.nodeIds}
+        selectedEdgeIds={selection.edgeIds}
+        readOnly={readOnly}
+        documentReferences={documentReferences}
+        onDocumentChange={setCurrentDocument}
+        onSelectionStateChange={setSelection}
+      />
+      <pre data-testid="stateful-document-json">{JSON.stringify(currentDocument)}</pre>
+      <pre data-testid="stateful-selection-json">{JSON.stringify(selection)}</pre>
+    </>
+  );
+}
+
+function readStatefulDocument() {
+  return JSON.parse(screen.getByTestId("stateful-document-json").textContent ?? "") as
+    | WorkflowEditorDocument
+    | never;
+}
+
+function readStatefulSelection() {
+  return JSON.parse(screen.getByTestId("stateful-selection-json").textContent ?? "") as
+    | WorkflowEditorSelectionState
+    | never;
+}
 
 beforeAll(() => {
   vi.stubGlobal(
@@ -1782,6 +1827,275 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
         ],
       }),
     );
+  });
+
+  test("handles keyboard mutation shortcuts, clipboard shortcuts, and escape", async () => {
+    render(
+      <StatefulWorkbench
+        initialSelection={{
+          nodeIds: ["input", "transform"],
+          edgeIds: [],
+          primary: { type: "node", id: "transform" },
+        }}
+      />,
+    );
+
+    fireEvent.keyDown(window, { key: "d", metaKey: true });
+    expect(readStatefulDocument().nodes.map((node) => node.id)).toEqual(
+      expect.arrayContaining(["input-copy", "transform-copy"]),
+    );
+    expect(readStatefulDocument().edges).toHaveLength(2);
+
+    fireEvent.keyDown(window, { key: "c", metaKey: true });
+    fireEvent.keyDown(window, { key: "v", metaKey: true });
+    await waitFor(() => expect(readStatefulDocument().nodes).toHaveLength(7));
+    expect(readStatefulDocument().edges).toHaveLength(3);
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(readStatefulSelection()).toEqual({ nodeIds: [], edgeIds: [] });
+  });
+
+  test("deletes selected nodes and edges from keyboard shortcuts", () => {
+    const { unmount } = render(
+      <StatefulWorkbench
+        initialSelection={{
+          nodeIds: ["input"],
+          edgeIds: [],
+          primary: { type: "node", id: "input" },
+        }}
+      />,
+    );
+
+    fireEvent.keyDown(window, { key: "Backspace" });
+    expect(readStatefulDocument().nodes.map((node) => node.id)).toEqual(["transform", "output"]);
+    expect(readStatefulDocument().edges).toHaveLength(0);
+
+    unmount();
+    render(
+      <StatefulWorkbench
+        initialSelection={{
+          nodeIds: [],
+          edgeIds: ["input-transform"],
+          primary: { type: "edge", id: "input-transform" },
+        }}
+      />,
+    );
+
+    fireEvent.keyDown(window, { key: "Delete" });
+    expect(readStatefulDocument().nodes).toHaveLength(3);
+    expect(readStatefulDocument().edges).toHaveLength(0);
+  });
+
+  test("ignores global shortcuts from editable inspector fields", () => {
+    render(
+      <StatefulWorkbench
+        initialSelection={{
+          nodeIds: ["input"],
+          edgeIds: [],
+          primary: { type: "node", id: "input" },
+        }}
+      />,
+    );
+
+    const labelInput = screen.getAllByLabelText("Label")[0]!;
+    fireEvent.keyDown(labelInput, { key: "Backspace" });
+    fireEvent.keyDown(labelInput, { key: "d", metaKey: true });
+
+    expect(readStatefulDocument().nodes).toHaveLength(3);
+    expect(readStatefulDocument().edges).toHaveLength(1);
+  });
+
+  test("blocks keyboard graph mutations in read-only mode", () => {
+    const handleDocumentChange = vi.fn();
+    render(
+      <WorkflowWorkbench
+        document={document}
+        selectedNodeIds={["input"]}
+        readOnly
+        onDocumentChange={handleDocumentChange}
+      />,
+    );
+
+    fireEvent.keyDown(window, { key: "Delete" });
+    fireEvent.keyDown(window, { key: "Backspace" });
+    fireEvent.keyDown(window, { key: "d", metaKey: true });
+    fireEvent.keyDown(window, { key: "v", metaKey: true });
+
+    expect(handleDocumentChange).not.toHaveBeenCalled();
+  });
+
+  test("edits edge status from the default inspector", () => {
+    const handleDocumentChange = vi.fn();
+    render(
+      <WorkflowWorkbench
+        document={document}
+        selectedEdgeId="input-transform"
+        onDocumentChange={handleDocumentChange}
+      />,
+    );
+
+    expect(screen.getAllByText("Workflow edge")).not.toHaveLength(0);
+    fireEvent.change(screen.getAllByLabelText("Status")[0]!, { target: { value: "success" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "Apply" })[0]!);
+
+    expect(handleDocumentChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        edges: [
+          expect.objectContaining({
+            id: "input-transform",
+            status: "success",
+          }),
+        ],
+      }),
+    );
+  });
+
+  test("ignores invalid UI connection attempts without mutating the document", () => {
+    const handleDocumentChange = vi.fn();
+    const typedDocument = normalizeWorkflowEditorDocument({
+      nodes: [
+        {
+          id: "source",
+          label: "Source",
+          x: 0,
+          y: 0,
+          outputs: [{ id: "out", label: "Out", type: { kind: "string" } }],
+        },
+        {
+          id: "target",
+          label: "Target",
+          x: 240,
+          y: 0,
+          inputs: [{ id: "in", label: "In", type: { kind: "number" } }],
+        },
+      ],
+      edges: [],
+    });
+
+    render(<WorkflowWorkbench document={typedDocument} onDocumentChange={handleDocumentChange} />);
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Start Source Out" })[0]!);
+    fireEvent.click(screen.getAllByRole("button", { name: "Connect to Target In" })[0]!);
+
+    expect(handleDocumentChange).not.toHaveBeenCalled();
+  });
+
+  test("clears workflow references back to none from the default inspector", () => {
+    const referencedDocument = normalizeWorkflowEditorDocument({
+      ...document,
+      nodes: [
+        { ...document.nodes[0]!, workflowRef: { documentId: "child" } },
+        document.nodes[1]!,
+        document.nodes[2]!,
+      ],
+    });
+    const handleDocumentChange = vi.fn();
+    render(
+      <WorkflowWorkbench
+        document={referencedDocument}
+        selectedNodeId="input"
+        documentReferences={[{ id: "child", name: "Child workflow" }]}
+        onDocumentChange={handleDocumentChange}
+      />,
+    );
+
+    fireEvent.click(screen.getAllByLabelText("Workflow document")[0]!);
+    fireEvent.click(screen.getByRole("option", { name: "None" }));
+    fireEvent.click(
+      screen
+        .getAllByRole("button", { name: "Apply" })
+        .find((button) => !(button as HTMLButtonElement).disabled)!,
+    );
+
+    expect(handleDocumentChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        nodes: expect.arrayContaining([
+          expect.objectContaining({
+            id: "input",
+            workflowRef: undefined,
+          }),
+        ]),
+      }),
+    );
+  });
+
+  test("updates node coordinates with valid numbers and ignores invalid values", () => {
+    const handleDocumentChange = vi.fn();
+    render(
+      <WorkflowWorkbench
+        document={document}
+        selectedNodeId="input"
+        onDocumentChange={handleDocumentChange}
+      />,
+    );
+
+    fireEvent.change(screen.getAllByLabelText("X")[0]!, { target: { value: "120" } });
+    fireEvent.change(screen.getAllByLabelText("Y")[0]!, { target: { value: "not-a-number" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "Apply" })[0]!);
+
+    expect(handleDocumentChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        nodes: expect.arrayContaining([
+          expect.objectContaining({
+            id: "input",
+            x: 120,
+            y: 0,
+          }),
+        ]),
+      }),
+    );
+  });
+
+  test("adds object constructor and decomposition ports from inspector controls", () => {
+    const objectTemplate = workflowEditorJsonNodeTemplates.find(
+      (template) => template.id === "json-object",
+    )!;
+    const decomposeTemplate = workflowEditorJsonNodeTemplates.find(
+      (template) => template.id === "json-object-decompose",
+    )!;
+    const objectDocument = normalizeWorkflowEditorDocument<Record<string, unknown>>({
+      nodes: [
+        { ...objectTemplate, id: "object", x: 0, y: 0 },
+        { ...decomposeTemplate, id: "decompose", x: 280, y: 0 },
+      ],
+      edges: [],
+    });
+    const { unmount } = render(
+      <StatefulWorkbench
+        initialDocument={objectDocument}
+        initialSelection={{
+          nodeIds: ["object"],
+          edgeIds: [],
+          primary: { type: "node", id: "object" },
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Add property input" })[0]!);
+    expect(
+      getWorkflowEditorObjectConstructorInputs(
+        readStatefulDocument().nodes.find((node) => node.id === "object")!,
+      ),
+    ).toHaveLength(1);
+
+    const updatedDocument = readStatefulDocument();
+    unmount();
+    render(
+      <StatefulWorkbench
+        initialDocument={updatedDocument}
+        initialSelection={{
+          nodeIds: ["decompose"],
+          edgeIds: [],
+          primary: { type: "node", id: "decompose" },
+        }}
+      />,
+    );
+    fireEvent.click(screen.getAllByRole("button", { name: "Add property output" })[0]!);
+    expect(
+      getWorkflowEditorObjectDecompositionOutputs(
+        readStatefulDocument().nodes.find((node) => node.id === "decompose")!,
+      ),
+    ).toHaveLength(1);
   });
 
   test("creates and opens referenced workflows with breadcrumbs in the editor shell", async () => {

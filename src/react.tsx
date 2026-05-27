@@ -121,6 +121,8 @@ export type WorkflowWorkbenchProps<
   typeDefinitions?: readonly WorkflowEditorTypeDefinition[];
   documentReferences?: WorkflowEditorDocumentReferenceOption[];
   className?: string;
+  showGraphStats?: boolean;
+  showShortcutHint?: boolean;
   onDocumentChange?: (document: WorkflowEditorDocument<TNodeData, TEdgeData>) => void;
   onSelectionChange?: (selection: WorkflowWorkbenchSelection<TNodeData, TEdgeData>) => void;
   onSelectionStateChange?: (selection: WorkflowEditorSelectionState) => void;
@@ -164,6 +166,8 @@ export function WorkflowWorkbench<
   typeDefinitions,
   documentReferences,
   className,
+  showGraphStats = true,
+  showShortcutHint = true,
   onDocumentChange,
   onSelectionChange,
   onSelectionStateChange,
@@ -175,6 +179,8 @@ export function WorkflowWorkbench<
   renderToolbarActions,
 }: WorkflowWorkbenchProps<TNodeData, TEdgeData, TTemplateData>) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const connectionInProgressRef = useRef(false);
+  const marqueeRef = useRef<WorkflowSelectionMarquee | null>(null);
   const pointerModifierRef = useRef({ additive: false });
   const [internalSelection, setInternalSelection] = useState<WorkflowEditorSelectionState>(
     emptyWorkflowEditorSelection,
@@ -544,6 +550,10 @@ export function WorkflowWorkbench<
   });
 
   const handleBuilderSelection = (builderSelection: WorkflowBuilderSelection) => {
+    if (connectionInProgressRef.current && builderSelection?.type === "node") {
+      return;
+    }
+
     if (!builderSelection) {
       if (!pointerModifierRef.current.additive && !marquee) {
         emitSelectionState(emptyWorkflowEditorSelection);
@@ -586,16 +596,19 @@ export function WorkflowWorkbench<
       return;
     }
 
-    setMarquee({
+    const nextMarquee = {
       startX: event.clientX - rect.left,
       startY: event.clientY - rect.top,
       currentX: event.clientX - rect.left,
       currentY: event.clientY - rect.top,
-    });
+    };
+    marqueeRef.current = nextMarquee;
+    setMarquee(nextMarquee);
   };
 
   const updateMarquee = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!marquee) {
+    const currentMarquee = marqueeRef.current;
+    if (!currentMarquee) {
       return;
     }
 
@@ -604,26 +617,45 @@ export function WorkflowWorkbench<
       return;
     }
 
-    setMarquee({
-      ...marquee,
+    const nextMarquee = {
+      ...currentMarquee,
       currentX: event.clientX - rect.left,
       currentY: event.clientY - rect.top,
-    });
+    };
+    marqueeRef.current = nextMarquee;
+    setMarquee(nextMarquee);
+  };
+
+  const clearPendingConnectionAfterTargetClick = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const target = event.target;
+    if (
+      !connectionInProgressRef.current ||
+      !(target instanceof Element) ||
+      target.closest("[data-port-direction='output']")
+    ) {
+      return;
+    }
+
+    window.setTimeout(() => {
+      connectionInProgressRef.current = false;
+    }, 0);
   };
 
   const completeMarquee = () => {
-    if (!marquee) {
+    const currentMarquee = marqueeRef.current;
+    if (!currentMarquee) {
       return;
     }
 
     const container = containerRef.current;
     const containerRect = container?.getBoundingClientRect();
     if (!container || !containerRect) {
+      marqueeRef.current = null;
       setMarquee(null);
       return;
     }
 
-    const marqueeRect = normalizeRect(marquee);
+    const marqueeRect = normalizeRect(currentMarquee);
     const nodeIds = Array.from(
       container.querySelectorAll<HTMLElement>("[data-slot='workflow-builder-node']"),
     ).flatMap((element) => {
@@ -637,6 +669,7 @@ export function WorkflowWorkbench<
       };
       return nodeId && rectsIntersect(marqueeRect, relativeRect) ? [nodeId] : [];
     });
+    marqueeRef.current = null;
     setMarquee(null);
     emitSelectionState({
       nodeIds,
@@ -709,21 +742,29 @@ export function WorkflowWorkbench<
       toolbar={
         <WorkbenchToolbar className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-3 py-2">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline">{document.nodes.length} nodes</Badge>
-            <Badge variant="outline">{document.edges.length} edges</Badge>
+            {showGraphStats ? (
+              <>
+                <Badge variant="outline">{document.nodes.length} nodes</Badge>
+                <Badge variant="outline">{document.edges.length} edges</Badge>
+              </>
+            ) : null}
             <Badge variant="outline" data-testid="selection-count">
               {selection.nodeIds.length + selection.edgeIds.length} selected
             </Badge>
-            <Badge variant="secondary">
-              {
-                graphIndex.getSubgraph({ offset: 0, limit: document.nodes.length }).summary
-                  .edgeCount
-              }{" "}
-              indexed
-            </Badge>
-            <span className="text-xs text-muted-foreground">
-              Duplicate {formatShortcutLabel(defaultWorkflowWorkbenchHotkeys.duplicateNode)}
-            </span>
+            {showGraphStats ? (
+              <Badge variant="secondary">
+                {
+                  graphIndex.getSubgraph({ offset: 0, limit: document.nodes.length }).summary
+                    .edgeCount
+                }{" "}
+                indexed
+              </Badge>
+            ) : null}
+            {showShortcutHint ? (
+              <span className="text-xs text-muted-foreground">
+                Duplicate {formatShortcutLabel(defaultWorkflowWorkbenchHotkeys.duplicateNode)}
+              </span>
+            ) : null}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button
@@ -817,9 +858,13 @@ export function WorkflowWorkbench<
           ref={containerRef}
           className="relative"
           onPointerDownCapture={startMarquee}
+          onPointerUpCapture={clearPendingConnectionAfterTargetClick}
           onPointerMove={updateMarquee}
           onPointerUp={completeMarquee}
-          onPointerCancel={() => setMarquee(null)}
+          onPointerCancel={() => {
+            marqueeRef.current = null;
+            setMarquee(null);
+          }}
         >
           <WorkflowBuilder
             nodes={uiNodes}
@@ -833,10 +878,14 @@ export function WorkflowWorkbench<
             toolbarLabel="Workflow"
             onNodesChange={(nodes) => {
               if (!readOnly) {
+                const nodeIds = new Set(nodes.map((node) => node.id));
                 commitDocument(
                   normalizeWorkflowEditorDocument({
                     ...document,
                     nodes: fromUiWorkflowBuilderNodes(nodes, document.nodes),
+                    edges: document.edges.filter(
+                      (edge) => nodeIds.has(edge.sourceNodeId) && nodeIds.has(edge.targetNodeId),
+                    ),
                   }),
                 );
               }
@@ -864,6 +913,12 @@ export function WorkflowWorkbench<
               commitDocument({ ...document, viewport });
             }}
             onSelectionChange={handleBuilderSelection}
+            onConnectionStart={() => {
+              connectionInProgressRef.current = true;
+            }}
+            onConnectionCancel={() => {
+              connectionInProgressRef.current = false;
+            }}
             isConnectionValid={(connection) => {
               const validity = validateWorkflowEditorConnection(document, connection, {
                 typeDefinitions,
@@ -875,6 +930,7 @@ export function WorkflowWorkbench<
               };
             }}
             onConnectionComplete={(connection) => {
+              connectionInProgressRef.current = false;
               if (!readOnly) {
                 commitDocument(
                   connectWorkflowEditorNodes(document, connection, { typeDefinitions }),

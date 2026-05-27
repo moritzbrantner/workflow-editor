@@ -69,6 +69,7 @@
     "@testing-library/react": "^16.3.0",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
+    "@vitest/coverage-v8": "4.1.7",
     "jsdom": "^26.1.0",
     "oxfmt": "^0.46.0",
     "oxlint": "^1.61.0",
@@ -87,6 +88,7 @@
   "scripts": {
     "build": "tsup src/index.ts src/core.ts src/react.tsx src/editor.tsx src/history.ts src/layout.ts src/persistence.ts src/share.ts --format esm --dts --clean --out-dir dist",
     "changeset": "changeset",
+    "dev": "vite --host 127.0.0.1 --port 5173 --config examples/workbench/vite.config.ts",
     "example": "vite --host 127.0.0.1 --port 5173 --config examples/workbench/vite.config.ts",
     "example:build": "vite build --config examples/workbench/vite.config.ts",
     "format": "oxfmt",
@@ -96,6 +98,7 @@
     "check-types": "tsc --noEmit",
     "smoke:package": "node scripts/smoke-package-exports.mjs",
     "test": "vitest run",
+    "test:coverage": "$(dirname $(command -v npm))/node node_modules/vitest/vitest.mjs run --coverage",
     "test:playwright": "playwright test",
     "verify": "bun run format:check && bun run lint && bun run check-types && bun run test && bun run test:playwright && bun run example:build && bun run build && bun run smoke:package"
   }

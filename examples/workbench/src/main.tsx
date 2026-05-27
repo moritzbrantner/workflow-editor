@@ -3,7 +3,6 @@ import { createRoot } from "react-dom/client";
 
 import {
   WorkflowEditor,
-  activeWorkflowEditorEntry,
   addWorkflowEditorObjectConstructorInputToNode,
   createWorkflowEditorEntry,
   createWorkflowEditorLibrary,
@@ -663,46 +662,14 @@ function edge(
 function App() {
   const [resetToken, setResetToken] = useState(0);
   const initialLibrary = useMemo(createExamplesLibrary, [resetToken]);
-  const [library, setLibrary] = useState<ExampleLibrary>(initialLibrary);
-  const activeEntry = activeWorkflowEditorEntry(library);
-  const totalNodes = library.documents.reduce(
-    (count, entry) => count + entry.document.nodes.length,
-    0,
-  );
-  const totalEdges = library.documents.reduce(
-    (count, entry) => count + entry.document.edges.length,
-    0,
-  );
 
   const resetExamples = () => {
     window.localStorage.removeItem(storageKey);
-    const nextLibrary = createExamplesLibrary();
-    setLibrary(nextLibrary);
     setResetToken((current) => current + 1);
   };
 
   return (
     <main className="example-shell">
-      <header className="example-header">
-        <div>
-          <p className="example-kicker">Workflow editor examples</p>
-          <h1>Experiment Workbench</h1>
-        </div>
-        <div className="example-stats" aria-label="Example library summary">
-          <span>{library.documents.length} workflows</span>
-          <span>{totalNodes} nodes</span>
-          <span>{totalEdges} edges</span>
-          <button type="button" onClick={resetExamples}>
-            Reset examples
-          </button>
-        </div>
-      </header>
-
-      <section className="example-active" aria-label="Active workflow">
-        <span>{activeEntry?.name ?? "No workflow selected"}</span>
-        <span>{activeEntry?.tags?.join(" / ") ?? "untagged"}</span>
-      </section>
-
       <WorkflowEditor
         key={resetToken}
         storageKey={storageKey}
@@ -710,7 +677,15 @@ function App() {
         className="example-editor"
         nodeTemplates={nodeTemplates}
         typeDefinitions={typeDefinitions}
-        onLibraryChange={setLibrary}
+        compactControls
+        showDocumentPath={false}
+        showDocumentStats={false}
+        showWorkbenchStats={false}
+        renderCompactMenuActions={() => (
+          <button type="button" className="example-menu-button" onClick={resetExamples}>
+            Reset examples
+          </button>
+        )}
         renderNodeTemplate={(template) => (
           <span className="template-row">
             <span>

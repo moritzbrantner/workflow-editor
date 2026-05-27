@@ -2,7 +2,17 @@
 
 import { type ChangeEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
-import { Badge, Button, WorkbenchToolbar, cn } from "@moritzbrantner/ui";
+import {
+  Badge,
+  Button,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  WorkbenchToolbar,
+  cn,
+} from "@moritzbrantner/ui";
 
 import {
   canRedoWorkflowEditorHistory,
@@ -40,10 +50,12 @@ import {
 } from "./persistence";
 import {
   WorkflowWorkbench,
+  defaultWorkflowWorkbenchHotkeys,
   type WorkflowWorkbenchPaletteItem,
   type WorkflowWorkbenchProps,
   type WorkflowWorkbenchSelection,
 } from "./react";
+import { formatShortcutLabel } from "./shortcut-label";
 import {
   defaultWorkflowEditorNodeTemplates,
   normalizeWorkflowEditorSelection,
@@ -73,6 +85,11 @@ export type WorkflowEditorProps<
   maxVersions?: number;
   enableNestedWorkflows?: boolean;
   maxNestedWorkflowDepth?: number;
+  compactControls?: boolean;
+  showDocumentStats?: boolean;
+  showDocumentPath?: boolean;
+  showWorkbenchStats?: boolean;
+  renderCompactMenuActions?: () => ReactNode;
   onLibraryChange?: (library: WorkflowEditorLibrary<TNodeData, TEdgeData>) => void;
   onDocumentPathChange?: (path: WorkflowEditorDocumentPathItem[]) => void;
   onError?: (error: Error) => void;
@@ -116,6 +133,10 @@ export function WorkflowEditor<
   maxVersions = defaultWorkflowEditorMaxVersions,
   enableNestedWorkflows = true,
   maxNestedWorkflowDepth = 64,
+  compactControls = false,
+  showDocumentStats = true,
+  showDocumentPath = true,
+  showWorkbenchStats = true,
   onLibraryChange,
   onDocumentPathChange,
   onError,
@@ -123,6 +144,7 @@ export function WorkflowEditor<
   renderNodeTemplate,
   renderInspector,
   renderToolbarActions,
+  renderCompactMenuActions,
 }: WorkflowEditorProps<TNodeData, TEdgeData, TTemplateData>) {
   const fallbackLibrary = useMemo(
     () => initialLibrary ?? createWorkflowEditorLibrary<TNodeData, TEdgeData>(),
@@ -558,165 +580,388 @@ export function WorkflowEditor<
 
   return (
     <section className={cn("grid gap-3", className)} data-testid="workflow-editor">
-      <WorkbenchToolbar className="flex flex-wrap items-center justify-between gap-3 border border-border bg-background px-3 py-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <select
-            aria-label="Workflow document"
-            className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-            value={activeEntry?.id ?? ""}
-            disabled={readOnly || library.documents.length === 0}
-            onChange={(event) => selectDocument(event.target.value)}
-          >
-            {library.documents.map((entry) => (
-              <option key={entry.id} value={entry.id}>
-                {entry.name}
-              </option>
-            ))}
-          </select>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={readOnly}
-            onClick={createDocument}
-          >
-            New
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={readOnly || !activeEntry}
-            onClick={duplicateDocument}
-          >
-            Duplicate document
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={readOnly || !activeEntry || library.documents.length <= 1}
-            onClick={deleteDocument}
-          >
-            Delete document
-          </Button>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant={saveState === "error" ? "outline" : "secondary"} data-testid="save-state">
-            {formatSaveState(saveState)}
-          </Badge>
-          <Badge variant="outline" data-testid="active-node-count">
-            {activeDocument.nodes.length} nodes
-          </Badge>
-          <Badge variant="outline" data-testid="active-edge-count">
-            {activeDocument.edges.length} edges
-          </Badge>
-        </div>
-      </WorkbenchToolbar>
+      {compactControls ? (
+        <WorkbenchToolbar className="flex items-center justify-between gap-2 border border-border bg-background px-2 py-1">
+          <DropdownMenu modal={false}>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" size="sm" variant="outline">
+                {activeEntry?.name ?? "Workflow"}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="start"
+              className="w-80 p-3"
+              onCloseAutoFocus={(event) => event.preventDefault()}
+            >
+              <div className="grid gap-3" onKeyDown={(event) => event.stopPropagation()}>
+                <div className="grid gap-1.5">
+                  <DropdownMenuLabel className="px-0">Workflow</DropdownMenuLabel>
+                  <select
+                    aria-label="Workflow document"
+                    className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                    value={activeEntry?.id ?? ""}
+                    disabled={readOnly || library.documents.length === 0}
+                    onChange={(event) => selectDocument(event.target.value)}
+                  >
+                    {library.documents.map((entry) => (
+                      <option key={entry.id} value={entry.id}>
+                        {entry.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-      <WorkbenchToolbar className="flex flex-wrap items-center justify-between gap-3 border border-border bg-background px-3 py-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <input
-            aria-label="Document name"
-            className="h-9 min-w-48 rounded-md border border-input bg-background px-2 text-sm"
-            value={nameDraft}
-            disabled={readOnly || !activeEntry}
-            onChange={(event) => setNameDraft(event.target.value)}
-          />
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={readOnly || !activeEntry}
-            onClick={renameDocument}
-          >
-            Rename
-          </Button>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={readOnly || !canUndoWorkflowEditorHistory(history)}
-            onClick={undo}
-            aria-label="Undo"
-          >
-            Undo
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={readOnly || !canRedoWorkflowEditorHistory(history)}
-            onClick={redo}
-            aria-label="Redo"
-          >
-            Redo
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={readOnly || !activeEntry}
-            onClick={saveVersion}
-          >
-            Save version
-          </Button>
-          <select
-            aria-label="Saved versions"
-            className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-            value={selectedVersionId}
-            disabled={readOnly || !activeEntry || activeEntry.versions.length === 0}
-            onChange={(event) => setSelectedVersionId(event.target.value)}
-          >
-            <option value="">No saved versions</option>
-            {activeEntry?.versions.map((version) => (
-              <option key={version.id} value={version.id}>
-                v{version.version} {version.name}
-              </option>
-            ))}
-          </select>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={readOnly || !selectedVersionId}
-            onClick={restoreVersion}
-          >
-            Restore version
-          </Button>
-          <input
-            ref={importInputRef}
-            aria-label="Import workflow JSON"
-            className="hidden"
-            type="file"
-            accept="application/json,.json"
-            disabled={readOnly}
-            onChange={importDocument}
-          />
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={readOnly}
-            onClick={() => importInputRef.current?.click()}
-          >
-            Import JSON
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={!activeEntry}
-            onClick={exportDocument}
-          >
-            Export JSON
-          </Button>
-        </div>
-      </WorkbenchToolbar>
+                <div className="grid gap-1.5">
+                  <input
+                    aria-label="Document name"
+                    className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                    value={nameDraft}
+                    disabled={readOnly || !activeEntry}
+                    onChange={(event) => setNameDraft(event.target.value)}
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={readOnly || !activeEntry}
+                    onClick={renameDocument}
+                  >
+                    Rename
+                  </Button>
+                </div>
 
-      {enableNestedWorkflows ? (
+                <div className="grid grid-cols-3 gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={readOnly}
+                    onClick={createDocument}
+                  >
+                    New
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={readOnly || !activeEntry}
+                    onClick={duplicateDocument}
+                  >
+                    Duplicate
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={readOnly || !activeEntry || library.documents.length <= 1}
+                    onClick={deleteDocument}
+                  >
+                    Delete
+                  </Button>
+                </div>
+
+                <DropdownMenuSeparator />
+
+                <div className="grid gap-1.5">
+                  <DropdownMenuLabel className="px-0">Versions and files</DropdownMenuLabel>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={readOnly || !activeEntry}
+                      onClick={saveVersion}
+                    >
+                      Save version
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={readOnly || !selectedVersionId}
+                      onClick={restoreVersion}
+                    >
+                      Restore
+                    </Button>
+                  </div>
+                  <select
+                    aria-label="Saved versions"
+                    className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                    value={selectedVersionId}
+                    disabled={readOnly || !activeEntry || activeEntry.versions.length === 0}
+                    onChange={(event) => setSelectedVersionId(event.target.value)}
+                  >
+                    <option value="">No saved versions</option>
+                    {activeEntry?.versions.map((version) => (
+                      <option key={version.id} value={version.id}>
+                        v{version.version} {version.name}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      ref={importInputRef}
+                      aria-label="Import workflow JSON"
+                      className="hidden"
+                      type="file"
+                      accept="application/json,.json"
+                      disabled={readOnly}
+                      onChange={importDocument}
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={readOnly}
+                      onClick={() => importInputRef.current?.click()}
+                    >
+                      Import JSON
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={!activeEntry}
+                      onClick={exportDocument}
+                    >
+                      Export JSON
+                    </Button>
+                  </div>
+                </div>
+
+                {renderCompactMenuActions ? (
+                  <>
+                    <DropdownMenuSeparator />
+                    <div className="grid gap-2">{renderCompactMenuActions()}</div>
+                  </>
+                ) : null}
+
+                <DropdownMenuSeparator />
+
+                <div className="grid gap-1.5 text-xs text-muted-foreground">
+                  <DropdownMenuLabel className="px-0 text-foreground">Hotkeys</DropdownMenuLabel>
+                  <div className="flex justify-between gap-3">
+                    <span>Duplicate selection</span>
+                    <span>
+                      {formatShortcutLabel(defaultWorkflowWorkbenchHotkeys.duplicateNode)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <span>Copy selection</span>
+                    <span>
+                      {formatShortcutLabel(defaultWorkflowWorkbenchHotkeys.copySelection)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <span>Paste selection</span>
+                    <span>
+                      {formatShortcutLabel(defaultWorkflowWorkbenchHotkeys.pasteSelection)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={readOnly || !canUndoWorkflowEditorHistory(history)}
+              onClick={undo}
+              aria-label="Undo"
+            >
+              Undo
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={readOnly || !canRedoWorkflowEditorHistory(history)}
+              onClick={redo}
+              aria-label="Redo"
+            >
+              Redo
+            </Button>
+            <Badge
+              variant={saveState === "error" ? "outline" : "secondary"}
+              data-testid="save-state"
+            >
+              {formatSaveState(saveState)}
+            </Badge>
+          </div>
+        </WorkbenchToolbar>
+      ) : (
+        <>
+          <WorkbenchToolbar className="flex flex-wrap items-center justify-between gap-3 border border-border bg-background px-3 py-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                aria-label="Workflow document"
+                className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                value={activeEntry?.id ?? ""}
+                disabled={readOnly || library.documents.length === 0}
+                onChange={(event) => selectDocument(event.target.value)}
+              >
+                {library.documents.map((entry) => (
+                  <option key={entry.id} value={entry.id}>
+                    {entry.name}
+                  </option>
+                ))}
+              </select>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={readOnly}
+                onClick={createDocument}
+              >
+                New
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={readOnly || !activeEntry}
+                onClick={duplicateDocument}
+              >
+                Duplicate document
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={readOnly || !activeEntry || library.documents.length <= 1}
+                onClick={deleteDocument}
+              >
+                Delete document
+              </Button>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge
+                variant={saveState === "error" ? "outline" : "secondary"}
+                data-testid="save-state"
+              >
+                {formatSaveState(saveState)}
+              </Badge>
+              {showDocumentStats ? (
+                <>
+                  <Badge variant="outline" data-testid="active-node-count">
+                    {activeDocument.nodes.length} nodes
+                  </Badge>
+                  <Badge variant="outline" data-testid="active-edge-count">
+                    {activeDocument.edges.length} edges
+                  </Badge>
+                </>
+              ) : null}
+            </div>
+          </WorkbenchToolbar>
+
+          <WorkbenchToolbar className="flex flex-wrap items-center justify-between gap-3 border border-border bg-background px-3 py-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                aria-label="Document name"
+                className="h-9 min-w-48 rounded-md border border-input bg-background px-2 text-sm"
+                value={nameDraft}
+                disabled={readOnly || !activeEntry}
+                onChange={(event) => setNameDraft(event.target.value)}
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={readOnly || !activeEntry}
+                onClick={renameDocument}
+              >
+                Rename
+              </Button>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={readOnly || !canUndoWorkflowEditorHistory(history)}
+                onClick={undo}
+                aria-label="Undo"
+              >
+                Undo
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={readOnly || !canRedoWorkflowEditorHistory(history)}
+                onClick={redo}
+                aria-label="Redo"
+              >
+                Redo
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={readOnly || !activeEntry}
+                onClick={saveVersion}
+              >
+                Save version
+              </Button>
+              <select
+                aria-label="Saved versions"
+                className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                value={selectedVersionId}
+                disabled={readOnly || !activeEntry || activeEntry.versions.length === 0}
+                onChange={(event) => setSelectedVersionId(event.target.value)}
+              >
+                <option value="">No saved versions</option>
+                {activeEntry?.versions.map((version) => (
+                  <option key={version.id} value={version.id}>
+                    v{version.version} {version.name}
+                  </option>
+                ))}
+              </select>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={readOnly || !selectedVersionId}
+                onClick={restoreVersion}
+              >
+                Restore version
+              </Button>
+              <input
+                ref={importInputRef}
+                aria-label="Import workflow JSON"
+                className="hidden"
+                type="file"
+                accept="application/json,.json"
+                disabled={readOnly}
+                onChange={importDocument}
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={readOnly}
+                onClick={() => importInputRef.current?.click()}
+              >
+                Import JSON
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={!activeEntry}
+                onClick={exportDocument}
+              >
+                Export JSON
+              </Button>
+            </div>
+          </WorkbenchToolbar>
+        </>
+      )}
+
+      {enableNestedWorkflows && showDocumentPath ? (
         <WorkbenchToolbar
           className="flex flex-wrap items-center gap-2 border border-border bg-background px-3 py-2"
           aria-label="Workflow path"
@@ -755,6 +1000,8 @@ export function WorkflowEditor<
         renderNodeTemplate={renderNodeTemplate}
         renderInspector={renderInspector}
         renderToolbarActions={renderToolbarActions}
+        showGraphStats={showWorkbenchStats}
+        showShortcutHint={!compactControls}
       />
     </section>
   );

@@ -22,7 +22,8 @@ export default defineConfig({
   webServer: {
     command: "node scripts/playwright-web-server.mjs",
     cwd: rootDir,
-    reuseExistingServer: false,
+    url: "http://127.0.0.1:4174",
+    reuseExistingServer: !isCi,
     timeout: 120_000,
   },
   projects: [

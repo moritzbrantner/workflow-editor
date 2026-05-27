@@ -19,11 +19,44 @@ async function readDocument(page: Page) {
 }
 
 async function selectNode(page: Page, label: string) {
-  await page.getByRole("button", { name: label, exact: true }).click();
+  await page
+    .locator(`[data-slot="workflow-node-select"][aria-label="${label}"]:visible`)
+    .first()
+    .click({ force: true });
+}
+
+async function selectNodeById(page: Page, id: string) {
+  await page
+    .locator(`[data-slot="workflow-builder-node"][data-node-id="${id}"]:visible`)
+    .locator('[data-slot="workflow-node-select"]')
+    .click({ force: true });
+}
+
+async function selectEdge(page: Page, id: string) {
+  await page.getByRole("button", { name: `Connection ${id}`, exact: true }).click({
+    force: true,
+  });
 }
 
 async function clickAction(page: Page, name: string) {
   await page.getByRole("button", { name, exact: true }).first().click();
+}
+
+async function expectNodeCount(page: Page, count: number) {
+  await expect(page.getByTestId("node-count")).toHaveText(String(count));
+}
+
+async function expectEdgeCount(page: Page, count: number) {
+  await expect(page.getByTestId("edge-count")).toHaveText(String(count));
+}
+
+async function pressShortcut(page: Page, shortcut: string) {
+  const modifier = process.platform === "darwin" ? "Meta" : "Control";
+  await page.keyboard.press(shortcut.replace("Mod", modifier));
+}
+
+async function readSelection(page: Page) {
+  return JSON.parse((await page.getByTestId("selection-json").textContent()) ?? "null") as unknown;
 }
 
 async function selectInspectorWorkflowReference(page: Page, label: string) {
@@ -135,6 +168,132 @@ test.describe("WorkflowWorkbench desktop", () => {
     await expect(page.getByTestId("edge-count")).toHaveText("2");
   });
 
+  test("uses keyboard shortcuts for duplicate, clipboard, escape, and delete", async ({ page }) => {
+    await page.goto("/");
+
+    await selectNode(page, "Input");
+    await page.getByRole("button", { name: "Transform", exact: true }).click({
+      modifiers: ["Shift"],
+    });
+    await expect(page.getByTestId("selection-count").first()).toHaveText("2 selected");
+
+    await pressShortcut(page, "Mod+D");
+    await expectNodeCount(page, 5);
+    await expectEdgeCount(page, 2);
+    await expect(page.getByTestId("document-json")).toContainText("input-copy");
+
+    await pressShortcut(page, "Mod+C");
+    await pressShortcut(page, "Mod+V");
+    await expectNodeCount(page, 7);
+    await expectEdgeCount(page, 3);
+
+    await page.keyboard.press("Delete");
+    await expectNodeCount(page, 6);
+    await expectEdgeCount(page, 2);
+
+    await selectNodeById(page, "input");
+    await expect(page.getByTestId("selected-node-id")).toHaveText('"input"');
+    await page.keyboard.press("Escape");
+    await expect(page.getByTestId("selection-count").first()).toHaveText("0 selected");
+    expect(await readSelection(page)).toBeNull();
+  });
+
+  test("does not run graph shortcuts while editing inspector fields", async ({ page }) => {
+    await page.goto("/");
+    await selectNode(page, "Input");
+
+    const labelInput = page.locator('input[aria-label="Label"]:visible').first();
+    await labelInput.focus();
+    await page.keyboard.press("Backspace");
+    await pressShortcut(page, "Mod+D");
+
+    await expectNodeCount(page, 3);
+    await expectEdgeCount(page, 1);
+    await expect(page.getByTestId("selected-node-id")).toHaveText('"input"');
+  });
+
+  test("clears selection from the canvas background and marquee-selects nodes", async ({
+    page,
+  }) => {
+    await page.goto("/");
+
+    await selectNode(page, "Input");
+    await expect(page.getByTestId("selected-node-id")).toHaveText('"input"');
+    await page
+      .locator('[data-slot="workflow-builder-surface"]:visible')
+      .first()
+      .click({ position: { x: 420, y: 420 } });
+    await expect(page.getByTestId("selection-count").first()).toHaveText("0 selected");
+
+    const inputBox = await page
+      .locator('[data-slot="workflow-builder-node"][data-node-id="input"]:visible')
+      .first()
+      .boundingBox();
+    const transformBox = await page
+      .locator('[data-slot="workflow-builder-node"][data-node-id="transform"]:visible')
+      .first()
+      .boundingBox();
+    expect(inputBox).not.toBeNull();
+    expect(transformBox).not.toBeNull();
+    const startX = Math.min(inputBox!.x, transformBox!.x) - 16;
+    const startY =
+      Math.max(inputBox!.y + inputBox!.height, transformBox!.y + transformBox!.height) + 16;
+    const endX =
+      Math.max(inputBox!.x + inputBox!.width, transformBox!.x + transformBox!.width) + 16;
+    const endY = Math.min(inputBox!.y, transformBox!.y) - 16;
+
+    const viewport = page.locator('[data-slot="workflow-builder-viewport"]:visible').first();
+    await viewport.dispatchEvent("pointerdown", {
+      bubbles: true,
+      button: 0,
+      buttons: 1,
+      clientX: startX,
+      clientY: startY,
+      pointerId: 1,
+      pointerType: "mouse",
+    });
+    await viewport.dispatchEvent("pointermove", {
+      bubbles: true,
+      button: 0,
+      buttons: 1,
+      clientX: endX,
+      clientY: endY,
+      pointerId: 1,
+      pointerType: "mouse",
+    });
+    await viewport.dispatchEvent("pointerup", {
+      bubbles: true,
+      button: 0,
+      buttons: 0,
+      clientX: endX,
+      clientY: endY,
+      pointerId: 1,
+      pointerType: "mouse",
+    });
+
+    await expect(page.getByTestId("selection-count").filter({ visible: true }).first()).toHaveText(
+      "2 selected",
+    );
+  });
+
+  test("selects edges, edits edge status, and deletes only the selected edge", async ({ page }) => {
+    await page.goto("/");
+
+    await selectEdge(page, "input-transform");
+    await expect(page.getByTestId("selected-edge-id")).toHaveText('"input-transform"');
+    await expect(
+      page.getByRole("heading", { name: "Workflow edge" }).filter({ visible: true }),
+    ).toBeVisible();
+
+    await page.locator('input[aria-label="Status"]:visible').fill("success");
+    await page.getByRole("button", { name: "Apply" }).click();
+    await expect(page.getByTestId("document-json")).toContainText('"status":"success"');
+
+    await page.keyboard.press("Delete");
+    await expectNodeCount(page, 3);
+    await expectEdgeCount(page, 0);
+  });
+
   test("arranges all nodes and selected nodes", async ({ page }) => {
     await page.goto("/");
     await selectNode(page, "Input");
@@ -178,6 +337,19 @@ test.describe("WorkflowWorkbench desktop", () => {
     );
   });
 
+  test("ignores duplicate connection attempts without changing selection or edge count", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await selectNode(page, "Input");
+
+    await page.getByRole("button", { name: "Start Input Out" }).first().click();
+    await page.getByRole("button", { name: "Connect to Transform In" }).first().click();
+
+    await expectEdgeCount(page, 1);
+    await expect(page.getByTestId("selected-node-id")).toHaveText('"input"');
+  });
+
   test("blocks mutations in read-only mode", async ({ page }) => {
     await page.goto("/?readonly=1");
     await selectNode(page, "Input");
@@ -190,6 +362,14 @@ test.describe("WorkflowWorkbench desktop", () => {
     await page.getByRole("button", { name: "Start Input Out" }).first().click({ force: true });
     await expect(page.getByTestId("node-count")).toHaveText("3");
     await expect(page.getByTestId("edge-count")).toHaveText("1");
+
+    await page.keyboard.press("Delete");
+    await pressShortcut(page, "Mod+D");
+    await pressShortcut(page, "Mod+V");
+    await expectNodeCount(page, 3);
+    await expectEdgeCount(page, 1);
+
+    await expect(page.getByRole("button", { name: "Export JSON" })).toBeEnabled();
   });
 
   test("creates, renames, duplicates, deletes, and persists documents", async ({ page }) => {
@@ -278,6 +458,21 @@ test.describe("WorkflowWorkbench desktop", () => {
 
     await expect(page.getByTestId("active-document-name")).toHaveText("Imported Flow");
     await expect(page.getByTestId("node-count")).toHaveText("1");
+  });
+
+  test("keeps the active document when importing invalid JSON", async ({ page }) => {
+    await page.goto("/");
+
+    await page.locator('input[aria-label="Import workflow JSON"]').setInputFiles({
+      name: "invalid-workflow.json",
+      mimeType: "application/json",
+      buffer: Buffer.from("{"),
+    });
+
+    await expect(page.getByTestId("save-state")).toHaveText("Save error");
+    await expect(page.getByTestId("active-document-name")).toHaveText("Demo Workflow");
+    await expectNodeCount(page, 3);
+    await expectEdgeCount(page, 1);
   });
 
   test("creates a nested workflow, opens it, and returns through breadcrumbs", async ({ page }) => {
@@ -395,6 +590,31 @@ test.describe("WorkflowWorkbench accessibility and responsive smoke", () => {
       .first()
       .click();
 
+    await expect(page.getByTestId("node-count")).toHaveText("4");
+
+    await selectNode(page, "Input");
+    await expect(page.getByRole("heading", { name: "Workflow node" })).toBeVisible();
+    await page.locator('input[aria-label="Label"]:visible').fill("Mobile Input");
+    await page
+      .getByRole("button", { name: "Apply" })
+      .filter({ visible: true })
+      .first()
+      .click({ force: true });
+    await expect(
+      page.locator('[data-slot="workflow-node-select"][aria-label="Mobile Input"]:visible'),
+    ).toBeVisible();
+
+    await page
+      .getByRole("button", { name: "Duplicate", exact: true })
+      .filter({ visible: true })
+      .first()
+      .click({ force: true });
+    await expect(page.getByTestId("node-count")).toHaveText("5");
+    await page
+      .getByRole("button", { name: "Delete", exact: true })
+      .filter({ visible: true })
+      .first()
+      .click({ force: true });
     await expect(page.getByTestId("node-count")).toHaveText("4");
   });
 });
