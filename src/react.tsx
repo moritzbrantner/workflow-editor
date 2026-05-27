@@ -86,6 +86,8 @@ const workflowEditorPanActivationDistance = 3;
 const workflowEditorSnapDistance = 28;
 const workflowEditorMinZoom = 0.5;
 const workflowEditorMaxZoom = 1.75;
+const workflowEditorMinimizedNodeWidth = 176;
+const workflowEditorMinimizedNodeHeight = 36;
 let workflowEditorMemoryClipboard: string | null = null;
 
 export type WorkflowWorkbenchPaletteItem<TData = Record<string, unknown>> =
@@ -618,9 +620,7 @@ export function WorkflowWorkbench<
     };
 
     if (position) {
-      const size = getWorkflowNodeSize(toUiWorkflowBuilderNodes([node])[0]!, {
-        showPortColumnHeaders: false,
-      });
+      const size = getWorkflowEditorRenderedNodeSize(toUiWorkflowBuilderNodes([node])[0]!);
       node.x = Math.round(position.x - size.width / 2);
       node.y = Math.round(position.y - size.height / 2);
     }
@@ -1404,7 +1404,7 @@ export function WorkflowWorkbench<
             onDrop={handleTemplateDrop}
           >
             <WorkflowBuilder
-              className="flex h-full min-h-0 min-w-0 flex-col [&>[data-slot='workflow-builder-surface']]:flex-1 [&>[data-slot='workflow-builder-surface']]:basis-0"
+              className="flex h-full min-h-0 min-w-0 flex-col [&>[data-slot='workflow-builder-surface']]:flex-1 [&>[data-slot='workflow-builder-surface']]:basis-0 [&_[data-slot='workflow-node'][data-minimized='true']]:!h-9 [&_[data-slot='workflow-node'][data-minimized='true']]:!min-h-9 [&_[data-slot='workflow-node'][data-minimized='true']]:!w-44 [&_[data-slot='workflow-node'][data-minimized='true']]:!flex-row [&_[data-slot='workflow-node'][data-minimized='true']]:items-stretch [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:!h-9 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:!min-h-9 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:!flex-1 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:!rounded-lg [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:!border-b-0 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:!px-2 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:!py-1.5 [&_[data-slot='workflow-node'][data-minimized='true']_[data-slot='workflow-node-header']>div]:items-center [&_[data-slot='workflow-node'][data-minimized='true']_[data-slot='workflow-node-header']>div>div:last-child]:!mt-0 [&_[data-slot='workflow-node'][data-minimized='true']_[data-slot='workflow-node-select']>div+div]:hidden [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']]:!absolute [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']]:inset-0 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']]:!h-auto [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']]:!border-t-0 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']]:!bg-transparent [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']]:pointer-events-none [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']>div]:hidden [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']>[data-slot='workflow-node-port']]:pointer-events-auto [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']>[data-slot='workflow-node-port']]:-translate-y-1/2"
               nodes={uiNodes}
               edges={uiEdges}
               selectedNodeId={primarySelectedNodeId}
@@ -1844,16 +1844,41 @@ function getWorkflowEditorPortCenter<TNodeData extends Record<string, unknown>>(
   }
 
   const uiNode = toUiWorkflowBuilderNodes([node])[0]!;
-  const size = getWorkflowNodeSize(uiNode, { showPortColumnHeaders: false });
+  const size = getWorkflowEditorRenderedNodeSize(uiNode);
 
   return {
     x: node.x + (direction === "input" ? 0 : size.width),
-    y:
-      node.y +
-      getWorkflowNodePortCenterOffset(uiNode, portIndex, {
-        showPortColumnHeaders: false,
-      }),
+    y: node.y + getWorkflowEditorPortCenterOffset(uiNode, direction, portIndex),
   };
+}
+
+function getWorkflowEditorRenderedNodeSize(
+  node: ReturnType<typeof toUiWorkflowBuilderNodes>[number],
+) {
+  if (node.minimized === true && node.variant !== "compact") {
+    return {
+      width: workflowEditorMinimizedNodeWidth,
+      height: workflowEditorMinimizedNodeHeight,
+    };
+  }
+
+  return getWorkflowNodeSize(node, { showPortColumnHeaders: false });
+}
+
+function getWorkflowEditorPortCenterOffset(
+  node: ReturnType<typeof toUiWorkflowBuilderNodes>[number],
+  direction: "input" | "output",
+  portIndex: number,
+) {
+  if (node.minimized === true && node.variant !== "compact") {
+    const portCount =
+      direction === "input" ? (node.inputs?.length ?? 0) : (node.outputs?.length ?? 0);
+    return ((portIndex + 1) / (portCount + 1)) * workflowEditorMinimizedNodeHeight;
+  }
+
+  return getWorkflowNodePortCenterOffset(node, portIndex, {
+    showPortColumnHeaders: false,
+  });
 }
 
 function getWorkflowEditorPointFromClient(
@@ -2106,10 +2131,8 @@ function getWorkflowJsonPrimitiveNodeControlOffset<TNodeData>(node: WorkflowEdit
     0,
     (node.outputs ?? []).findIndex((output) => output.id === "value"),
   );
-  const size = getWorkflowNodeSize(uiNode, { showPortColumnHeaders: false });
-  const portCenterY = getWorkflowNodePortCenterOffset(uiNode, outputIndex, {
-    showPortColumnHeaders: false,
-  });
+  const size = getWorkflowEditorRenderedNodeSize(uiNode);
+  const portCenterY = getWorkflowEditorPortCenterOffset(uiNode, "output", outputIndex);
   const width = Math.min(170, Math.max(112, size.width - 48));
 
   return {
@@ -2141,9 +2164,7 @@ function WorkflowSelectionOverlay<
       {document.nodes
         .filter((node) => selectedNodeIds.has(node.id))
         .map((node) => {
-          const size = getWorkflowNodeSize(toUiWorkflowBuilderNodes([node])[0]!, {
-            showPortColumnHeaders: false,
-          });
+          const size = getWorkflowEditorRenderedNodeSize(toUiWorkflowBuilderNodes([node])[0]!);
           return (
             <div
               key={node.id}

@@ -37,6 +37,8 @@ export type WorkflowEditorLayoutResult<
 
 const defaultNodeWidth = 248;
 const defaultNodeHeight = 124;
+const minimizedNodeWidth = 176;
+const minimizedNodeHeight = 36;
 
 export function layoutWorkflowEditorDocument<
   TNodeData = Record<string, unknown>,
@@ -68,9 +70,7 @@ export function layoutWorkflowEditorDocument<
   graph.setDefaultEdgeLabel(() => ({}));
 
   for (const node of nodes) {
-    const size = getWorkflowNodeSize(toUiWorkflowBuilderNodes([node])[0]!, {
-      showPortColumnHeaders: false,
-    });
+    const size = getWorkflowEditorLayoutNodeSize(node);
     graph.setNode(node.id, {
       width: resolveLayoutDimension(options.nodeWidth, node, size.width, defaultNodeWidth),
       height: resolveLayoutDimension(options.nodeHeight, node, size.height, defaultNodeHeight),
@@ -156,6 +156,21 @@ export function layoutWorkflowEditorDocument<
     changedNodeIds,
     cycles,
   };
+}
+
+function getWorkflowEditorLayoutNodeSize<TNodeData = Record<string, unknown>>(
+  node: WorkflowEditorNode<TNodeData>,
+) {
+  if (node.minimized === true && node.variant !== "compact") {
+    return {
+      width: minimizedNodeWidth,
+      height: minimizedNodeHeight,
+    };
+  }
+
+  return getWorkflowNodeSize(toUiWorkflowBuilderNodes([node])[0]!, {
+    showPortColumnHeaders: false,
+  });
 }
 
 function resolveLayoutDimension<TNodeData = Record<string, unknown>>(
