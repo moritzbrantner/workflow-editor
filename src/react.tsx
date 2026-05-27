@@ -4,7 +4,6 @@ import {
   type DragEvent as ReactDragEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
-  type WheelEvent as ReactWheelEvent,
   useEffect,
   useMemo,
   useRef,
@@ -962,7 +961,7 @@ export function WorkflowWorkbench<
     }, 0);
   };
 
-  const handleCanvasWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
+  const handleCanvasWheel = (event: WheelEvent) => {
     const target = event.target;
     if (target instanceof Element && isWorkflowWorkbenchOverlayInteractionTarget(target)) {
       event.stopPropagation();
@@ -1024,6 +1023,17 @@ export function WorkflowWorkbench<
 
     commitViewportChange(nextViewport);
   };
+
+  useEffect(() => {
+    const container = containerRef.current;
+
+    if (!container) {
+      return;
+    }
+
+    container.addEventListener("wheel", handleCanvasWheel, { capture: true, passive: false });
+    return () => container.removeEventListener("wheel", handleCanvasWheel, { capture: true });
+  });
 
   const completeMarquee = () => {
     const currentMarquee = marqueeRef.current;
@@ -1292,7 +1302,6 @@ export function WorkflowWorkbench<
             }}
             onDragOver={handleTemplateDragOver}
             onDrop={handleTemplateDrop}
-            onWheelCapture={handleCanvasWheel}
           >
             <WorkflowBuilder
               className="flex h-full min-h-0 min-w-0 flex-col [&>[data-slot='workflow-builder-surface']]:flex-1 [&>[data-slot='workflow-builder-surface']]:basis-0"
@@ -1770,7 +1779,7 @@ function normalizeWorkflowEditorViewport(viewport: WorkflowEditorViewport | unde
   };
 }
 
-function getWorkflowEditorWheelDelta(event: ReactWheelEvent<HTMLElement>) {
+function getWorkflowEditorWheelDelta(event: WheelEvent) {
   const multiplier = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 600 : 1;
 
   return {
