@@ -168,6 +168,7 @@ test.describe("WorkflowWorkbench desktop", () => {
     expect(expandedPaletteBox?.width).toBeGreaterThan(300);
 
     await page.getByRole("button", { name: "Minimize node palette", exact: true }).click();
+    await expect(palette).toContainText("Node palette");
     await expect(page.getByRole("button", { name: /Decision/ })).toHaveCount(0);
     const canvasBox = await page.locator('[data-slot="workbench-canvas"]').first().boundingBox();
     const minimizedPaletteBox = await palette.boundingBox();
@@ -175,7 +176,15 @@ test.describe("WorkflowWorkbench desktop", () => {
     expect(canvasBox).not.toBeNull();
     expect(minimizedPaletteBox!.x - canvasBox!.x).toBeLessThan(32);
     expect(minimizedPaletteBox!.y - canvasBox!.y).toBeLessThan(32);
+    expect(minimizedPaletteBox!.width).toBeLessThan(expandedPaletteBox!.width);
     await page.getByRole("button", { name: "Expand node palette", exact: true }).click();
+
+    const paletteSearch = page.getByLabel("Search node palette");
+    await expect(paletteSearch).toBeVisible();
+    await paletteSearch.fill("webhook");
+    await expect(page.getByRole("button", { name: /Webhook/ }).first()).toBeVisible();
+    await expect(page.getByRole("button", { name: /Decision/ })).toHaveCount(0);
+    await paletteSearch.fill("");
     await expect(page.getByRole("button", { name: /Decision/ }).first()).toBeVisible();
 
     await page

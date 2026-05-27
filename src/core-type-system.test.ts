@@ -314,6 +314,25 @@ describe("workflow editor port type assignability", () => {
 });
 
 describe("workflow editor type-aware connections", () => {
+  test("allows number outputs to connect to any inputs", () => {
+    const document = typedDocument(numberType, anyType);
+    const connection = {
+      sourceNodeId: "source",
+      sourcePortId: "out",
+      targetNodeId: "target",
+      targetPortId: "in",
+    };
+
+    expectAssignable(numberType, anyType);
+    expect(validateWorkflowEditorConnection(document, connection)).toEqual({ valid: true });
+    expect(connectWorkflowEditorNodes(document, connection).edges).toEqual([
+      {
+        id: "source:out->target:in",
+        ...connection,
+      },
+    ]);
+  });
+
   test("validates connections with supplied type definitions", () => {
     const typeDefinitions = [
       {

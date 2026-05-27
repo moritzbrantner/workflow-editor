@@ -10,6 +10,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  Input,
   WorkbenchToolbar,
   cn,
 } from "@moritzbrantner/ui";
@@ -612,7 +613,7 @@ export function WorkflowEditor<
                 </div>
 
                 <div className="grid gap-1.5">
-                  <input
+                  <Input
                     aria-label="Document name"
                     className="h-9 rounded-md border border-input bg-background px-2 text-sm"
                     value={nameDraft}
@@ -859,7 +860,7 @@ export function WorkflowEditor<
 
           <WorkbenchToolbar className="flex flex-wrap items-center justify-between gap-3 border border-border bg-background px-3 py-2">
             <div className="flex flex-wrap items-center gap-2">
-              <input
+              <Input
                 aria-label="Document name"
                 className="h-9 min-w-48 rounded-md border border-input bg-background px-2 text-sm"
                 value={nameDraft}

@@ -32,7 +32,9 @@ export default defineConfig({
       ],
     },
     environment: "jsdom",
+    fileParallelism: false,
     globals: true,
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
+    maxConcurrency: 1,
   },
 });

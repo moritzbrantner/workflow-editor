@@ -1,0 +1,669 @@
+import { useState } from "react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { getWorkflowNodeSize } from "@moritzbrantner/ui/labs";
+import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
+
+import {
+  WorkflowWorkbench,
+  connectWorkflowEditorNodes,
+  normalizeWorkflowEditorDocument,
+  toUiWorkflowBuilderNodes,
+  type WorkflowEditorDocument,
+  type WorkflowEditorSelectionState,
+  type WorkflowEditorTypeDefinition,
+} from "@moritzbrantner/workflow-editor";
+
+const document: WorkflowEditorDocument = normalizeWorkflowEditorDocument({
+  nodes: [
+    {
+      id: "input",
+      label: "Input",
+      x: 0,
+      y: 0,
+      outputs: [{ id: "out", label: "Out", type: { kind: "string" } }],
+    },
+    {
+      id: "transform",
+      label: "Transform",
+      x: 240,
+      y: 0,
+      inputs: [{ id: "in", label: "In", type: { kind: "string" } }],
+      outputs: [{ id: "out", label: "Out", type: { kind: "string" } }],
+    },
+    {
+      id: "output",
+      label: "Output",
+      x: 480,
+      y: 0,
+      inputs: [{ id: "in", label: "In", type: { kind: "string" } }],
+    },
+  ],
+  edges: [
+    {
+      id: "input-transform",
+      sourceNodeId: "input",
+      sourcePortId: "out",
+      targetNodeId: "transform",
+      targetPortId: "in",
+    },
+  ],
+});
+
+function StatefulWorkbench({
+  initialDocument = document,
+  initialSelection = { nodeIds: [], edgeIds: [] },
+  readOnly = false,
+  documentReferences,
+}: {
+  initialDocument?: WorkflowEditorDocument;
+  initialSelection?: WorkflowEditorSelectionState;
+  readOnly?: boolean;
+  documentReferences?: Array<{ id: string; name: string }>;
+}) {
+  const [currentDocument, setCurrentDocument] = useState(initialDocument);
+  const [selection, setSelection] = useState(initialSelection);
+
+  return (
+    <>
+      <WorkflowWorkbench
+        document={currentDocument}
+        selectedNodeIds={selection.nodeIds}
+        selectedEdgeIds={selection.edgeIds}
+        readOnly={readOnly}
+        documentReferences={documentReferences}
+        onDocumentChange={setCurrentDocument}
+        onSelectionStateChange={setSelection}
+      />
+      <pre data-testid="stateful-document-json">{JSON.stringify(currentDocument)}</pre>
+      <pre data-testid="stateful-selection-json">{JSON.stringify(selection)}</pre>
+    </>
+  );
+}
+
+function readStatefulDocument() {
+  return JSON.parse(screen.getByTestId("stateful-document-json").textContent ?? "") as
+    | WorkflowEditorDocument
+    | never;
+}
+
+beforeAll(() => {
+  vi.stubGlobal(
+    "ResizeObserver",
+    class ResizeObserver {
+      disconnect() {}
+      observe() {}
+      unobserve() {}
+    },
+  );
+  Element.prototype.scrollIntoView = vi.fn();
+});
+
+afterEach(() => {
+  cleanup();
+});
+
+describe("@moritzbrantner/workflow-editor React workbench", () => {
+  test("hides visible input and output headers in the workflow workbench", () => {
+    render(<WorkflowWorkbench document={document} />);
+
+    expect(screen.queryByText("Inputs")).toBeNull();
+    expect(screen.queryByText("Outputs")).toBeNull();
+  });
+
+  test("renders, selects, changes document state, and respects read-only mode", () => {
+    const handleDocumentChange = vi.fn();
+    const handleSelectionChange = vi.fn();
+    const { rerender } = render(
+      <WorkflowWorkbench
+        document={document}
+        selectedNodeId="input"
+        nodeTemplates={[
+          {
+            id: "decision",
+            label: "Decision",
+            inputs: [{ id: "in", label: "In", type: { kind: "string" } }],
+            outputs: [{ id: "out", label: "Out", type: { kind: "string" } }],
+          },
+        ]}
+        renderNodeTemplate={(template) => template.label}
+        onDocumentChange={handleDocumentChange}
+        onSelectionChange={handleSelectionChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Input" }));
+    expect(handleSelectionChange).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "input", type: "node" }),
+    );
+
+    fireEvent.click(screen.getAllByRole("button", { name: /Decision/ })[0]!);
+    expect(handleDocumentChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        nodes: expect.arrayContaining([expect.objectContaining({ id: "decision" })]),
+      }),
+    );
+
+    handleDocumentChange.mockClear();
+    rerender(
+      <WorkflowWorkbench
+        document={document}
+        selectedNodeId="input"
+        readOnly
+        nodeTemplates={[{ id: "decision", label: "Decision" }]}
+        renderNodeTemplate={(template) => template.label}
+        onDocumentChange={handleDocumentChange}
+      />,
+    );
+    fireEvent.click(screen.getAllByRole("button", { name: /Decision/ })[0]!);
+    expect(handleDocumentChange).not.toHaveBeenCalled();
+  });
+
+  test("supports controlled multi-selection and keyboard selection shortcuts", () => {
+    const handleSelectionStateChange = vi.fn();
+    const handleSelectionChange = vi.fn();
+
+    render(
+      <WorkflowWorkbench
+        document={document}
+        selectedNodeIds={["input", "transform"]}
+        onSelectionChange={handleSelectionChange}
+        onSelectionStateChange={handleSelectionStateChange}
+        renderInspector={(context) => (
+          <div data-testid="selected-node-labels">
+            {context.selectedNodes.map((node) => node.label).join(",")}
+          </div>
+        )}
+      />,
+    );
+
+    expect(screen.getAllByTestId("selected-node-labels")[0]?.textContent).toBe("Input,Transform");
+    expect(screen.getAllByTestId("selection-count")[0]?.textContent).toBe("2 selected");
+
+    fireEvent.keyDown(window, { key: "a", metaKey: true });
+    expect(handleSelectionStateChange).toHaveBeenLastCalledWith({
+      nodeIds: ["input", "transform", "output"],
+      edgeIds: [],
+      primary: { type: "node", id: "input" },
+    });
+    expect(handleSelectionChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: "input", type: "node" }),
+    );
+  });
+
+  test("duplicates and arranges selected nodes from the workbench toolbar", () => {
+    const handleDocumentChange = vi.fn();
+
+    const { rerender } = render(
+      <WorkflowWorkbench
+        document={document}
+        selectedNodeIds={["input", "transform"]}
+        onDocumentChange={handleDocumentChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
+    expect(handleDocumentChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        nodes: expect.arrayContaining([
+          expect.objectContaining({ id: "input-copy" }),
+          expect.objectContaining({ id: "transform-copy" }),
+        ]),
+        edges: expect.arrayContaining([
+          expect.objectContaining({
+            sourceNodeId: "input-copy",
+            targetNodeId: "transform-copy",
+          }),
+        ]),
+      }),
+    );
+
+    handleDocumentChange.mockClear();
+    rerender(
+      <WorkflowWorkbench
+        document={document}
+        selectedNodeIds={["input", "transform"]}
+        onDocumentChange={handleDocumentChange}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Arrange selection" }));
+    expect(handleDocumentChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        nodes: expect.arrayContaining([
+          expect.objectContaining({ id: "input", x: 0 }),
+          expect.objectContaining({ id: "output", x: 480, y: 0 }),
+        ]),
+      }),
+    );
+
+    handleDocumentChange.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Arrange all" }));
+    expect(handleDocumentChange).toHaveBeenCalled();
+  });
+
+  test("snaps dragged nodes to compatible ports even when the edge already exists", () => {
+    const handleDocumentChange = vi.fn();
+    render(<WorkflowWorkbench document={document} onDocumentChange={handleDocumentChange} />);
+
+    const inputWidth = getWorkflowNodeSize(toUiWorkflowBuilderNodes([document.nodes[0]!])[0]!, {
+      showPortColumnHeaders: false,
+    }).width;
+    const transformNode = globalThis.document.querySelector<HTMLElement>(
+      "[data-slot='workflow-builder-node'][data-node-id='transform']",
+    )!;
+    const surface = globalThis.document.querySelector<HTMLElement>(
+      "[data-slot='workflow-builder-surface']",
+    )!;
+
+    fireEvent.mouseDown(transformNode, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(surface, {
+      clientX: inputWidth + 20 - document.nodes[1]!.x,
+      clientY: 0,
+    });
+
+    expect(handleDocumentChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        nodes: expect.arrayContaining([
+          expect.objectContaining({ id: "transform", x: inputWidth, y: 0 }),
+        ]),
+        edges: expect.arrayContaining([
+          expect.objectContaining({
+            id: "input-transform",
+            sourceNodeId: "input",
+            targetNodeId: "transform",
+          }),
+        ]),
+      }),
+    );
+  });
+
+  test("uses type definitions for workbench connection validation", () => {
+    const handleDocumentChange = vi.fn();
+    const typedDocument = normalizeWorkflowEditorDocument({
+      nodes: [
+        {
+          id: "source",
+          label: "Source",
+          x: 0,
+          y: 0,
+          outputs: [{ id: "out", label: "Out", type: { kind: "ref", name: "AdminUser" } }],
+        },
+        {
+          id: "target",
+          label: "Target",
+          x: 240,
+          y: 0,
+          inputs: [{ id: "in", label: "In", type: { kind: "ref", name: "User" } }],
+        },
+      ],
+      edges: [],
+    });
+
+    const typeDefinitions: readonly WorkflowEditorTypeDefinition[] = [
+      {
+        name: "User",
+        type: {
+          kind: "object",
+          properties: {
+            id: { type: { kind: "string" } },
+          },
+        },
+      },
+      {
+        name: "AdminUser",
+        extends: ["User"],
+        type: {
+          kind: "object",
+          properties: {
+            permissions: {
+              type: { kind: "array", element: { kind: "string" } },
+            },
+          },
+        },
+      },
+    ];
+    const connected = connectWorkflowEditorNodes(
+      typedDocument,
+      {
+        sourceNodeId: "source",
+        sourcePortId: "out",
+        targetNodeId: "target",
+        targetPortId: "in",
+      },
+      { typeDefinitions },
+    );
+
+    render(
+      <WorkflowWorkbench
+        document={connected}
+        typeDefinitions={typeDefinitions}
+        onDocumentChange={handleDocumentChange}
+      />,
+    );
+
+    expect(connected).toEqual(
+      expect.objectContaining({
+        edges: [
+          expect.objectContaining({
+            id: "source:out->target:in",
+            sourceNodeId: "source",
+            sourcePortId: "out",
+            targetNodeId: "target",
+            targetPortId: "in",
+          }),
+        ],
+      }),
+    );
+  });
+
+  test("assigns workflow references from the default inspector", () => {
+    const handleDocumentChange = vi.fn();
+    render(
+      <WorkflowWorkbench
+        document={document}
+        selectedNodeId="input"
+        documentReferences={[{ id: "child", name: "Child workflow" }]}
+        onDocumentChange={handleDocumentChange}
+      />,
+    );
+
+    fireEvent.click(screen.getAllByLabelText("Workflow document")[0]!);
+    fireEvent.click(screen.getByRole("option", { name: "Child workflow" }));
+    fireEvent.click(
+      screen
+        .getAllByRole("button", { name: "Apply" })
+        .find((button) => !(button as HTMLButtonElement).disabled)!,
+    );
+
+    expect(handleDocumentChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        nodes: expect.arrayContaining([
+          expect.objectContaining({
+            id: "input",
+            workflowRef: { documentId: "child" },
+          }),
+        ]),
+      }),
+    );
+  });
+
+  test("edits built-in JSON source values from the default inspector", () => {
+    const handleDocumentChange = vi.fn();
+    const sourceDocument = normalizeWorkflowEditorDocument({
+      nodes: [
+        {
+          id: "flag",
+          label: "Flag",
+          kind: "json.boolean",
+          category: "JSON",
+          x: 0,
+          y: 0,
+          outputs: [{ id: "value", label: "Value", type: { kind: "boolean" } }],
+          data: { value: false },
+        },
+      ],
+      edges: [],
+    });
+
+    render(
+      <WorkflowWorkbench
+        document={sourceDocument}
+        selectedNodeId="flag"
+        onDocumentChange={handleDocumentChange}
+      />,
+    );
+
+    fireEvent.click(screen.getAllByLabelText("Value")[0]!);
+    fireEvent.click(screen.getByRole("option", { name: "True" }));
+    fireEvent.click(
+      screen
+        .getAllByRole("button", { name: "Apply" })
+        .find((button) => !(button as HTMLButtonElement).disabled)!,
+    );
+
+    expect(handleDocumentChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        nodes: [
+          expect.objectContaining({
+            id: "flag",
+            data: { value: true },
+          }),
+        ],
+      }),
+    );
+  });
+
+  test("keeps node kind read-only in the default inspector", () => {
+    const handleDocumentChange = vi.fn();
+
+    render(
+      <WorkflowWorkbench
+        document={document}
+        selectedNodeId="input"
+        onDocumentChange={handleDocumentChange}
+      />,
+    );
+
+    const labelField = screen.getAllByLabelText("Label")[0] as HTMLInputElement;
+    const kindField = screen.getAllByLabelText("Kind")[0] as HTMLInputElement;
+
+    expect(kindField.disabled || kindField.readOnly).toBe(true);
+
+    fireEvent.change(labelField, { target: { value: "Source" } });
+    fireEvent.change(kindField, { target: { value: "json.boolean" } });
+    fireEvent.click(
+      screen
+        .getAllByRole("button", { name: "Apply" })
+        .find((button) => !(button as HTMLButtonElement).disabled)!,
+    );
+
+    const nextDocument = handleDocumentChange.mock.calls.at(-1)?.[0] as WorkflowEditorDocument;
+    const inputNode = nextDocument.nodes.find((node) => node.id === "input");
+
+    expect(inputNode?.label).toBe("Source");
+    expect(inputNode?.kind).toBeUndefined();
+  });
+
+  test("edits JSON string and number source values and keeps null read-only", () => {
+    const stringChange = vi.fn();
+    const stringDocument = normalizeWorkflowEditorDocument({
+      nodes: [
+        {
+          id: "title",
+          label: "Title",
+          kind: "json.string",
+          category: "JSON",
+          x: 0,
+          y: 0,
+          outputs: [{ id: "value", label: "Value", type: { kind: "string" } }],
+          data: { value: "draft" },
+        },
+      ],
+      edges: [],
+    });
+
+    const { unmount } = render(
+      <WorkflowWorkbench
+        document={stringDocument}
+        selectedNodeId="title"
+        onDocumentChange={stringChange}
+      />,
+    );
+
+    fireEvent.change(screen.getAllByLabelText("Value")[0]!, { target: { value: "published" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "Apply" })[0]!);
+    expect(stringChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        nodes: [expect.objectContaining({ id: "title", data: { value: "published" } })],
+      }),
+    );
+
+    unmount();
+
+    const numberChange = vi.fn();
+    const numberDocument = normalizeWorkflowEditorDocument({
+      nodes: [
+        {
+          id: "count",
+          label: "Count",
+          kind: "json.number",
+          category: "JSON",
+          x: 0,
+          y: 0,
+          outputs: [{ id: "value", label: "Value", type: { kind: "number" } }],
+          data: { value: 1 },
+        },
+      ],
+      edges: [],
+    });
+
+    const renderedNumber = render(
+      <WorkflowWorkbench
+        document={numberDocument}
+        selectedNodeId="count"
+        onDocumentChange={numberChange}
+      />,
+    );
+
+    fireEvent.change(screen.getAllByLabelText("Value")[0]!, { target: { value: "42" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "Apply" })[0]!);
+    expect(numberChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        nodes: [expect.objectContaining({ id: "count", data: { value: 42 } })],
+      }),
+    );
+
+    renderedNumber.unmount();
+
+    const nullDocument = normalizeWorkflowEditorDocument({
+      nodes: [
+        {
+          id: "nothing",
+          label: "Nothing",
+          kind: "json.null",
+          category: "JSON",
+          x: 0,
+          y: 0,
+          outputs: [{ id: "value", label: "Value", type: { kind: "null" } }],
+          data: { value: null },
+        },
+      ],
+      edges: [],
+    });
+
+    render(<WorkflowWorkbench document={nullDocument} selectedNodeId="nothing" />);
+
+    const nullValue = screen.getAllByLabelText("Value")[0] as HTMLTextAreaElement;
+
+    expect(nullValue.disabled).toBe(true);
+    expect(nullValue.value).toBe("null");
+  });
+
+  test("edits JSON primitive source values from rendered workflow nodes", async () => {
+    const primitiveDocument = normalizeWorkflowEditorDocument({
+      nodes: [
+        {
+          id: "flag",
+          label: "Flag",
+          kind: "json.boolean",
+          category: "JSON",
+          x: 0,
+          y: 0,
+          outputs: [{ id: "value", label: "Value", type: { kind: "boolean" } }],
+          data: { value: false },
+        },
+        {
+          id: "title",
+          label: "Title",
+          kind: "json.string",
+          category: "JSON",
+          x: 360,
+          y: 0,
+          outputs: [{ id: "value", label: "Value", type: { kind: "string" } }],
+          data: { value: "draft" },
+        },
+        {
+          id: "count",
+          label: "Count",
+          kind: "json.number",
+          category: "JSON",
+          x: 720,
+          y: 0,
+          outputs: [{ id: "value", label: "Value", type: { kind: "number" } }],
+          data: { value: 1 },
+        },
+        {
+          id: "nothing",
+          label: "Nothing",
+          kind: "json.null",
+          category: "JSON",
+          x: 1080,
+          y: 0,
+          outputs: [{ id: "value", label: "Value", type: { kind: "null" } }],
+          data: { value: null },
+        },
+      ],
+      edges: [],
+    });
+
+    render(<StatefulWorkbench initialDocument={primitiveDocument} />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Set Flag to true" })).toBeTruthy(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Set Flag to true" }));
+    expect(readStatefulDocument().nodes.find((node) => node.id === "flag")?.data).toEqual({
+      value: true,
+    });
+
+    fireEvent.change(screen.getByLabelText("Title JSON value"), {
+      target: { value: "published" },
+    });
+    expect(readStatefulDocument().nodes.find((node) => node.id === "title")?.data).toEqual({
+      value: "published",
+    });
+
+    fireEvent.change(screen.getByLabelText("Count JSON value"), { target: { value: "42" } });
+    expect(readStatefulDocument().nodes.find((node) => node.id === "count")?.data).toEqual({
+      value: 42,
+    });
+
+    const nullValue = screen.getByLabelText("Nothing JSON value") as HTMLInputElement;
+    expect(nullValue.disabled).toBe(true);
+    expect(nullValue.value).toBe("null");
+  });
+
+  test("indicates JSON primitive source values on workflow nodes", () => {
+    const uiNodes = toUiWorkflowBuilderNodes([
+      {
+        id: "flag",
+        label: "Flag",
+        description: "Create a JSON boolean value.",
+        kind: "json.boolean",
+        category: "JSON",
+        x: 0,
+        y: 0,
+        outputs: [{ id: "value", label: "Value", type: { kind: "boolean" } }],
+        data: { value: true },
+      },
+      {
+        id: "title",
+        label: "Title",
+        kind: "json.string",
+        category: "JSON",
+        x: 0,
+        y: 0,
+        outputs: [{ id: "value", label: "Value", type: { kind: "string" } }],
+        data: { value: "published" },
+      },
+    ]);
+
+    expect(uiNodes[0]?.packageLabel).toBe("true");
+    expect(uiNodes[0]?.minimized).toBe(true);
+    expect(uiNodes[0]?.description).toBeUndefined();
+    expect(uiNodes[0]?.outputs?.[0]?.badge).toBe("true");
+    expect(uiNodes[1]?.packageLabel).toBe('"published"');
+    expect(uiNodes[1]?.minimized).toBe(true);
+    expect(uiNodes[1]?.outputs?.[0]?.badge).toBe('"published"');
+  });
+});

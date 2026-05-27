@@ -12,7 +12,7 @@ import {
 } from "react";
 import { Maximize2Icon, Minimize2Icon } from "lucide-react";
 
-import { Badge, Button, cn } from "@moritzbrantner/ui";
+import { Badge, Button, Input, SearchField, cn } from "@moritzbrantner/ui";
 import {
   InspectorPanel,
   WorkflowBuilder,
@@ -61,6 +61,7 @@ import {
   updateWorkflowEditorObjectConstructorPropertiesInNode,
   updateWorkflowEditorNodeWorkflowReference,
   validateWorkflowEditorConnection,
+  type WorkflowEditorConnectionInput,
   type WorkflowEditorDocument,
   type WorkflowEditorEdge,
   type WorkflowEditorNode,
@@ -229,6 +230,44 @@ function getWorkflowWorkbenchPaletteCategoryPath<TData>(
   return categorySegments.length > 0 ? categorySegments : [category];
 }
 
+function getWorkflowWorkbenchPaletteTemplateSearchText<TData>(
+  template: WorkflowWorkbenchPaletteItem<TData>,
+) {
+  const searchableValues = [
+    template.id,
+    template.label,
+    template.description,
+    template.kind,
+    template.category,
+    ...getWorkflowWorkbenchPaletteCategoryPath(template),
+  ];
+
+  return searchableValues
+    .flatMap((value) => (typeof value === "string" ? [value] : []))
+    .join("\n")
+    .toLowerCase();
+}
+
+type WorkflowWorkbenchConnectionCoordinates = Pick<
+  WorkflowEditorConnectionInput,
+  "sourceNodeId" | "sourcePortId" | "targetNodeId" | "targetPortId"
+>;
+
+function toWorkflowWorkbenchConnectionInput(
+  connection: WorkflowWorkbenchConnectionCoordinates,
+): WorkflowEditorConnectionInput {
+  return {
+    sourceNodeId: connection.sourceNodeId,
+    sourcePortId: connection.sourcePortId,
+    targetNodeId: connection.targetNodeId,
+    targetPortId: connection.targetPortId,
+  };
+}
+
+function getWorkflowWorkbenchConnectionKey(connection: WorkflowWorkbenchConnectionCoordinates) {
+  return `${connection.sourceNodeId}:${connection.sourcePortId}->${connection.targetNodeId}:${connection.targetPortId}`;
+}
+
 export function WorkflowWorkbench<
   TNodeData extends Record<string, unknown> = Record<string, unknown>,
   TEdgeData extends Record<string, unknown> = Record<string, unknown>,
@@ -260,6 +299,7 @@ export function WorkflowWorkbench<
 }: WorkflowWorkbenchProps<TNodeData, TEdgeData, TTemplateData>) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const connectionInProgressRef = useRef(false);
+  const uiCreatedConnectionCommitKeyRef = useRef<string | null>(null);
   const ignoreSelectionClearUntilRef = useRef(0);
   const marqueeRef = useRef<WorkflowSelectionMarquee | null>(null);
   const canvasPanRef = useRef<WorkflowCanvasPanState | null>(null);
@@ -275,6 +315,7 @@ export function WorkflowWorkbench<
   const [narrowOverlayLayout, setNarrowOverlayLayout] = useState(false);
   const [marquee, setMarquee] = useState<WorkflowSelectionMarquee | null>(null);
   const [paletteMinimized, setPaletteMinimized] = useState(false);
+  const [paletteSearchValue, setPaletteSearchValue] = useState("");
   const [builderSurfaceLayout, setBuilderSurfaceLayout] =
     useState<WorkflowBuilderSurfaceLayout | null>(null);
   const documentContext = useMemo(() => createWorkflowEditorDocumentContext(document), [document]);
@@ -355,13 +396,54 @@ export function WorkflowWorkbench<
     () => toUiWorkflowBuilderEdges(document.edges, document.nodes),
     [document.edges, document.nodes],
   );
+  const filteredNodeTemplates = useMemo(() => {
+    const query = paletteSearchValue.trim().toLowerCase();
+
+    if (!query) {
+      return nodeTemplates;
+    }
+
+    return nodeTemplates.filter((template) =>
+      getWorkflowWorkbenchPaletteTemplateSearchText(template).includes(query),
+    );
+  }, [nodeTemplates, paletteSearchValue]);
   const paletteGroups = useMemo(
-    () => createWorkflowWorkbenchPaletteCategoryGroups(nodeTemplates),
-    [nodeTemplates],
+    () => createWorkflowWorkbenchPaletteCategoryGroups(filteredNodeTemplates),
+    [filteredNodeTemplates],
   );
 
   const commitDocument = (nextDocument: WorkflowEditorDocument<TNodeData, TEdgeData>) => {
     onDocumentChange?.(nextDocument);
+  };
+
+  const commitWorkflowEditorConnection = (
+    connectionCoordinates: WorkflowWorkbenchConnectionCoordinates,
+    options: { fromUiCreatedEdge?: boolean } = {},
+  ) => {
+    const connection = toWorkflowWorkbenchConnectionInput(connectionCoordinates);
+    const connectionKey = getWorkflowWorkbenchConnectionKey(connection);
+
+    if (!options.fromUiCreatedEdge && uiCreatedConnectionCommitKeyRef.current === connectionKey) {
+      uiCreatedConnectionCommitKeyRef.current = null;
+      return;
+    }
+
+    const nextDocument = connectWorkflowEditorNodes(document, connection, { typeDefinitions });
+
+    if (nextDocument === document) {
+      return;
+    }
+
+    if (options.fromUiCreatedEdge) {
+      uiCreatedConnectionCommitKeyRef.current = connectionKey;
+      window.setTimeout(() => {
+        if (uiCreatedConnectionCommitKeyRef.current === connectionKey) {
+          uiCreatedConnectionCommitKeyRef.current = null;
+        }
+      }, 0);
+    }
+
+    commitDocument(nextDocument);
   };
 
   const commitViewportChange = (viewport: WorkflowEditorViewport) => {
@@ -1465,11 +1547,12 @@ export function WorkflowWorkbench<
               }}
               onEdgesChange={(edges) => {
                 if (!readOnly) {
-                  const hasUiCreatedEdge = edges.some(
+                  const uiCreatedEdge = edges.find(
                     (edge) => !document.edges.some((currentEdge) => currentEdge.id === edge.id),
                   );
 
-                  if (hasUiCreatedEdge) {
+                  if (uiCreatedEdge) {
+                    commitWorkflowEditorConnection(uiCreatedEdge, { fromUiCreatedEdge: true });
                     return;
                   }
 
@@ -1492,9 +1575,11 @@ export function WorkflowWorkbench<
                 connectionInProgressRef.current = false;
               }}
               isConnectionValid={(connection) => {
-                const validity = validateWorkflowEditorConnection(document, connection, {
-                  typeDefinitions,
-                });
+                const validity = validateWorkflowEditorConnection(
+                  document,
+                  toWorkflowWorkbenchConnectionInput(connection),
+                  { typeDefinitions },
+                );
 
                 return {
                   valid: validity.valid,
@@ -1504,9 +1589,7 @@ export function WorkflowWorkbench<
               onConnectionComplete={(connection) => {
                 connectionInProgressRef.current = false;
                 if (!readOnly) {
-                  commitDocument(
-                    connectWorkflowEditorNodes(document, connection, { typeDefinitions }),
-                  );
+                  commitWorkflowEditorConnection(connection);
                 }
               }}
               onDoubleClick={() => {
@@ -1534,16 +1617,14 @@ export function WorkflowWorkbench<
               onMouseDownCapture={preserveOverlaySelection}
               onPointerDownCapture={preserveOverlaySelection}
               className={cn(
-                "absolute left-3 z-30 flex max-h-[calc(100%-5rem)] max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-md border border-border/70 bg-card/95 text-sm shadow-md supports-backdrop-filter:backdrop-blur-xl",
-                paletteMinimized ? "w-16 p-2" : "w-96 p-3",
+                "absolute left-3 z-[20000] flex max-h-[calc(100%-5rem)] max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-md border border-border/70 bg-card/95 text-sm shadow-md supports-backdrop-filter:backdrop-blur-xl",
+                paletteMinimized ? "w-44 p-2" : "w-96 p-3",
               )}
               style={paletteOverlayPosition}
             >
               <div className="flex min-h-0 flex-col gap-3">
                 <div className="flex flex-none items-center justify-between gap-3">
-                  {paletteMinimized ? null : (
-                    <div className="text-sm font-medium">Node palette</div>
-                  )}
+                  <div className="min-w-0 truncate text-sm font-medium">Node palette</div>
                   <div className="flex items-center gap-2">
                     <Button
                       type="button"
@@ -1564,17 +1645,30 @@ export function WorkflowWorkbench<
                   </div>
                 </div>
                 {paletteMinimized ? null : (
-                  <div className="min-h-0 overflow-y-auto pr-1">
-                    {nodeTemplates.length > 0 ? (
-                      <div className="grid gap-3">
-                        {paletteGroups.map((group) => renderPaletteCategoryGroup(group))}
-                      </div>
-                    ) : (
-                      <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
-                        No node templates
-                      </div>
-                    )}
-                  </div>
+                  <>
+                    <SearchField
+                      value={paletteSearchValue}
+                      onValueChange={setPaletteSearchValue}
+                      placeholder="Search nodes"
+                      clearLabel="Clear node search"
+                      inputProps={{ "aria-label": "Search node palette" }}
+                    />
+                    <div className="min-h-0 overflow-y-auto pr-1">
+                      {filteredNodeTemplates.length > 0 ? (
+                        <div className="grid gap-3">
+                          {paletteGroups.map((group) => renderPaletteCategoryGroup(group))}
+                        </div>
+                      ) : nodeTemplates.length > 0 ? (
+                        <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+                          No matching node templates
+                        </div>
+                      ) : (
+                        <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+                          No node templates
+                        </div>
+                      )}
+                    </div>
+                  </>
                 )}
               </div>
             </div>
@@ -1585,7 +1679,7 @@ export function WorkflowWorkbench<
               onMouseDownCapture={preserveOverlaySelection}
               onPointerDownCapture={preserveOverlaySelection}
               className={cn(
-                "absolute right-3 z-30 max-h-[calc(100%-5rem)] overflow-auto rounded-md border border-border/70 bg-card/95 text-sm shadow-md supports-backdrop-filter:backdrop-blur-xl",
+                "absolute right-3 z-[20000] max-h-[calc(100%-5rem)] overflow-auto rounded-md border border-border/70 bg-card/95 text-sm shadow-md supports-backdrop-filter:backdrop-blur-xl",
                 inspectorCollapsed ? "w-16 p-2" : "w-[min(20rem,calc(100%-1.5rem))] p-3",
               )}
               style={{ top: "4rem" }}
@@ -2081,7 +2175,7 @@ function WorkflowJsonPrimitiveNodeValueControl<TNodeData extends Record<string, 
           onMouseDownCapture={stopInteractionPropagation}
           onClick={stopInteractionPropagation}
         >
-          <input
+          <Input
             aria-label={label}
             className={controlClassName}
             disabled={readOnly}
@@ -2098,7 +2192,7 @@ function WorkflowJsonPrimitiveNodeValueControl<TNodeData extends Record<string, 
           onMouseDownCapture={stopInteractionPropagation}
           onClick={stopInteractionPropagation}
         >
-          <input
+          <Input
             aria-label={label}
             className={controlClassName}
             disabled={readOnly}
@@ -2159,7 +2253,7 @@ function WorkflowJsonPrimitiveNodeValueControl<TNodeData extends Record<string, 
           onMouseDownCapture={stopInteractionPropagation}
           onClick={stopInteractionPropagation}
         >
-          <input aria-label={label} className={controlClassName} disabled value="null" readOnly />
+          <Input aria-label={label} className={controlClassName} disabled value="null" readOnly />
         </div>
       );
     default:
@@ -2780,7 +2874,7 @@ function createWorkflowEditorRemovableInspectorField({
     placeholder,
     render: (value, onChange) => (
       <div className="flex items-center gap-2">
-        <input
+        <Input
           aria-label={label}
           className={cn(
             "h-8 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-sm",

@@ -1828,16 +1828,16 @@ export function validateWorkflowEditorConnection<
   }
 
   const uiConnection = {
+    ...connection,
     nodes: toUiWorkflowBuilderStructuralNodes(document.nodes),
     edges: toUiWorkflowBuilderEdges(document.edges),
-    ...connection,
   };
   const structuralValidity = getWorkflowBuilderConnectionValidity({
     ...uiConnection,
     edges: [],
   });
 
-  if (!structuralValidity.valid) {
+  if (!structuralValidity.valid && !isWorkflowEditorUiTypeMismatch(structuralValidity.reason)) {
     return structuralValidity;
   }
 
@@ -1861,7 +1861,7 @@ export function validateWorkflowEditorConnection<
     ? ({ valid: true } as const)
     : getWorkflowBuilderConnectionValidity(uiConnection);
 
-  if (!baseValidity.valid) {
+  if (!baseValidity.valid && !isWorkflowEditorUiTypeMismatch(baseValidity.reason)) {
     return baseValidity;
   }
 
@@ -1870,6 +1870,10 @@ export function validateWorkflowEditorConnection<
   }
 
   return { valid: true };
+}
+
+function isWorkflowEditorUiTypeMismatch(reason: WorkflowEditorConnectionInvalidReason | undefined) {
+  return reason === "kind-mismatch" || reason === "type-mismatch";
 }
 
 export function connectWorkflowEditorNodes<
