@@ -116,6 +116,36 @@ test.describe("WorkflowWorkbench desktop", () => {
     );
   });
 
+  test("minimizes the node palette and adds template nodes by dragging", async ({ page }) => {
+    await page.goto("/");
+
+    await page.getByRole("button", { name: "Minimize node palette", exact: true }).click();
+    await expect(page.getByRole("button", { name: /Decision/ })).toHaveCount(0);
+    await page.getByRole("button", { name: "Expand node palette", exact: true }).click();
+    await expect(page.getByRole("button", { name: /Decision/ }).first()).toBeVisible();
+
+    await page
+      .getByRole("button", { name: /Decision/ })
+      .first()
+      .dragTo(page.locator('[data-slot="workflow-builder-viewport"]:visible').first(), {
+        targetPosition: { x: 500, y: 260 },
+      });
+
+    await expect(page.getByTestId("node-count")).toHaveText("4");
+    await expect(page.getByTestId("selection-json")).toContainText('"id":"decision"');
+
+    const document = await readDocument(page);
+    const decision = document.nodes.find((node) => node.id === "decision");
+    expect(decision).toEqual(
+      expect.objectContaining({
+        label: "Decision",
+        x: expect.any(Number),
+        y: expect.any(Number),
+      }),
+    );
+    expect(decision?.x).toBeGreaterThan(300);
+  });
+
   test("selects, duplicates, edits, and deletes nodes", async ({ page }) => {
     await page.goto("/");
     await selectNode(page, "Input");
@@ -329,6 +359,42 @@ test.describe("WorkflowWorkbench desktop", () => {
     expect(document.edges).toContainEqual(
       expect.objectContaining({
         id: "input:out->output:in",
+        sourceNodeId: "input",
+        sourcePortId: "out",
+        targetNodeId: "output",
+        targetPortId: "in",
+      }),
+    );
+  });
+
+  test("snaps compatible ports together while dragging nodes", async ({ page }) => {
+    await page.goto("/");
+
+    const inputBox = await page
+      .locator('[data-slot="workflow-builder-node"][data-node-id="input"]:visible')
+      .first()
+      .boundingBox();
+    const outputBox = await page
+      .locator('[data-slot="workflow-builder-node"][data-node-id="output"]:visible')
+      .first()
+      .boundingBox();
+    expect(inputBox).not.toBeNull();
+    expect(outputBox).not.toBeNull();
+
+    const targetLeft = inputBox!.x + inputBox!.width + 20;
+    await page.mouse.move(outputBox!.x + outputBox!.width / 2, outputBox!.y + 24);
+    await page.mouse.down();
+    await page.mouse.move(targetLeft + outputBox!.width / 2, inputBox!.y + 24, { steps: 8 });
+    await page.mouse.up();
+
+    await expect(page.getByTestId("edge-count")).toHaveText("2");
+    await expect(page.getByTestId("summary-json")).toContainText("input:out->output:in");
+
+    const document = await readDocument(page);
+    const output = document.nodes.find((node) => node.id === "output");
+    expect(output).toEqual(expect.objectContaining({ x: 248, y: 0 }));
+    expect(document.edges).toContainEqual(
+      expect.objectContaining({
         sourceNodeId: "input",
         sourcePortId: "out",
         targetNodeId: "output",

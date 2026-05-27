@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  type DragEvent as ReactDragEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
   useEffect,
@@ -22,6 +23,7 @@ import {
   InspectorPanel,
   WorkflowBuilder,
   WorkflowNode,
+  getWorkflowNodePortCenterOffset,
   getWorkflowNodeSize,
   type WorkflowBuilderConnectionValidity,
   type WorkflowBuilderSelection,
@@ -76,6 +78,9 @@ const emptyWorkflowEditorSelection: WorkflowEditorSelectionState = {
   nodeIds: [],
   edgeIds: [],
 };
+
+const workflowEditorPaletteDragType = "application/x-workflow-editor-node-template";
+const workflowEditorSnapDistance = 28;
 
 let workflowEditorMemoryClipboard: string | null = null;
 
@@ -181,11 +186,16 @@ export function WorkflowWorkbench<
   const containerRef = useRef<HTMLDivElement | null>(null);
   const connectionInProgressRef = useRef(false);
   const marqueeRef = useRef<WorkflowSelectionMarquee | null>(null);
+  const pendingNodeSnapRef = useRef<{
+    document: WorkflowEditorDocument<TNodeData, TEdgeData>;
+    nodeIds: Set<string>;
+  } | null>(null);
   const pointerModifierRef = useRef({ additive: false });
   const [internalSelection, setInternalSelection] = useState<WorkflowEditorSelectionState>(
     emptyWorkflowEditorSelection,
   );
   const [marquee, setMarquee] = useState<WorkflowSelectionMarquee | null>(null);
+  const [paletteMinimized, setPaletteMinimized] = useState(false);
   const documentContext = useMemo(() => createWorkflowEditorDocumentContext(document), [document]);
   const externalSelectionProvided =
     selectedNodeIds !== undefined ||
@@ -361,11 +371,10 @@ export function WorkflowWorkbench<
     updateSelectedNodeWorkflowReference,
   } satisfies WorkflowWorkbenchInspectorContext<TNodeData, TEdgeData>;
 
-  const addTemplateNode = (template: WorkflowWorkbenchPaletteItem<TTemplateData>) => {
-    if (readOnly) {
-      return;
-    }
-
+  const createTemplateNode = (
+    template: WorkflowWorkbenchPaletteItem<TTemplateData>,
+    position?: WorkflowEditorPoint,
+  ) => {
     const id = createTemplateNodeId(document.nodes, template.id);
     const node: WorkflowEditorNode<TNodeData> = {
       id,
@@ -380,8 +389,8 @@ export function WorkflowWorkbench<
       variant: template.variant,
       minimized: template.minimized,
       tags: template.tags,
-      x: 120 + document.nodes.length * 36,
-      y: 120 + document.nodes.length * 28,
+      x: position?.x ?? 120 + document.nodes.length * 36,
+      y: position?.y ?? 120 + document.nodes.length * 28,
       inputs: template.inputs,
       outputs: template.outputs,
       data: template.data as TNodeData | undefined,
@@ -389,12 +398,101 @@ export function WorkflowWorkbench<
       composition: template.composition as WorkflowEditorNode<TNodeData>["composition"],
     };
 
+    if (position) {
+      const size = getWorkflowNodeSize(node);
+      node.x = Math.round(position.x - size.width / 2);
+      node.y = Math.round(position.y - size.height / 2);
+    }
+
+    return { id, node };
+  };
+
+  const addTemplateNode = (
+    template: WorkflowWorkbenchPaletteItem<TTemplateData>,
+    position?: WorkflowEditorPoint,
+  ) => {
+    if (readOnly) {
+      return;
+    }
+
+    const { id, node } = createTemplateNode(template, position);
     const nextDocument = {
       ...document,
       nodes: [...document.nodes, node],
     };
     commitDocument(nextDocument);
     emitSelectionState({ nodeIds: [id], edgeIds: [], primary: { type: "node", id } }, nextDocument);
+  };
+
+  const startTemplateDrag = (
+    event: ReactDragEvent<HTMLElement>,
+    template: WorkflowWorkbenchPaletteItem<TTemplateData>,
+  ) => {
+    if (readOnly) {
+      event.preventDefault();
+      return;
+    }
+
+    event.dataTransfer.effectAllowed = "copy";
+    event.dataTransfer.setData(workflowEditorPaletteDragType, template.id);
+    event.dataTransfer.setData("text/plain", template.label);
+  };
+
+  const templateFromDragEvent = (event: ReactDragEvent<HTMLElement>) => {
+    const templateId = event.dataTransfer.getData(workflowEditorPaletteDragType);
+    return templateId ? nodeTemplates.find((template) => template.id === templateId) : undefined;
+  };
+
+  const handleTemplateDragOver = (event: ReactDragEvent<HTMLDivElement>) => {
+    if (!readOnly && Array.from(event.dataTransfer.types).includes(workflowEditorPaletteDragType)) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+    }
+  };
+
+  const handleTemplateDrop = (event: ReactDragEvent<HTMLDivElement>) => {
+    const template = templateFromDragEvent(event);
+    const position = getWorkflowEditorPointFromClient(
+      containerRef.current,
+      event.clientX,
+      event.clientY,
+      document.viewport?.zoom ?? 1,
+    );
+
+    if (!template || !position) {
+      return;
+    }
+
+    event.preventDefault();
+    addTemplateNode(template, position);
+  };
+
+  const completePendingNodeSnap = () => {
+    const pendingSnap = pendingNodeSnapRef.current;
+
+    if (!pendingSnap) {
+      return;
+    }
+
+    pendingNodeSnapRef.current = null;
+    let nextDocument = pendingSnap.document;
+    let changed = false;
+
+    for (const nodeId of pendingSnap.nodeIds) {
+      const snappedDocument = snapWorkflowEditorNodeToCompatiblePort(nextDocument, nodeId, {
+        typeDefinitions,
+      });
+
+      if (snappedDocument !== nextDocument) {
+        changed = true;
+      }
+
+      nextDocument = snappedDocument;
+    }
+
+    if (changed) {
+      commitDocument(nextDocument);
+    }
   };
 
   const deleteSelection = () => {
@@ -682,13 +780,31 @@ export function WorkflowWorkbench<
     <WorkbenchLayout
       className={cn("min-h-[38rem] overflow-hidden border border-border bg-background", className)}
       leftPanel={
-        <WorkbenchPanel side="left" className="min-w-64">
+        <WorkbenchPanel side="left" className={cn(paletteMinimized ? "min-w-16" : "min-w-64")}>
           <div className="grid gap-3 p-3">
             <div className="flex items-center justify-between gap-3">
-              <div className="text-sm font-medium">Node palette</div>
-              <Badge variant="secondary">{nodeTemplates.length}</Badge>
+              {paletteMinimized ? null : <div className="text-sm font-medium">Node palette</div>}
+              <div className="flex items-center gap-2">
+                {paletteMinimized ? null : (
+                  <Badge variant="secondary">{nodeTemplates.length}</Badge>
+                )}
+                <Button
+                  type="button"
+                  size="icon-sm"
+                  variant="ghost"
+                  aria-label={paletteMinimized ? "Expand node palette" : "Minimize node palette"}
+                  aria-pressed={paletteMinimized}
+                  onClick={() => setPaletteMinimized((current) => !current)}
+                >
+                  {paletteMinimized ? "+" : "-"}
+                </Button>
+              </div>
             </div>
-            {renderNodeTemplate ? (
+            {paletteMinimized ? (
+              <Badge variant="secondary" className="justify-center">
+                {nodeTemplates.length}
+              </Badge>
+            ) : renderNodeTemplate ? (
               <div className="grid gap-2">
                 {nodeTemplates.map((template) => (
                   <Button
@@ -697,6 +813,8 @@ export function WorkflowWorkbench<
                     variant="ghost"
                     className="h-auto justify-start border border-border bg-background px-3 py-2 text-left"
                     disabled={readOnly}
+                    draggable={!readOnly}
+                    onDragStart={(event) => startTemplateDrag(event, template)}
                     onClick={() => addTemplateNode(template)}
                   >
                     {renderNodeTemplate(template)}
@@ -717,6 +835,8 @@ export function WorkflowWorkbench<
                         "cursor-pointer transition-colors hover:border-primary/60",
                         readOnly && "cursor-not-allowed opacity-60",
                       )}
+                      draggable={!readOnly}
+                      onDragStart={(event) => startTemplateDrag(event, template)}
                       onNodeSelect={readOnly ? undefined : () => addTemplateNode(template)}
                     />
                   ))
@@ -860,11 +980,17 @@ export function WorkflowWorkbench<
           onPointerDownCapture={startMarquee}
           onPointerUpCapture={clearPendingConnectionAfterTargetClick}
           onPointerMove={updateMarquee}
-          onPointerUp={completeMarquee}
+          onPointerUp={() => {
+            completeMarquee();
+            completePendingNodeSnap();
+          }}
           onPointerCancel={() => {
             marqueeRef.current = null;
+            pendingNodeSnapRef.current = null;
             setMarquee(null);
           }}
+          onDragOver={handleTemplateDragOver}
+          onDrop={handleTemplateDrop}
         >
           <WorkflowBuilder
             nodes={uiNodes}
@@ -879,15 +1005,35 @@ export function WorkflowWorkbench<
             onNodesChange={(nodes) => {
               if (!readOnly) {
                 const nodeIds = new Set(nodes.map((node) => node.id));
-                commitDocument(
-                  normalizeWorkflowEditorDocument({
-                    ...document,
-                    nodes: fromUiWorkflowBuilderNodes(nodes, document.nodes),
-                    edges: document.edges.filter(
-                      (edge) => nodeIds.has(edge.sourceNodeId) && nodeIds.has(edge.targetNodeId),
-                    ),
-                  }),
-                );
+                const movedNodeIds = nodes
+                  .filter((node) => {
+                    const currentNode = documentContext.nodeById.get(node.id);
+                    return currentNode && (currentNode.x !== node.x || currentNode.y !== node.y);
+                  })
+                  .map((node) => node.id);
+                const nextDocument = normalizeWorkflowEditorDocument({
+                  ...document,
+                  nodes: fromUiWorkflowBuilderNodes(nodes, document.nodes),
+                  edges: document.edges.filter(
+                    (edge) => nodeIds.has(edge.sourceNodeId) && nodeIds.has(edge.targetNodeId),
+                  ),
+                });
+
+                if (movedNodeIds.length > 0) {
+                  const pendingSnap = pendingNodeSnapRef.current ?? {
+                    document: nextDocument,
+                    nodeIds: new Set<string>(),
+                  };
+                  pendingSnap.document = nextDocument;
+
+                  for (const nodeId of movedNodeIds) {
+                    pendingSnap.nodeIds.add(nodeId);
+                  }
+
+                  pendingNodeSnapRef.current = pendingSnap;
+                }
+
+                commitDocument(nextDocument);
               }
             }}
             onEdgesChange={(edges) => {
@@ -959,6 +1105,166 @@ type WorkflowSelectionMarquee = {
   currentX: number;
   currentY: number;
 };
+
+type WorkflowEditorPoint = {
+  x: number;
+  y: number;
+};
+
+function snapWorkflowEditorNodeToCompatiblePort<
+  TNodeData extends Record<string, unknown>,
+  TEdgeData extends Record<string, unknown>,
+>(
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>,
+  nodeId: string,
+  options: { typeDefinitions?: readonly WorkflowEditorTypeDefinition[] } = {},
+) {
+  const movedNode = document.nodes.find((node) => node.id === nodeId);
+
+  if (!movedNode) {
+    return document;
+  }
+
+  let bestCandidate:
+    | {
+        connection: {
+          sourceNodeId: string;
+          sourcePortId: string;
+          targetNodeId: string;
+          targetPortId: string;
+        };
+        distance: number;
+        dx: number;
+        dy: number;
+      }
+    | undefined;
+
+  const addCandidate = (
+    connection: {
+      sourceNodeId: string;
+      sourcePortId: string;
+      targetNodeId: string;
+      targetPortId: string;
+    },
+    movedPortCenter: WorkflowEditorPoint | null,
+    otherPortCenter: WorkflowEditorPoint | null,
+  ) => {
+    if (!movedPortCenter || !otherPortCenter) {
+      return;
+    }
+
+    const dx = otherPortCenter.x - movedPortCenter.x;
+    const dy = otherPortCenter.y - movedPortCenter.y;
+    const distance = Math.hypot(dx, dy);
+
+    if (distance > workflowEditorSnapDistance) {
+      return;
+    }
+
+    const validity = validateWorkflowEditorConnection(document, connection, options);
+
+    if (!validity.valid || (bestCandidate && bestCandidate.distance <= distance)) {
+      return;
+    }
+
+    bestCandidate = { connection, distance, dx, dy };
+  };
+
+  for (const node of document.nodes) {
+    if (node.id === movedNode.id) {
+      continue;
+    }
+
+    for (const output of movedNode.outputs ?? []) {
+      for (const input of node.inputs ?? []) {
+        addCandidate(
+          {
+            sourceNodeId: movedNode.id,
+            sourcePortId: output.id,
+            targetNodeId: node.id,
+            targetPortId: input.id,
+          },
+          getWorkflowEditorPortCenter(movedNode, "output", output.id),
+          getWorkflowEditorPortCenter(node, "input", input.id),
+        );
+      }
+    }
+
+    for (const input of movedNode.inputs ?? []) {
+      for (const output of node.outputs ?? []) {
+        addCandidate(
+          {
+            sourceNodeId: node.id,
+            sourcePortId: output.id,
+            targetNodeId: movedNode.id,
+            targetPortId: input.id,
+          },
+          getWorkflowEditorPortCenter(movedNode, "input", input.id),
+          getWorkflowEditorPortCenter(node, "output", output.id),
+        );
+      }
+    }
+  }
+
+  if (!bestCandidate) {
+    return document;
+  }
+
+  const snapCandidate = bestCandidate;
+  const snappedDocument = {
+    ...document,
+    nodes: document.nodes.map((node) =>
+      node.id === movedNode.id
+        ? {
+            ...node,
+            x: Math.round(node.x + snapCandidate.dx),
+            y: Math.round(node.y + snapCandidate.dy),
+          }
+        : node,
+    ),
+  };
+
+  return connectWorkflowEditorNodes(snappedDocument, snapCandidate.connection, options);
+}
+
+function getWorkflowEditorPortCenter<TNodeData extends Record<string, unknown>>(
+  node: WorkflowEditorNode<TNodeData>,
+  direction: "input" | "output",
+  portId: string,
+): WorkflowEditorPoint | null {
+  const ports = direction === "input" ? (node.inputs ?? []) : (node.outputs ?? []);
+  const portIndex = ports.findIndex((port) => port.id === portId);
+
+  if (portIndex === -1) {
+    return null;
+  }
+
+  const size = getWorkflowNodeSize(node);
+
+  return {
+    x: node.x + (direction === "input" ? 0 : size.width),
+    y: node.y + getWorkflowNodePortCenterOffset(node, portIndex),
+  };
+}
+
+function getWorkflowEditorPointFromClient(
+  container: HTMLDivElement | null,
+  clientX: number,
+  clientY: number,
+  zoom: number,
+): WorkflowEditorPoint | null {
+  const viewport = container?.querySelector<HTMLElement>("[data-slot='workflow-builder-viewport']");
+  const rect = viewport?.getBoundingClientRect();
+
+  if (!rect || zoom <= 0) {
+    return null;
+  }
+
+  return {
+    x: (clientX - rect.left) / zoom,
+    y: (clientY - rect.top) / zoom,
+  };
+}
 
 function WorkflowSelectionOverlay<
   TNodeData extends Record<string, unknown>,
