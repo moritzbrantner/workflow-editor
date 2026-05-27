@@ -18,6 +18,7 @@ import {
   connectWorkflowEditorNodes,
   createLocalStorageWorkflowEditorStorage,
   createWorkflowEditorComposedNode,
+  createWorkflowEditorDocumentContext,
   createWorkflowEditorEntry,
   createWorkflowEditorGraphIndex,
   createWorkflowEditorHistory,
@@ -466,8 +467,11 @@ describe("@moritzbrantner/workflow-editor core", () => {
     const moved = moveWorkflowEditorNode(added, "review", { x: 400, y: 160 });
     const updated = updateWorkflowEditorNode(moved, "review", { label: "Human review" });
     const duplicated = duplicateWorkflowEditorNode(updated, "review");
+    const documentContext = createWorkflowEditorDocumentContext(duplicated);
     const graphIndex = createWorkflowEditorGraphIndex(duplicated);
 
+    expect(documentContext.nodeById.get("review")?.label).toBe("Human review");
+    expect(documentContext.edgeById.get("input-transform")?.sourceNodeId).toBe("input");
     expect(graphIndex.getNodeById("review")?.label).toBe("Human review");
     expect(duplicated.nodes.some((node) => node.id === "review-copy")).toBe(true);
     expect(

@@ -25,11 +25,10 @@ import {
   addWorkflowEditorObjectDecompositionOutputToNode,
   addWorkflowEditorObjectConstructorInputToNode,
   connectWorkflowEditorNodes,
+  createWorkflowEditorDocumentContext,
   createWorkflowEditorGraphIndex,
   defaultWorkflowEditorNodeTemplates,
   duplicateWorkflowEditorNode,
-  findWorkflowEditorEdge,
-  findWorkflowEditorNode,
   formatWorkflowEditorObjectDecompositionExpression,
   formatWorkflowEditorObjectConstructorExpression,
   fromUiWorkflowBuilderEdges,
@@ -142,13 +141,12 @@ export function WorkflowWorkbench<
   renderInspector,
   renderToolbarActions,
 }: WorkflowWorkbenchProps<TNodeData, TEdgeData, TTemplateData>) {
-  const selectedNode = selectedNodeId
-    ? findWorkflowEditorNode(document, selectedNodeId)
-    : undefined;
-  const selectedEdge = selectedEdgeId
-    ? findWorkflowEditorEdge(document, selectedEdgeId)
-    : undefined;
+  const documentContext = useMemo(() => createWorkflowEditorDocumentContext(document), [document]);
+  const selectedNode = selectedNodeId ? documentContext.nodeById.get(selectedNodeId) : undefined;
+  const selectedEdge = selectedEdgeId ? documentContext.edgeById.get(selectedEdgeId) : undefined;
   const graphIndex = useMemo(() => createWorkflowEditorGraphIndex(document), [document]);
+  const uiNodes = useMemo(() => toUiWorkflowBuilderNodes(document.nodes), [document.nodes]);
+  const uiEdges = useMemo(() => toUiWorkflowBuilderEdges(document.edges), [document.edges]);
 
   const commitDocument = (nextDocument: WorkflowEditorDocument<TNodeData, TEdgeData>) => {
     onDocumentChange?.(nextDocument);
@@ -414,8 +412,8 @@ export function WorkflowWorkbench<
     >
       <WorkbenchCanvas className="overflow-hidden p-3">
         <WorkflowBuilder
-          nodes={toUiWorkflowBuilderNodes(document.nodes)}
-          edges={toUiWorkflowBuilderEdges(document.edges)}
+          nodes={uiNodes}
+          edges={uiEdges}
           selectedNodeId={selectedNodeId}
           selectedEdgeId={selectedEdgeId}
           readOnly={readOnly}
@@ -462,12 +460,12 @@ export function WorkflowWorkbench<
             }
 
             if (selection.type === "node") {
-              const node = findWorkflowEditorNode(document, selection.id);
+              const node = documentContext.nodeById.get(selection.id);
               onSelectionChange?.(node ? { type: "node", id: selection.id, node } : null);
               return;
             }
 
-            const edge = findWorkflowEditorEdge(document, selection.id);
+            const edge = documentContext.edgeById.get(selection.id);
             onSelectionChange?.(edge ? { type: "edge", id: selection.id, edge } : null);
           }}
           isConnectionValid={(connection) => {

@@ -7,6 +7,7 @@ export {
   type WorkflowEditorDocument,
   type WorkflowEditorDocumentDiagnostic,
   type WorkflowEditorDocumentDiagnosticCode,
+  type WorkflowEditorDocumentContext,
   type WorkflowEditorDocumentNormalizationMode,
   type WorkflowEditorDocumentNormalizationOptions,
   type WorkflowEditorDocumentValidationOptions,
