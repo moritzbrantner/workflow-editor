@@ -10,6 +10,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { Maximize2Icon, Minimize2Icon } from "lucide-react";
 
 import { Badge, Button, cn } from "@moritzbrantner/ui";
 import {
@@ -1544,9 +1545,6 @@ export function WorkflowWorkbench<
                     <div className="text-sm font-medium">Node palette</div>
                   )}
                   <div className="flex items-center gap-2">
-                    {paletteMinimized ? null : (
-                      <Badge variant="secondary">{nodeTemplates.length}</Badge>
-                    )}
                     <Button
                       type="button"
                       size="icon-sm"
@@ -1557,15 +1555,15 @@ export function WorkflowWorkbench<
                       aria-pressed={paletteMinimized}
                       onClick={() => setPaletteMinimized((current) => !current)}
                     >
-                      {paletteMinimized ? "+" : "-"}
+                      {paletteMinimized ? (
+                        <Maximize2Icon className="size-3.5" aria-hidden="true" />
+                      ) : (
+                        <Minimize2Icon className="size-3.5" aria-hidden="true" />
+                      )}
                     </Button>
                   </div>
                 </div>
-                {paletteMinimized ? (
-                  <Badge variant="secondary" className="justify-center">
-                    {nodeTemplates.length}
-                  </Badge>
-                ) : (
+                {paletteMinimized ? null : (
                   <div className="min-h-0 overflow-y-auto pr-1">
                     {nodeTemplates.length > 0 ? (
                       <div className="grid gap-3">

@@ -58,7 +58,8 @@
   },
   "dependencies": {
     "@dagrejs/dagre": "^3.0.0",
-    "@moritzbrantner/ui": "^0.8.0"
+    "@moritzbrantner/ui": "^0.8.0",
+    "lucide-react": "^1.16.0"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.11.3",
