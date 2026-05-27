@@ -222,6 +222,22 @@ export type WorkflowEditorSelection<
     }
   | null;
 
+export type WorkflowEditorSelectionItem =
+  | {
+      type: "node";
+      id: string;
+    }
+  | {
+      type: "edge";
+      id: string;
+    };
+
+export type WorkflowEditorSelectionState = {
+  nodeIds: string[];
+  edgeIds: string[];
+  primary?: WorkflowEditorSelectionItem;
+};
+
 export type WorkflowEditorNodeTemplate<TData = Record<string, unknown>> = Omit<
   WorkflowEditorNode<TData>,
   "x" | "y"
@@ -2567,6 +2583,19 @@ function formatWorkflowEditorDocumentValidationMessage(
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
+
+export {
+  copyWorkflowEditorSelection,
+  duplicateWorkflowEditorSelection,
+  normalizeWorkflowEditorSelection,
+  pasteWorkflowEditorClipboardPayload,
+  removeWorkflowEditorSelection,
+  workflowEditorClipboardFormat,
+  workflowEditorClipboardVersion,
+  type WorkflowEditorClipboardPayload,
+  type WorkflowEditorPasteOptions,
+  type WorkflowEditorPasteResult,
+} from "./core-clipboard";
 
 function validateWorkflowEditorPorts(
   ports: unknown,

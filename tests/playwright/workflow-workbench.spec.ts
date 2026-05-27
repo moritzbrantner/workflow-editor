@@ -108,6 +108,55 @@ test.describe("WorkflowWorkbench desktop", () => {
     expect(document.nodes.map((node) => node.id)).toContain("input-copy");
   });
 
+  test("multi-selects nodes and duplicates, copies, pastes, and deletes the selection", async ({
+    page,
+  }) => {
+    await page.goto("/");
+
+    await selectNode(page, "Input");
+    await page.getByRole("button", { name: "Transform", exact: true }).click({
+      modifiers: ["Shift"],
+    });
+    await expect(page.getByTestId("selection-count").first()).toHaveText("2 selected");
+
+    await page.getByRole("button", { name: "Duplicate", exact: true }).click();
+    await expect(page.getByTestId("node-count")).toHaveText("5");
+    await expect(page.getByTestId("edge-count")).toHaveText("2");
+    await expect(page.getByTestId("document-json")).toContainText("input-copy");
+    await expect(page.getByTestId("document-json")).toContainText("transform-copy");
+
+    await page.getByRole("button", { name: "Copy", exact: true }).click();
+    await page.getByRole("button", { name: "Paste", exact: true }).click();
+    await expect(page.getByTestId("node-count")).toHaveText("7");
+    await expect(page.getByTestId("edge-count")).toHaveText("3");
+
+    await page.getByRole("button", { name: "Delete", exact: true }).click();
+    await expect(page.getByTestId("node-count")).toHaveText("5");
+    await expect(page.getByTestId("edge-count")).toHaveText("2");
+  });
+
+  test("arranges all nodes and selected nodes", async ({ page }) => {
+    await page.goto("/");
+    await selectNode(page, "Input");
+    await page.getByRole("button", { name: "Transform", exact: true }).click({
+      modifiers: ["Shift"],
+    });
+
+    await page.getByRole("button", { name: "Arrange selection", exact: true }).click();
+    const selectionLayout = await readDocument(page);
+    const selectedInput = selectionLayout.nodes.find((node) => node.id === "input")!;
+    const selectedTransform = selectionLayout.nodes.find((node) => node.id === "transform")!;
+    const selectedOutput = selectionLayout.nodes.find((node) => node.id === "output")!;
+    expect(selectedTransform.x).toBeGreaterThan(selectedInput.x);
+    expect(selectedOutput).toEqual(expect.objectContaining({ x: 560, y: 0 }));
+
+    await page.getByRole("button", { name: "Arrange all", exact: true }).click();
+    const fullLayout = await readDocument(page);
+    const input = fullLayout.nodes.find((node) => node.id === "input")!;
+    const transform = fullLayout.nodes.find((node) => node.id === "transform")!;
+    expect(transform.x).toBeGreaterThan(input.x);
+  });
+
   test("creates a valid edge through port interactions", async ({ page }) => {
     await page.goto("/");
 

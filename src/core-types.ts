@@ -24,6 +24,8 @@ export {
   type WorkflowEditorPortProperty,
   type WorkflowEditorPortType,
   type WorkflowEditorSelection,
+  type WorkflowEditorSelectionItem,
+  type WorkflowEditorSelectionState,
   type WorkflowEditorTypeDefinition,
   type WorkflowEditorTypeDiagnostic,
   type WorkflowEditorTypeValidationOptions,

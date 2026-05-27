@@ -24,6 +24,10 @@ The React workbench expects `react` as a peer dependency and consumes
   `workflowEditorCollectionNodeTemplates` for built-in control-flow, JSON value, and
   collection transform nodes.
 - `normalizeWorkflowEditorDocument(...)`, `connectWorkflowEditorNodes(...)`, `duplicateWorkflowEditorNode(...)`, and node/edge mutation helpers.
+- `copyWorkflowEditorSelection(...)`, `pasteWorkflowEditorClipboardPayload(...)`,
+  `duplicateWorkflowEditorSelection(...)`, and `removeWorkflowEditorSelection(...)`
+  for headless selected-subgraph clipboard operations.
+- `layoutWorkflowEditorDocument(...)` for deterministic automatic graph layout powered by Dagre.
 - `createWorkflowEditorComposedNode(...)`, `composeWorkflowEditorNodes(...)`,
   `restoreWorkflowEditorComposedNode(...)`, and `hasWorkflowEditorNodeComposition(...)`
   for reusable component-style nodes backed by embedded subgraphs.
@@ -119,12 +123,42 @@ export function App() {
   for unconnected or externally connected inputs/outputs, and reroutes external
   edges through the wrapper. `restoreWorkflowEditorComposedNode(...)` expands the
   wrapper back into ordinary nodes and edges.
+- `WorkflowWorkbench` supports multi-select, copy/paste, duplicate, delete, and
+  arrange actions. Use `selectedNodeIds`, `selectedEdgeIds`, and
+  `onSelectionStateChange(...)` for controlled multi-selection; the older
+  `selectedNodeId`, `selectedEdgeId`, and `onSelectionChange(...)` props remain
+  available for single-selection integrations.
+
+## Clipboard and Layout
+
+```ts
+import {
+  copyWorkflowEditorSelection,
+  layoutWorkflowEditorDocument,
+  pasteWorkflowEditorClipboardPayload,
+} from "@moritzbrantner/workflow-editor";
+
+const selection = {
+  nodeIds: ["source", "transform"],
+  edgeIds: [],
+  primary: { type: "node", id: "transform" },
+};
+
+const clipboard = copyWorkflowEditorSelection(document, selection);
+const pasted = pasteWorkflowEditorClipboardPayload(document, clipboard);
+const arranged = layoutWorkflowEditorDocument(pasted.document, {
+  direction: "right",
+});
+```
+
+Layout is also available from the focused subpath:
+
+```ts
+import { layoutWorkflowEditorDocument } from "@moritzbrantner/workflow-editor/layout";
+```
 
 ## Enhancement Roadmap
 
-- Clipboard copy/paste for selected nodes and connected subgraphs.
-- Selection box and multi-select operations.
-- Automatic graph layout helpers.
 - Configurable graph validation policies.
 - Port cardinality rules for single-input and multi-input ports.
 - Typed node template registries with validation.

@@ -46,9 +46,11 @@ import {
 } from "./react";
 import {
   defaultWorkflowEditorNodeTemplates,
+  normalizeWorkflowEditorSelection,
   updateWorkflowEditorNodeWorkflowReference,
   type WorkflowEditorDocument,
   type WorkflowEditorNode,
+  type WorkflowEditorSelectionState,
   type WorkflowEditorTypeDefinition,
 } from "./core";
 
@@ -92,6 +94,11 @@ export type WorkflowEditorProps<
 
 type SaveState = "loading" | "dirty" | "saving" | "saved" | "error";
 
+const emptyWorkflowEditorSelection: WorkflowEditorSelectionState = {
+  nodeIds: [],
+  edgeIds: [],
+};
+
 export function WorkflowEditor<
   TNodeData extends Record<string, unknown> = Record<string, unknown>,
   TEdgeData extends Record<string, unknown> = Record<string, unknown>,
@@ -129,8 +136,9 @@ export function WorkflowEditor<
     useState<WorkflowEditorLibrary<TNodeData, TEdgeData>>(fallbackLibrary);
   const [loaded, setLoaded] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("loading");
-  const [selection, setSelection] =
-    useState<WorkflowWorkbenchSelection<TNodeData, TEdgeData>>(null);
+  const [selection, setSelection] = useState<WorkflowEditorSelectionState>(
+    emptyWorkflowEditorSelection,
+  );
   const initialActiveEntry = activeWorkflowEditorEntry(fallbackLibrary);
   const [documentPath, setDocumentPath] = useState<WorkflowEditorDocumentPathItem[]>(() =>
     initialActiveEntry ? [{ documentId: initialActiveEntry.id }] : [],
@@ -235,7 +243,7 @@ export function WorkflowEditor<
   useEffect(() => {
     setNameDraft(activeEntry?.name ?? "Untitled Workflow");
     setSelectedVersionId(activeEntry?.versions[0]?.id ?? "");
-    setSelection(null);
+    setSelection(emptyWorkflowEditorSelection);
   }, [activeEntry?.id]);
 
   useEffect(() => {
@@ -254,8 +262,16 @@ export function WorkflowEditor<
     onDocumentPathChange?.(documentPath);
   }, [documentPath, onDocumentPathChange]);
 
-  const selectedNodeId = selection?.type === "node" ? selection.id : null;
-  const selectedEdgeId = selection?.type === "edge" ? selection.id : null;
+  const normalizedSelection = normalizeWorkflowEditorSelection(activeDocument, selection);
+  const selectedNodeId =
+    normalizedSelection.primary?.type === "node"
+      ? normalizedSelection.primary.id
+      : (normalizedSelection.nodeIds[0] ?? null);
+  const selectedEdgeId =
+    normalizedSelection.primary?.type === "edge"
+      ? normalizedSelection.primary.id
+      : (normalizedSelection.edgeIds[0] ?? null);
+  const selectionFingerprint = JSON.stringify(normalizedSelection);
   const documentPathEntries = documentPath.map((item) => ({
     documentId: item.documentId,
     entry: library.documents.find((candidate) => candidate.id === item.documentId) ?? null,
@@ -265,6 +281,10 @@ export function WorkflowEditor<
     setSaveState("dirty");
     setLibrary(nextLibrary);
   };
+
+  useEffect(() => {
+    onSelectionChange?.(selectionStateToSingleSelection(activeDocument, normalizedSelection));
+  }, [activeDocument, onSelectionChange, selectionFingerprint]);
 
   const updateActiveEntry = (
     updater: (
@@ -293,6 +313,7 @@ export function WorkflowEditor<
 
     const nextHistory = commitWorkflowEditorHistory(history, document);
     setHistoryByDocumentId((current) => ({ ...current, [activeEntry.id]: nextHistory }));
+    setSelection((current) => normalizeWorkflowEditorSelection(nextHistory.present, current));
     updateActiveEntry((entry) => ({
       ...entry,
       updatedAt: new Date().toISOString(),
@@ -306,7 +327,7 @@ export function WorkflowEditor<
       return;
     }
 
-    setSelection(null);
+    setSelection(emptyWorkflowEditorSelection);
     setDocumentPath([{ documentId: entry.id }]);
     setHistoryByDocumentId((current) => ({
       ...current,
@@ -389,7 +410,7 @@ export function WorkflowEditor<
       return;
     }
 
-    setSelection(null);
+    setSelection(emptyWorkflowEditorSelection);
     updateActiveEntry((entry) => restoreWorkflowEditorVersion(entry, selectedVersionId), {
       resetHistory: true,
     });
@@ -478,7 +499,7 @@ export function WorkflowEditor<
       return;
     }
 
-    setSelection(null);
+    setSelection(emptyWorkflowEditorSelection);
     setDocumentPath([...documentPath, { documentId: targetEntry.id }]);
     setHistoryByDocumentId((current) => ({
       ...current,
@@ -513,7 +534,7 @@ export function WorkflowEditor<
       { activate: true },
     );
 
-    setSelection(null);
+    setSelection(emptyWorkflowEditorSelection);
     setDocumentPath([...documentPath, { documentId: childEntry.id }]);
     setHistoryByDocumentId((current) => ({
       ...current,
@@ -530,7 +551,7 @@ export function WorkflowEditor<
       return;
     }
 
-    setSelection(null);
+    setSelection(emptyWorkflowEditorSelection);
     setDocumentPath(nextPath);
     updateLibrary({ ...library, activeDocumentId: nextEntry.id });
   };
@@ -720,6 +741,8 @@ export function WorkflowEditor<
         document={activeDocument}
         selectedNodeId={selectedNodeId}
         selectedEdgeId={selectedEdgeId}
+        selectedNodeIds={normalizedSelection.nodeIds}
+        selectedEdgeIds={normalizedSelection.edgeIds}
         readOnly={readOnly}
         nodeTemplates={nodeTemplates}
         typeDefinitions={typeDefinitions}
@@ -727,10 +750,8 @@ export function WorkflowEditor<
         onOpenWorkflowReference={canOpenNestedWorkflow ? openWorkflowReference : undefined}
         onCreateWorkflowReference={canOpenNestedWorkflow ? createWorkflowReference : undefined}
         onDocumentChange={updateDocument}
-        onSelectionChange={(nextSelection) => {
-          setSelection(nextSelection);
-          onSelectionChange?.(nextSelection);
-        }}
+        onSelectionChange={onSelectionChange}
+        onSelectionStateChange={(nextSelection) => setSelection(nextSelection)}
         renderNodeTemplate={renderNodeTemplate}
         renderInspector={renderInspector}
         renderToolbarActions={renderToolbarActions}
@@ -800,4 +821,32 @@ function safeFilename(value: string) {
       .replace(/[^a-z0-9._-]+/g, "-")
       .replace(/^-+|-+$/g, "") || "workflow-document"
   );
+}
+
+function selectionStateToSingleSelection<
+  TNodeData extends Record<string, unknown> = Record<string, unknown>,
+  TEdgeData extends Record<string, unknown> = Record<string, unknown>,
+>(
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>,
+  selection: WorkflowEditorSelectionState,
+): WorkflowWorkbenchSelection<TNodeData, TEdgeData> {
+  const primary = selection.primary;
+
+  if (primary?.type === "node") {
+    const node = document.nodes.find((candidate) => candidate.id === primary.id);
+    return node ? { type: "node", id: primary.id, node } : null;
+  }
+
+  if (primary?.type === "edge") {
+    const edge = document.edges.find((candidate) => candidate.id === primary.id);
+    return edge ? { type: "edge", id: primary.id, edge } : null;
+  }
+
+  const node = document.nodes.find((candidate) => candidate.id === selection.nodeIds[0]);
+  if (node) {
+    return { type: "node", id: node.id, node };
+  }
+
+  const edge = document.edges.find((candidate) => candidate.id === selection.edgeIds[0]);
+  return edge ? { type: "edge", id: edge.id, edge } : null;
 }

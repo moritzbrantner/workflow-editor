@@ -12,6 +12,7 @@ export default defineConfig({
       "@moritzbrantner/workflow-editor/core": path.resolve(rootDir, "src/core.ts"),
       "@moritzbrantner/workflow-editor/editor": path.resolve(rootDir, "src/editor.tsx"),
       "@moritzbrantner/workflow-editor/history": path.resolve(rootDir, "src/history.ts"),
+      "@moritzbrantner/workflow-editor/layout": path.resolve(rootDir, "src/layout.ts"),
       "@moritzbrantner/workflow-editor/persistence": path.resolve(rootDir, "src/persistence.ts"),
       "@moritzbrantner/workflow-editor/react": path.resolve(rootDir, "src/react.tsx"),
       "@moritzbrantner/workflow-editor/share": path.resolve(rootDir, "src/share.ts"),

@@ -1,6 +1,13 @@
 "use client";
 
-import { type ReactNode, useMemo } from "react";
+import {
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import {
   Badge,
@@ -15,7 +22,9 @@ import {
   InspectorPanel,
   WorkflowBuilder,
   WorkflowNode,
+  getWorkflowNodeSize,
   type WorkflowBuilderConnectionValidity,
+  type WorkflowBuilderSelection,
   type InspectorFieldDefinition,
   type InspectorFieldValue,
   type WorkflowNodeData,
@@ -25,10 +34,12 @@ import {
   addWorkflowEditorObjectDecompositionOutputToNode,
   addWorkflowEditorObjectConstructorInputToNode,
   connectWorkflowEditorNodes,
+  copyWorkflowEditorSelection,
   createWorkflowEditorDocumentContext,
   createWorkflowEditorGraphIndex,
   defaultWorkflowEditorNodeTemplates,
   duplicateWorkflowEditorNode,
+  duplicateWorkflowEditorSelection,
   formatWorkflowEditorObjectDecompositionExpression,
   formatWorkflowEditorObjectConstructorExpression,
   fromUiWorkflowBuilderEdges,
@@ -38,8 +49,9 @@ import {
   isWorkflowEditorObjectDecompositionNode,
   isWorkflowEditorObjectConstructorNode,
   normalizeWorkflowEditorDocument,
-  removeWorkflowEditorEdge,
-  removeWorkflowEditorNode,
+  normalizeWorkflowEditorSelection,
+  pasteWorkflowEditorClipboardPayload,
+  removeWorkflowEditorSelection,
   toUiWorkflowBuilderEdges,
   toUiWorkflowBuilderNodes,
   updateWorkflowEditorNode,
@@ -52,11 +64,20 @@ import {
   type WorkflowEditorNode,
   type WorkflowEditorNodeTemplate,
   type WorkflowEditorSelection,
+  type WorkflowEditorSelectionState,
   type WorkflowEditorTypeDefinition,
   type WorkflowEditorViewport,
 } from "./core";
+import { layoutWorkflowEditorDocument } from "./core-layout";
 import type { WorkflowEditorDocumentReferenceOption } from "./persistence";
 import { formatShortcutLabel } from "./shortcut-label";
+
+const emptyWorkflowEditorSelection: WorkflowEditorSelectionState = {
+  nodeIds: [],
+  edgeIds: [],
+};
+
+let workflowEditorMemoryClipboard: string | null = null;
 
 export type WorkflowWorkbenchPaletteItem<TData = Record<string, unknown>> =
   WorkflowEditorNodeTemplate<TData>;
@@ -73,6 +94,9 @@ export type WorkflowWorkbenchInspectorContext<
   document: WorkflowEditorDocument<TNodeData, TEdgeData>;
   documentReferences?: WorkflowEditorDocumentReferenceOption[];
   readOnly: boolean;
+  selection: WorkflowEditorSelectionState;
+  selectedEdges: Array<WorkflowEditorEdge<TEdgeData>>;
+  selectedNodes: Array<WorkflowEditorNode<TNodeData>>;
   selectedEdge?: WorkflowEditorEdge<TEdgeData>;
   selectedNode?: WorkflowEditorNode<TNodeData>;
   openSelectedNodeWorkflow?: () => void;
@@ -90,6 +114,8 @@ export type WorkflowWorkbenchProps<
   document: WorkflowEditorDocument<TNodeData, TEdgeData>;
   selectedNodeId?: string | null;
   selectedEdgeId?: string | null;
+  selectedNodeIds?: readonly string[] | null;
+  selectedEdgeIds?: readonly string[] | null;
   readOnly?: boolean;
   nodeTemplates?: ReadonlyArray<WorkflowWorkbenchPaletteItem<TTemplateData>>;
   typeDefinitions?: readonly WorkflowEditorTypeDefinition[];
@@ -97,6 +123,7 @@ export type WorkflowWorkbenchProps<
   className?: string;
   onDocumentChange?: (document: WorkflowEditorDocument<TNodeData, TEdgeData>) => void;
   onSelectionChange?: (selection: WorkflowWorkbenchSelection<TNodeData, TEdgeData>) => void;
+  onSelectionStateChange?: (selection: WorkflowEditorSelectionState) => void;
   onViewportChange?: (viewport: WorkflowEditorViewport) => void;
   onOpenWorkflowReference?: (node: WorkflowEditorNode<TNodeData>) => void;
   onCreateWorkflowReference?: (node: WorkflowEditorNode<TNodeData>) => void;
@@ -108,9 +135,12 @@ export type WorkflowWorkbenchProps<
 };
 
 export const defaultWorkflowWorkbenchHotkeys = {
+  copySelection: "Mod+C",
   deleteSelection: "Delete",
   duplicateNode: "Mod+D",
   fitView: "Mod+0",
+  pasteSelection: "Mod+V",
+  selectAll: "Mod+A",
   nudgeDown: "ArrowDown",
   nudgeLeft: "ArrowLeft",
   nudgeRight: "ArrowRight",
@@ -125,6 +155,8 @@ export function WorkflowWorkbench<
   document,
   selectedNodeId,
   selectedEdgeId,
+  selectedNodeIds,
+  selectedEdgeIds,
   readOnly = false,
   nodeTemplates = defaultWorkflowEditorNodeTemplates as ReadonlyArray<
     WorkflowWorkbenchPaletteItem<TTemplateData>
@@ -134,6 +166,7 @@ export function WorkflowWorkbench<
   className,
   onDocumentChange,
   onSelectionChange,
+  onSelectionStateChange,
   onViewportChange,
   onOpenWorkflowReference,
   onCreateWorkflowReference,
@@ -141,15 +174,109 @@ export function WorkflowWorkbench<
   renderInspector,
   renderToolbarActions,
 }: WorkflowWorkbenchProps<TNodeData, TEdgeData, TTemplateData>) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const pointerModifierRef = useRef({ additive: false });
+  const [internalSelection, setInternalSelection] = useState<WorkflowEditorSelectionState>(
+    emptyWorkflowEditorSelection,
+  );
+  const [marquee, setMarquee] = useState<WorkflowSelectionMarquee | null>(null);
   const documentContext = useMemo(() => createWorkflowEditorDocumentContext(document), [document]);
-  const selectedNode = selectedNodeId ? documentContext.nodeById.get(selectedNodeId) : undefined;
-  const selectedEdge = selectedEdgeId ? documentContext.edgeById.get(selectedEdgeId) : undefined;
+  const externalSelectionProvided =
+    selectedNodeIds !== undefined ||
+    selectedEdgeIds !== undefined ||
+    selectedNodeId !== undefined ||
+    selectedEdgeId !== undefined;
+  const rawSelection = useMemo<WorkflowEditorSelectionState>(() => {
+    if (selectedNodeIds !== undefined || selectedEdgeIds !== undefined) {
+      const nodeIds = [...(selectedNodeIds ?? [])];
+      const edgeIds = [...(selectedEdgeIds ?? [])];
+      const primary =
+        nodeIds.length > 0
+          ? ({ type: "node", id: nodeIds.at(-1)! } as const)
+          : edgeIds.length > 0
+            ? ({ type: "edge", id: edgeIds.at(-1)! } as const)
+            : undefined;
+
+      return {
+        nodeIds,
+        edgeIds,
+        ...(primary ? { primary } : {}),
+      };
+    }
+
+    if (selectedNodeId) {
+      return {
+        nodeIds: [selectedNodeId],
+        edgeIds: [],
+        primary: { type: "node", id: selectedNodeId },
+      };
+    }
+
+    if (selectedEdgeId) {
+      return {
+        nodeIds: [],
+        edgeIds: [selectedEdgeId],
+        primary: { type: "edge", id: selectedEdgeId },
+      };
+    }
+
+    return externalSelectionProvided ? emptyWorkflowEditorSelection : internalSelection;
+  }, [
+    externalSelectionProvided,
+    internalSelection,
+    selectedEdgeId,
+    selectedEdgeIds,
+    selectedNodeId,
+    selectedNodeIds,
+  ]);
+  const selection = useMemo(
+    () => normalizeWorkflowEditorSelection(document, rawSelection),
+    [document, rawSelection],
+  );
+  const primarySelectedNodeId =
+    selection.primary?.type === "node" ? selection.primary.id : selection.nodeIds[0];
+  const primarySelectedEdgeId =
+    selection.primary?.type === "edge" ? selection.primary.id : selection.edgeIds[0];
+  const selectedNode = primarySelectedNodeId
+    ? documentContext.nodeById.get(primarySelectedNodeId)
+    : undefined;
+  const selectedEdge = primarySelectedEdgeId
+    ? documentContext.edgeById.get(primarySelectedEdgeId)
+    : undefined;
+  const selectedNodes = selection.nodeIds.flatMap((id) => {
+    const node = documentContext.nodeById.get(id);
+    return node ? [node] : [];
+  });
+  const selectedEdges = selection.edgeIds.flatMap((id) => {
+    const edge = documentContext.edgeById.get(id);
+    return edge ? [edge] : [];
+  });
   const graphIndex = useMemo(() => createWorkflowEditorGraphIndex(document), [document]);
   const uiNodes = useMemo(() => toUiWorkflowBuilderNodes(document.nodes), [document.nodes]);
   const uiEdges = useMemo(() => toUiWorkflowBuilderEdges(document.edges), [document.edges]);
 
   const commitDocument = (nextDocument: WorkflowEditorDocument<TNodeData, TEdgeData>) => {
     onDocumentChange?.(nextDocument);
+  };
+
+  useEffect(() => {
+    if (!externalSelectionProvided) {
+      setInternalSelection((current) => normalizeWorkflowEditorSelection(document, current));
+    }
+  }, [document, externalSelectionProvided]);
+
+  const emitSelectionState = (
+    nextSelection: WorkflowEditorSelectionState,
+    selectionDocument: WorkflowEditorDocument<TNodeData, TEdgeData> = document,
+  ) => {
+    const normalizedSelection = normalizeWorkflowEditorSelection(selectionDocument, nextSelection);
+
+    if (!externalSelectionProvided) {
+      setInternalSelection(normalizedSelection);
+    }
+
+    onSelectionStateChange?.(normalizedSelection);
+    onSelectionChange?.(selectionStateToSingleSelection(document, normalizedSelection));
   };
 
   const updateSelectedNode = (patch: Partial<WorkflowEditorNode<TNodeData>>) => {
@@ -214,6 +341,9 @@ export function WorkflowWorkbench<
     document,
     documentReferences,
     readOnly,
+    selection,
+    selectedEdges,
+    selectedNodes,
     createSelectedNodeWorkflow:
       documentReferences && onCreateWorkflowReference ? createSelectedNodeWorkflow : undefined,
     openSelectedNodeWorkflow:
@@ -258,7 +388,7 @@ export function WorkflowWorkbench<
       nodes: [...document.nodes, node],
     };
     commitDocument(nextDocument);
-    onSelectionChange?.({ type: "node", id, node });
+    emitSelectionState({ nodeIds: [id], edgeIds: [], primary: { type: "node", id } }, nextDocument);
   };
 
   const deleteSelection = () => {
@@ -266,24 +396,253 @@ export function WorkflowWorkbench<
       return;
     }
 
-    if (selectedNode) {
-      commitDocument(removeWorkflowEditorNode(document, selectedNode.id));
-      onSelectionChange?.(null);
-      return;
-    }
-
-    if (selectedEdge) {
-      commitDocument(removeWorkflowEditorEdge(document, selectedEdge.id));
-      onSelectionChange?.(null);
+    if (selection.nodeIds.length > 0 || selection.edgeIds.length > 0) {
+      commitDocument(removeWorkflowEditorSelection(document, selection));
+      emitSelectionState(emptyWorkflowEditorSelection);
     }
   };
 
   const duplicateSelection = () => {
-    if (!selectedNode || readOnly) {
+    if (readOnly || (selection.nodeIds.length === 0 && selection.edgeIds.length === 0)) {
       return;
     }
 
-    commitDocument(duplicateWorkflowEditorNode(document, selectedNode.id));
+    if (selection.nodeIds.length === 1 && selection.edgeIds.length === 0) {
+      const nextDocument = duplicateWorkflowEditorNode(document, selection.nodeIds[0]!);
+      commitDocument(nextDocument);
+      emitSelectionState(
+        {
+          nodeIds: selection.nodeIds,
+          edgeIds: [],
+          primary: { type: "node", id: selection.nodeIds[0]! },
+        },
+        nextDocument,
+      );
+      return;
+    }
+
+    const result = duplicateWorkflowEditorSelection(document, selection);
+    commitDocument(result.document);
+    emitSelectionState(
+      {
+        nodeIds: result.nodeIds,
+        edgeIds: result.edgeIds,
+        ...(result.nodeIds[0] ? { primary: { type: "node", id: result.nodeIds[0] } } : {}),
+      },
+      result.document,
+    );
+  };
+
+  const copySelection = () => {
+    if (selection.nodeIds.length === 0 && selection.edgeIds.length === 0) {
+      return;
+    }
+
+    const text = JSON.stringify(copyWorkflowEditorSelection(document, selection));
+    workflowEditorMemoryClipboard = text;
+    void navigator.clipboard?.writeText(text).catch(() => {});
+  };
+
+  const pasteSelection = async () => {
+    if (readOnly) {
+      return;
+    }
+
+    let text = workflowEditorMemoryClipboard;
+    if (!text) {
+      try {
+        text = (await navigator.clipboard?.readText?.()) ?? null;
+      } catch {
+        text = null;
+      }
+    }
+
+    if (!text) {
+      return;
+    }
+
+    try {
+      const result = pasteWorkflowEditorClipboardPayload(document, JSON.parse(text));
+      commitDocument(result.document);
+      emitSelectionState(
+        {
+          nodeIds: result.nodeIds,
+          edgeIds: result.edgeIds,
+          ...(result.nodeIds[0] ? { primary: { type: "node", id: result.nodeIds[0] } } : {}),
+        },
+        result.document,
+      );
+    } catch {
+      return;
+    }
+  };
+
+  const arrangeSelection = () => {
+    if (readOnly || selection.nodeIds.length === 0) {
+      return;
+    }
+
+    commitDocument(layoutWorkflowEditorDocument(document, { nodeIds: selection.nodeIds }).document);
+  };
+
+  const arrangeAll = () => {
+    if (readOnly || document.nodes.length === 0) {
+      return;
+    }
+
+    commitDocument(layoutWorkflowEditorDocument(document).document);
+  };
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (isEditableEventTarget(event.target)) {
+        return;
+      }
+
+      const mod = event.metaKey || event.ctrlKey;
+      if (mod && event.key.toLowerCase() === "a") {
+        event.preventDefault();
+        emitSelectionState({
+          nodeIds: document.nodes.map((node) => node.id),
+          edgeIds: [],
+          ...(document.nodes[0] ? { primary: { type: "node", id: document.nodes[0].id } } : {}),
+        });
+        return;
+      }
+
+      if (event.key === "Escape") {
+        emitSelectionState(emptyWorkflowEditorSelection);
+        return;
+      }
+
+      if (event.key === "Delete" || event.key === "Backspace") {
+        event.preventDefault();
+        deleteSelection();
+        return;
+      }
+
+      if (mod && event.key.toLowerCase() === "c") {
+        event.preventDefault();
+        copySelection();
+        return;
+      }
+
+      if (mod && event.key.toLowerCase() === "v") {
+        event.preventDefault();
+        void pasteSelection();
+        return;
+      }
+
+      if (mod && event.key.toLowerCase() === "d") {
+        event.preventDefault();
+        duplicateSelection();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  });
+
+  const handleBuilderSelection = (builderSelection: WorkflowBuilderSelection) => {
+    if (!builderSelection) {
+      if (!pointerModifierRef.current.additive && !marquee) {
+        emitSelectionState(emptyWorkflowEditorSelection);
+      }
+      return;
+    }
+
+    const item =
+      builderSelection.type === "node"
+        ? ({ type: "node", id: builderSelection.id } as const)
+        : ({ type: "edge", id: builderSelection.id } as const);
+
+    if (!pointerModifierRef.current.additive) {
+      emitSelectionState({
+        nodeIds: item.type === "node" ? [item.id] : [],
+        edgeIds: item.type === "edge" ? [item.id] : [],
+        primary: item,
+      });
+      return;
+    }
+
+    emitSelectionState(toggleWorkflowEditorSelectionItem(selection, item));
+  };
+
+  const startMarquee = (event: ReactPointerEvent<HTMLDivElement>) => {
+    pointerModifierRef.current = { additive: event.shiftKey || event.metaKey || event.ctrlKey };
+    const target = event.target;
+    if (
+      event.button !== 0 ||
+      !(target instanceof Element) ||
+      target.closest(
+        "[data-slot='workflow-builder-node'], [data-slot='workflow-node-port'], [data-slot='workflow-builder-edge'], button, input, textarea, select",
+      )
+    ) {
+      return;
+    }
+
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) {
+      return;
+    }
+
+    setMarquee({
+      startX: event.clientX - rect.left,
+      startY: event.clientY - rect.top,
+      currentX: event.clientX - rect.left,
+      currentY: event.clientY - rect.top,
+    });
+  };
+
+  const updateMarquee = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!marquee) {
+      return;
+    }
+
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) {
+      return;
+    }
+
+    setMarquee({
+      ...marquee,
+      currentX: event.clientX - rect.left,
+      currentY: event.clientY - rect.top,
+    });
+  };
+
+  const completeMarquee = () => {
+    if (!marquee) {
+      return;
+    }
+
+    const container = containerRef.current;
+    const containerRect = container?.getBoundingClientRect();
+    if (!container || !containerRect) {
+      setMarquee(null);
+      return;
+    }
+
+    const marqueeRect = normalizeRect(marquee);
+    const nodeIds = Array.from(
+      container.querySelectorAll<HTMLElement>("[data-slot='workflow-builder-node']"),
+    ).flatMap((element) => {
+      const nodeId = element.dataset.nodeId;
+      const nodeRect = element.getBoundingClientRect();
+      const relativeRect = {
+        left: nodeRect.left - containerRect.left,
+        top: nodeRect.top - containerRect.top,
+        right: nodeRect.right - containerRect.left,
+        bottom: nodeRect.bottom - containerRect.top,
+      };
+      return nodeId && rectsIntersect(marqueeRect, relativeRect) ? [nodeId] : [];
+    });
+    setMarquee(null);
+    emitSelectionState({
+      nodeIds,
+      edgeIds: [],
+      ...(nodeIds[0] ? { primary: { type: "node", id: nodeIds[0] } } : {}),
+    });
   };
 
   return (
@@ -352,6 +711,9 @@ export function WorkflowWorkbench<
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="outline">{document.nodes.length} nodes</Badge>
             <Badge variant="outline">{document.edges.length} edges</Badge>
+            <Badge variant="outline" data-testid="selection-count">
+              {selection.nodeIds.length + selection.edgeIds.length} selected
+            </Badge>
             <Badge variant="secondary">
               {
                 graphIndex.getSubgraph({ offset: 0, limit: document.nodes.length }).summary
@@ -368,10 +730,48 @@ export function WorkflowWorkbench<
               type="button"
               size="sm"
               variant="outline"
-              disabled={readOnly || !selectedNode}
+              disabled={
+                readOnly || (selection.nodeIds.length === 0 && selection.edgeIds.length === 0)
+              }
               onClick={duplicateSelection}
             >
               Duplicate
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={selection.nodeIds.length === 0 && selection.edgeIds.length === 0}
+              onClick={copySelection}
+            >
+              Copy
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={readOnly}
+              onClick={() => void pasteSelection()}
+            >
+              Paste
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={readOnly || selection.nodeIds.length === 0}
+              onClick={arrangeSelection}
+            >
+              Arrange selection
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={readOnly || document.nodes.length === 0}
+              onClick={arrangeAll}
+            >
+              Arrange all
             </Button>
             {documentReferences ? (
               selectedNodeHasWorkflowReference ? (
@@ -400,7 +800,9 @@ export function WorkflowWorkbench<
               type="button"
               size="sm"
               variant="outline"
-              disabled={readOnly || (!selectedNode && !selectedEdge)}
+              disabled={
+                readOnly || (selection.nodeIds.length === 0 && selection.edgeIds.length === 0)
+              }
               onClick={deleteSelection}
             >
               Delete
@@ -411,84 +813,228 @@ export function WorkflowWorkbench<
       }
     >
       <WorkbenchCanvas className="overflow-hidden p-3">
-        <WorkflowBuilder
-          nodes={uiNodes}
-          edges={uiEdges}
-          selectedNodeId={selectedNodeId}
-          selectedEdgeId={selectedEdgeId}
-          readOnly={readOnly}
-          showMiniMap
-          surfaceHeight="34rem"
-          viewport={document.viewport}
-          toolbarLabel="Workflow"
-          onNodesChange={(nodes) => {
-            if (!readOnly) {
-              commitDocument(
-                normalizeWorkflowEditorDocument({
-                  ...document,
-                  nodes: fromUiWorkflowBuilderNodes(nodes, document.nodes),
-                }),
-              );
-            }
-          }}
-          onEdgesChange={(edges) => {
-            if (!readOnly) {
-              const hasUiCreatedEdge = edges.some(
-                (edge) => !document.edges.some((currentEdge) => currentEdge.id === edge.id),
-              );
-
-              if (hasUiCreatedEdge) {
-                return;
+        <div
+          ref={containerRef}
+          className="relative"
+          onPointerDownCapture={startMarquee}
+          onPointerMove={updateMarquee}
+          onPointerUp={completeMarquee}
+          onPointerCancel={() => setMarquee(null)}
+        >
+          <WorkflowBuilder
+            nodes={uiNodes}
+            edges={uiEdges}
+            selectedNodeId={primarySelectedNodeId}
+            selectedEdgeId={primarySelectedEdgeId}
+            readOnly={readOnly}
+            showMiniMap
+            surfaceHeight="34rem"
+            viewport={document.viewport}
+            toolbarLabel="Workflow"
+            onNodesChange={(nodes) => {
+              if (!readOnly) {
+                commitDocument(
+                  normalizeWorkflowEditorDocument({
+                    ...document,
+                    nodes: fromUiWorkflowBuilderNodes(nodes, document.nodes),
+                  }),
+                );
               }
+            }}
+            onEdgesChange={(edges) => {
+              if (!readOnly) {
+                const hasUiCreatedEdge = edges.some(
+                  (edge) => !document.edges.some((currentEdge) => currentEdge.id === edge.id),
+                );
 
-              commitDocument(
-                normalizeWorkflowEditorDocument({
-                  ...document,
-                  edges: fromUiWorkflowBuilderEdges(edges, document.edges),
-                }),
-              );
-            }
-          }}
-          onViewportChange={(viewport) => {
-            onViewportChange?.(viewport);
-            commitDocument({ ...document, viewport });
-          }}
-          onSelectionChange={(selection) => {
-            if (!selection) {
-              onSelectionChange?.(null);
-              return;
-            }
+                if (hasUiCreatedEdge) {
+                  return;
+                }
 
-            if (selection.type === "node") {
-              const node = documentContext.nodeById.get(selection.id);
-              onSelectionChange?.(node ? { type: "node", id: selection.id, node } : null);
-              return;
-            }
+                commitDocument(
+                  normalizeWorkflowEditorDocument({
+                    ...document,
+                    edges: fromUiWorkflowBuilderEdges(edges, document.edges),
+                  }),
+                );
+              }
+            }}
+            onViewportChange={(viewport) => {
+              onViewportChange?.(viewport);
+              commitDocument({ ...document, viewport });
+            }}
+            onSelectionChange={handleBuilderSelection}
+            isConnectionValid={(connection) => {
+              const validity = validateWorkflowEditorConnection(document, connection, {
+                typeDefinitions,
+              });
 
-            const edge = documentContext.edgeById.get(selection.id);
-            onSelectionChange?.(edge ? { type: "edge", id: selection.id, edge } : null);
-          }}
-          isConnectionValid={(connection) => {
-            const validity = validateWorkflowEditorConnection(document, connection, {
-              typeDefinitions,
-            });
-
-            return {
-              valid: validity.valid,
-              reason: toUiConnectionInvalidReason(validity.reason),
-            };
-          }}
-          onConnectionComplete={(connection) => {
-            if (!readOnly) {
-              commitDocument(connectWorkflowEditorNodes(document, connection, { typeDefinitions }));
-            }
-          }}
-          onDoubleClick={() => {
-            openSelectedNodeWorkflow();
-          }}
-        />
+              return {
+                valid: validity.valid,
+                reason: toUiConnectionInvalidReason(validity.reason),
+              };
+            }}
+            onConnectionComplete={(connection) => {
+              if (!readOnly) {
+                commitDocument(
+                  connectWorkflowEditorNodes(document, connection, { typeDefinitions }),
+                );
+              }
+            }}
+            onDoubleClick={() => {
+              openSelectedNodeWorkflow();
+            }}
+          />
+          <WorkflowSelectionOverlay
+            document={document}
+            marquee={marquee}
+            primaryNodeId={primarySelectedNodeId}
+            selection={selection}
+          />
+        </div>
       </WorkbenchCanvas>
     </WorkbenchLayout>
+  );
+}
+
+type WorkflowSelectionMarquee = {
+  startX: number;
+  startY: number;
+  currentX: number;
+  currentY: number;
+};
+
+function WorkflowSelectionOverlay<
+  TNodeData extends Record<string, unknown>,
+  TEdgeData extends Record<string, unknown>,
+>({
+  document,
+  marquee,
+  primaryNodeId,
+  selection,
+}: {
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>;
+  marquee: WorkflowSelectionMarquee | null;
+  primaryNodeId?: string;
+  selection: WorkflowEditorSelectionState;
+}) {
+  const selectedNodeIds = new Set(selection.nodeIds.filter((id) => id !== primaryNodeId));
+  const marqueeRect = marquee ? normalizeRect(marquee) : null;
+
+  return (
+    <div className="pointer-events-none absolute inset-0 z-20" aria-hidden="true">
+      {document.nodes
+        .filter((node) => selectedNodeIds.has(node.id))
+        .map((node) => {
+          const size = getWorkflowNodeSize(node);
+          return (
+            <div
+              key={node.id}
+              data-testid={`multi-selection-outline-${node.id}`}
+              className="absolute rounded-xl border-2 border-primary/70 bg-primary/5"
+              style={{
+                height: size.height,
+                left: node.x,
+                top: node.y,
+                width: size.width,
+              }}
+            />
+          );
+        })}
+      {marqueeRect ? (
+        <div
+          data-testid="selection-marquee"
+          className="absolute border border-primary bg-primary/10"
+          style={{
+            height: marqueeRect.bottom - marqueeRect.top,
+            left: marqueeRect.left,
+            top: marqueeRect.top,
+            width: marqueeRect.right - marqueeRect.left,
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function selectionStateToSingleSelection<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+>(
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>,
+  selection: WorkflowEditorSelectionState,
+): WorkflowEditorSelection<TNodeData, TEdgeData> {
+  const primary = selection.primary;
+
+  if (primary?.type === "node") {
+    const node = document.nodes.find((candidate) => candidate.id === primary.id);
+    return node ? { type: "node", id: primary.id, node } : null;
+  }
+
+  if (primary?.type === "edge") {
+    const edge = document.edges.find((candidate) => candidate.id === primary.id);
+    return edge ? { type: "edge", id: primary.id, edge } : null;
+  }
+
+  const node = document.nodes.find((candidate) => candidate.id === selection.nodeIds[0]);
+  if (node) {
+    return { type: "node", id: node.id, node };
+  }
+
+  const edge = document.edges.find((candidate) => candidate.id === selection.edgeIds[0]);
+  return edge ? { type: "edge", id: edge.id, edge } : null;
+}
+
+function toggleWorkflowEditorSelectionItem(
+  selection: WorkflowEditorSelectionState,
+  item: NonNullable<WorkflowEditorSelectionState["primary"]>,
+): WorkflowEditorSelectionState {
+  if (item.type === "node") {
+    const hasNode = selection.nodeIds.includes(item.id);
+    return {
+      nodeIds: hasNode
+        ? selection.nodeIds.filter((nodeId) => nodeId !== item.id)
+        : [...selection.nodeIds, item.id],
+      edgeIds: selection.edgeIds,
+      primary: item,
+    };
+  }
+
+  const hasEdge = selection.edgeIds.includes(item.id);
+  return {
+    nodeIds: selection.nodeIds,
+    edgeIds: hasEdge
+      ? selection.edgeIds.filter((edgeId) => edgeId !== item.id)
+      : [...selection.edgeIds, item.id],
+    primary: item,
+  };
+}
+
+function normalizeRect(rect: WorkflowSelectionMarquee) {
+  return {
+    left: Math.min(rect.startX, rect.currentX),
+    top: Math.min(rect.startY, rect.currentY),
+    right: Math.max(rect.startX, rect.currentX),
+    bottom: Math.max(rect.startY, rect.currentY),
+  };
+}
+
+function rectsIntersect(
+  left: { left: number; top: number; right: number; bottom: number },
+  right: { left: number; top: number; right: number; bottom: number },
+) {
+  return (
+    left.left <= right.right &&
+    left.right >= right.left &&
+    left.top <= right.bottom &&
+    left.bottom >= right.top
+  );
+}
+
+function isEditableEventTarget(target: EventTarget | null) {
+  return (
+    target instanceof HTMLElement &&
+    !!target.closest("input, textarea, select, [contenteditable='true'], [role='textbox']")
   );
 }
 

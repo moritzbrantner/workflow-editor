@@ -16,6 +16,7 @@ import {
   commitWorkflowEditorHistory,
   composeWorkflowEditorNodes,
   connectWorkflowEditorNodes,
+  copyWorkflowEditorSelection,
   createLocalStorageWorkflowEditorStorage,
   createWorkflowEditorComposedNode,
   createWorkflowEditorDocumentContext,
@@ -28,6 +29,7 @@ import {
   decodeWorkflowEditorSharePayload,
   detectWorkflowEditorCycles,
   duplicateWorkflowEditorNode,
+  duplicateWorkflowEditorSelection,
   duplicateWorkflowEditorEntry,
   encodeWorkflowEditorSharePayload,
   findWorkflowEditorNode,
@@ -45,11 +47,15 @@ import {
   isWorkflowEditorObjectDecompositionNode,
   isWorkflowEditorDirectedAcyclicGraph,
   isWorkflowEditorPortTypeAssignable,
+  layoutWorkflowEditorDocument,
   listWorkflowEditorDocumentReferenceOptions,
   loadWorkflowEditorLibrary,
   moveWorkflowEditorNode,
   normalizeWorkflowEditorDocument,
+  normalizeWorkflowEditorSelection,
+  pasteWorkflowEditorClipboardPayload,
   parseWorkflowEditorDocumentFile,
+  removeWorkflowEditorSelection,
   removeWorkflowEditorNode,
   removeWorkflowEditorEntry,
   renameWorkflowEditorEntry,
@@ -492,6 +498,131 @@ describe("@moritzbrantner/workflow-editor core", () => {
 
     const removed = removeWorkflowEditorNode(duplicated, "input");
     expect(removed.edges).toHaveLength(0);
+  });
+
+  test("copies, pastes, duplicates, and removes selected subgraphs", () => {
+    const selection = normalizeWorkflowEditorSelection(document, {
+      nodeIds: ["transform", "input", "input"],
+      edgeIds: [],
+      primary: { type: "node", id: "transform" },
+    });
+    expect(selection.nodeIds).toEqual(["input", "transform"]);
+
+    const payload = copyWorkflowEditorSelection(document, selection, {
+      copiedAt: "2026-05-27T00:00:00.000Z",
+      sourceDocumentId: "demo",
+    });
+    expect(payload.nodes.map((node) => node.id)).toEqual(["input", "transform"]);
+    expect(payload.edges.map((edge) => edge.id)).toEqual(["input-transform"]);
+    expect(payload.sourceDocumentId).toBe("demo");
+
+    const pasted = pasteWorkflowEditorClipboardPayload(document, payload);
+    expect(pasted.nodeIds).toEqual(["input-copy", "transform-copy"]);
+    expect(pasted.edgeIds).toEqual(["input-copy:out->transform-copy:in"]);
+    expect(pasted.document.nodes.find((node) => node.id === "input-copy")).toEqual(
+      expect.objectContaining({ x: 48, y: 48, outputs: document.nodes[0]?.outputs }),
+    );
+    expect(pasted.document.edges).toContainEqual(
+      expect.objectContaining({
+        id: "input-copy:out->transform-copy:in",
+        sourceNodeId: "input-copy",
+        targetNodeId: "transform-copy",
+      }),
+    );
+
+    const edgePayload = copyWorkflowEditorSelection(document, {
+      nodeIds: [],
+      edgeIds: ["input-transform"],
+      primary: { type: "edge", id: "input-transform" },
+    });
+    expect(edgePayload.nodes.map((node) => node.id)).toEqual(["input", "transform"]);
+    expect(edgePayload.edges.map((edge) => edge.id)).toEqual(["input-transform"]);
+
+    const duplicated = duplicateWorkflowEditorSelection(document, {
+      nodeIds: ["input", "transform"],
+      edgeIds: [],
+    });
+    expect(duplicated.nodeIds).toEqual(["input-copy", "transform-copy"]);
+    expect(duplicated.document.nodes).toHaveLength(5);
+
+    const removed = removeWorkflowEditorSelection(document, {
+      nodeIds: ["input"],
+      edgeIds: [],
+    });
+    expect(removed.nodes.map((node) => node.id)).toEqual(["transform", "output"]);
+    expect(removed.edges).toHaveLength(0);
+
+    expect(() =>
+      pasteWorkflowEditorClipboardPayload(document, {
+        ...payload,
+        version: 999 as 1,
+      }),
+    ).toThrow("Invalid workflow editor clipboard payload");
+  });
+
+  test("lays out whole documents, selections, and cyclic graphs", () => {
+    const laidOut = layoutWorkflowEditorDocument(document);
+    const input = laidOut.document.nodes.find((node) => node.id === "input")!;
+    const transform = laidOut.document.nodes.find((node) => node.id === "transform")!;
+    expect(transform.x).toBeGreaterThan(input.x);
+    expect(laidOut.cycles).toEqual([]);
+
+    const vertical = layoutWorkflowEditorDocument(document, { direction: "down" });
+    expect(vertical.document.nodes.find((node) => node.id === "transform")!.y).toBeGreaterThan(
+      vertical.document.nodes.find((node) => node.id === "input")!.y,
+    );
+
+    const selected = layoutWorkflowEditorDocument(
+      normalizeWorkflowEditorDocument({
+        nodes: [
+          { id: "a", label: "A", x: 100, y: 50 },
+          { id: "b", label: "B", x: 0, y: 0 },
+          { id: "c", label: "C", x: 200, y: 100 },
+        ],
+        edges: [
+          {
+            id: "a-c",
+            sourceNodeId: "a",
+            sourcePortId: "out",
+            targetNodeId: "c",
+            targetPortId: "in",
+          },
+        ],
+      }),
+      { nodeIds: ["a", "c"] },
+    );
+    expect(selected.document.nodes.find((node) => node.id === "b")).toEqual(
+      expect.objectContaining({ x: 0, y: 0 }),
+    );
+    expect(
+      Math.min(...selected.document.nodes.filter((node) => node.id !== "b").map((node) => node.x)),
+    ).toBe(100);
+
+    const cyclic = {
+      nodes: [
+        { id: "a", label: "A", x: 0, y: 0 },
+        { id: "b", label: "B", x: 100, y: 0 },
+      ],
+      edges: [
+        {
+          id: "a-b",
+          sourceNodeId: "a",
+          sourcePortId: "out",
+          targetNodeId: "b",
+          targetPortId: "in",
+        },
+        {
+          id: "b-a",
+          sourceNodeId: "b",
+          sourcePortId: "out",
+          targetNodeId: "a",
+          targetPortId: "in",
+        },
+      ],
+    } satisfies WorkflowEditorDocument;
+    const cyclicLayout = layoutWorkflowEditorDocument(cyclic);
+    expect(cyclicLayout.cycles).toHaveLength(1);
+    expect(cyclicLayout.document.nodes.every((node) => Number.isFinite(node.x))).toBe(true);
   });
 
   test("validates workflow documents and supports repair-mode normalization", () => {
@@ -1421,6 +1552,88 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     );
     fireEvent.click(screen.getAllByRole("button", { name: /Decision/ })[0]!);
     expect(handleDocumentChange).not.toHaveBeenCalled();
+  });
+
+  test("supports controlled multi-selection and keyboard selection shortcuts", () => {
+    const handleSelectionStateChange = vi.fn();
+    const handleSelectionChange = vi.fn();
+
+    render(
+      <WorkflowWorkbench
+        document={document}
+        selectedNodeIds={["input", "transform"]}
+        onSelectionChange={handleSelectionChange}
+        onSelectionStateChange={handleSelectionStateChange}
+        renderInspector={(context) => (
+          <div data-testid="selected-node-labels">
+            {context.selectedNodes.map((node) => node.label).join(",")}
+          </div>
+        )}
+      />,
+    );
+
+    expect(screen.getAllByTestId("selected-node-labels")[0]?.textContent).toBe("Input,Transform");
+    expect(screen.getAllByTestId("selection-count")[0]?.textContent).toBe("2 selected");
+
+    fireEvent.keyDown(window, { key: "a", metaKey: true });
+    expect(handleSelectionStateChange).toHaveBeenLastCalledWith({
+      nodeIds: ["input", "transform", "output"],
+      edgeIds: [],
+      primary: { type: "node", id: "input" },
+    });
+    expect(handleSelectionChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: "input", type: "node" }),
+    );
+  });
+
+  test("duplicates and arranges selected nodes from the workbench toolbar", () => {
+    const handleDocumentChange = vi.fn();
+
+    const { rerender } = render(
+      <WorkflowWorkbench
+        document={document}
+        selectedNodeIds={["input", "transform"]}
+        onDocumentChange={handleDocumentChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
+    expect(handleDocumentChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        nodes: expect.arrayContaining([
+          expect.objectContaining({ id: "input-copy" }),
+          expect.objectContaining({ id: "transform-copy" }),
+        ]),
+        edges: expect.arrayContaining([
+          expect.objectContaining({
+            sourceNodeId: "input-copy",
+            targetNodeId: "transform-copy",
+          }),
+        ]),
+      }),
+    );
+
+    handleDocumentChange.mockClear();
+    rerender(
+      <WorkflowWorkbench
+        document={document}
+        selectedNodeIds={["input", "transform"]}
+        onDocumentChange={handleDocumentChange}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Arrange selection" }));
+    expect(handleDocumentChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        nodes: expect.arrayContaining([
+          expect.objectContaining({ id: "input", x: 0 }),
+          expect.objectContaining({ id: "output", x: 480, y: 0 }),
+        ]),
+      }),
+    );
+
+    handleDocumentChange.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Arrange all" }));
+    expect(handleDocumentChange).toHaveBeenCalled();
   });
 
   test("uses type definitions for workbench connection validation", () => {

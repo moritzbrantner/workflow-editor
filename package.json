@@ -40,6 +40,10 @@
       "types": "./dist/history.d.ts",
       "import": "./dist/history.js"
     },
+    "./layout": {
+      "types": "./dist/layout.d.ts",
+      "import": "./dist/layout.js"
+    },
     "./persistence": {
       "types": "./dist/persistence.d.ts",
       "import": "./dist/persistence.js"
@@ -53,6 +57,7 @@
     "react": "^19.0.0"
   },
   "dependencies": {
+    "@dagrejs/dagre": "^3.0.0",
     "@moritzbrantner/ui": "^0.8.0"
   },
   "devDependencies": {
@@ -80,7 +85,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsup src/index.ts src/core.ts src/react.tsx src/editor.tsx src/history.ts src/persistence.ts src/share.ts --format esm --dts --clean --out-dir dist",
+    "build": "tsup src/index.ts src/core.ts src/react.tsx src/editor.tsx src/history.ts src/layout.ts src/persistence.ts src/share.ts --format esm --dts --clean --out-dir dist",
     "changeset": "changeset",
     "example": "vite --host 127.0.0.1 --port 5173 --config examples/workbench/vite.config.ts",
     "example:build": "vite build --config examples/workbench/vite.config.ts",

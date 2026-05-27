@@ -20,6 +20,10 @@ const modules = [
     exports: ["createWorkflowEditorHistory"],
   },
   {
+    path: "../dist/layout.js",
+    exports: ["layoutWorkflowEditorDocument"],
+  },
+  {
     path: "../dist/persistence.js",
     exports: ["parseWorkflowEditorDocumentFile"],
   },
