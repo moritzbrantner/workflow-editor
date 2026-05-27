@@ -24,6 +24,7 @@ import {
 } from "@moritzbrantner/ui/labs";
 
 import {
+  addWorkflowEditorArrayConstructorInputToNode,
   addWorkflowEditorObjectDecompositionOutputToNode,
   addWorkflowEditorObjectConstructorInputToNode,
   connectWorkflowEditorNodes,
@@ -33,17 +34,23 @@ import {
   defaultWorkflowEditorNodeTemplates,
   duplicateWorkflowEditorNode,
   duplicateWorkflowEditorSelection,
+  formatWorkflowEditorArrayConstructorExpression,
   formatWorkflowEditorObjectDecompositionExpression,
   formatWorkflowEditorObjectConstructorExpression,
   fromUiWorkflowBuilderEdges,
   fromUiWorkflowBuilderNodes,
+  getWorkflowEditorArrayConstructorInputs,
   getWorkflowEditorObjectDecompositionOutputs,
   getWorkflowEditorObjectConstructorInputs,
+  isWorkflowEditorArrayConstructorNode,
   isWorkflowEditorObjectDecompositionNode,
   isWorkflowEditorObjectConstructorNode,
   normalizeWorkflowEditorDocument,
   normalizeWorkflowEditorSelection,
   pasteWorkflowEditorClipboardPayload,
+  removeWorkflowEditorArrayConstructorInput,
+  removeWorkflowEditorObjectDecompositionOutput,
+  removeWorkflowEditorObjectConstructorInput,
   removeWorkflowEditorSelection,
   toUiWorkflowBuilderEdges,
   toUiWorkflowBuilderNodes,
@@ -109,6 +116,7 @@ export type WorkflowWorkbenchInspectorContext<
   selectedNode?: WorkflowEditorNode<TNodeData>;
   openSelectedNodeWorkflow?: () => void;
   createSelectedNodeWorkflow?: () => void;
+  updateDocument?: (document: WorkflowEditorDocument<TNodeData, TEdgeData>) => void;
   updateSelectedNode: (patch: Partial<WorkflowEditorNode<TNodeData>>) => void;
   updateSelectedEdge: (patch: Partial<WorkflowEditorEdge<TEdgeData>>) => void;
   updateSelectedNodeWorkflowReference: (documentId: string | null) => void;
@@ -434,6 +442,14 @@ export function WorkflowWorkbench<
     });
   };
 
+  const updateDocument = (nextDocument: WorkflowEditorDocument<TNodeData, TEdgeData>) => {
+    if (readOnly) {
+      return;
+    }
+
+    commitDocument(nextDocument);
+  };
+
   const updateSelectedNodeWorkflowReference = (documentId: string | null) => {
     if (readOnly || !selectedNode) {
       return;
@@ -484,6 +500,7 @@ export function WorkflowWorkbench<
       documentReferences && onOpenWorkflowReference ? openSelectedNodeWorkflow : undefined,
     selectedEdge,
     selectedNode,
+    updateDocument,
     updateSelectedEdge,
     updateSelectedNode,
     updateSelectedNodeWorkflowReference,
@@ -1968,6 +1985,14 @@ function DefaultWorkflowInspector<
     const referenceMissing =
       referencedDocumentId !== "" &&
       !context.documentReferences?.some((reference) => reference.id === referencedDocumentId);
+    const arrayConstructorInputs = getWorkflowEditorArrayConstructorInputs(node);
+    const arrayConstructorExpression = formatWorkflowEditorArrayConstructorExpression(node);
+    const arrayConstructorDefaultValues = Object.fromEntries(
+      arrayConstructorInputs.map((input) => [
+        `arrayItem:${input.id}`,
+        input.badge ? String(input.badge) : input.id,
+      ]),
+    );
     const objectConstructorInputs = getWorkflowEditorObjectConstructorInputs(node);
     const objectConstructorExpression = formatWorkflowEditorObjectConstructorExpression(node);
     const objectConstructorDefaultValues = Object.fromEntries(
@@ -2002,9 +2027,11 @@ function DefaultWorkflowInspector<
             y: node.y,
             status: node.status ?? "idle",
             workflowDocumentId: referencedDocumentId,
+            arrayExpression: arrayConstructorExpression,
             objectExpression: objectConstructorExpression,
             objectDecompositionExpression,
             ...(jsonValueField ? { jsonValue: jsonValueDefault } : {}),
+            ...arrayConstructorDefaultValues,
             ...objectConstructorDefaultValues,
             ...objectDecompositionDefaultValues,
           }}
@@ -2049,6 +2076,40 @@ function DefaultWorkflowInspector<
                   },
                 ]
               : []),
+            ...(isWorkflowEditorArrayConstructorNode(node)
+              ? [
+                  {
+                    id: "array-constructor",
+                    title: "Array",
+                    description: "Collect input values into array items.",
+                    fields: [
+                      ...arrayConstructorInputs.map((input, index) =>
+                        createWorkflowEditorRemovableInspectorField({
+                          id: `arrayItem:${input.id}`,
+                          label: input.label,
+                          readOnly: true,
+                          removeLabel: `Remove array item ${index + 1}`,
+                          removeDisabled: context.readOnly,
+                          onRemove: () =>
+                            context.updateDocument?.(
+                              removeWorkflowEditorArrayConstructorInput(
+                                context.document,
+                                node.id,
+                                input.id,
+                              ),
+                            ),
+                        }),
+                      ),
+                      {
+                        id: "arrayExpression",
+                        label: "Expression",
+                        type: "code" as const,
+                        readOnly: true,
+                      },
+                    ],
+                  },
+                ]
+              : []),
             ...(isWorkflowEditorObjectConstructorNode(node)
               ? [
                   {
@@ -2056,12 +2117,24 @@ function DefaultWorkflowInspector<
                     title: "Object",
                     description: "Map input values to object properties.",
                     fields: [
-                      ...objectConstructorInputs.map((input) => ({
-                        id: `objectProperty:${input.id}`,
-                        label: input.badge ? `${input.badge}` : input.label,
-                        type: "text" as const,
-                        placeholder: "propertyName",
-                      })),
+                      ...objectConstructorInputs.map((input) =>
+                        createWorkflowEditorRemovableInspectorField({
+                          id: `objectProperty:${input.id}`,
+                          label: input.badge ? `${input.badge}` : input.label,
+                          placeholder: "propertyName",
+                          readOnly: context.readOnly,
+                          removeLabel: `Remove property input ${input.label}`,
+                          removeDisabled: context.readOnly,
+                          onRemove: () =>
+                            context.updateDocument?.(
+                              removeWorkflowEditorObjectConstructorInput(
+                                context.document,
+                                node.id,
+                                input.id,
+                              ),
+                            ),
+                        }),
+                      ),
                       {
                         id: "objectExpression",
                         label: "Expression",
@@ -2079,12 +2152,24 @@ function DefaultWorkflowInspector<
                     title: "Object decomposition",
                     description: "Map object properties to output ports.",
                     fields: [
-                      ...objectDecompositionOutputs.map((output) => ({
-                        id: `objectOutput:${output.id}`,
-                        label: output.badge ? `${output.badge}` : output.label,
-                        type: "text" as const,
-                        placeholder: "propertyName",
-                      })),
+                      ...objectDecompositionOutputs.map((output) =>
+                        createWorkflowEditorRemovableInspectorField({
+                          id: `objectOutput:${output.id}`,
+                          label: output.badge ? `${output.badge}` : output.label,
+                          placeholder: "propertyName",
+                          readOnly: context.readOnly,
+                          removeLabel: `Remove property output ${output.label}`,
+                          removeDisabled: context.readOnly,
+                          onRemove: () =>
+                            context.updateDocument?.(
+                              removeWorkflowEditorObjectDecompositionOutput(
+                                context.document,
+                                node.id,
+                                output.id,
+                              ),
+                            ),
+                        }),
+                      ),
                       {
                         id: "objectDecompositionExpression",
                         label: "Expression",
@@ -2158,6 +2243,26 @@ function DefaultWorkflowInspector<
             context.updateSelectedNode(patch);
           }}
         />
+        {isWorkflowEditorArrayConstructorNode(node) ? (
+          <div className="flex flex-wrap gap-2 px-4">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={context.readOnly}
+              onClick={() => {
+                const nextNode = addWorkflowEditorArrayConstructorInputToNode(node);
+                context.updateSelectedNode({
+                  inputs: nextNode.inputs,
+                  outputs: nextNode.outputs,
+                  data: nextNode.data,
+                } as Partial<WorkflowEditorNode<TNodeData>>);
+              }}
+            >
+              Add item input
+            </Button>
+          </div>
+        ) : null}
         {isWorkflowEditorObjectConstructorNode(node) ? (
           <div className="flex flex-wrap gap-2 px-4">
             <Button
@@ -2262,6 +2367,56 @@ function DefaultWorkflowInspector<
       Select a workflow node or edge to inspect its configuration.
     </div>
   );
+}
+
+function createWorkflowEditorRemovableInspectorField({
+  id,
+  label,
+  onRemove,
+  placeholder,
+  readOnly = false,
+  removeDisabled = false,
+  removeLabel,
+}: {
+  id: string;
+  label: string;
+  onRemove: () => void;
+  placeholder?: string;
+  readOnly?: boolean;
+  removeDisabled?: boolean;
+  removeLabel: string;
+}): InspectorFieldDefinition {
+  return {
+    id,
+    label,
+    type: "custom",
+    placeholder,
+    render: (value, onChange) => (
+      <div className="flex items-center gap-2">
+        <input
+          aria-label={label}
+          className={cn(
+            "h-8 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-sm",
+            readOnly && "text-muted-foreground",
+          )}
+          disabled={readOnly}
+          placeholder={placeholder}
+          value={String(value ?? "")}
+          onChange={(event) => onChange(event.currentTarget.value)}
+        />
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          aria-label={removeLabel}
+          disabled={removeDisabled}
+          onClick={onRemove}
+        >
+          Remove
+        </Button>
+      </div>
+    ),
+  };
 }
 
 function toNumber(value: InspectorFieldValue, fallback: number) {

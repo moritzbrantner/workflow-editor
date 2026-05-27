@@ -7,6 +7,7 @@ import {
   WorkflowEditor,
   WorkflowEditorDocumentValidationError,
   WorkflowWorkbench,
+  addWorkflowEditorArrayConstructorInput,
   addWorkflowEditorNode,
   addWorkflowEditorObjectDecompositionOutput,
   addWorkflowEditorObjectConstructorInput,
@@ -35,16 +36,19 @@ import {
   duplicateWorkflowEditorEntry,
   encodeWorkflowEditorSharePayload,
   findWorkflowEditorNode,
+  formatWorkflowEditorArrayConstructorExpression,
   formatWorkflowEditorObjectDecompositionExpression,
   formatWorkflowEditorObjectConstructorExpression,
   fromUiWorkflowBuilderEdges,
   fromUiWorkflowBuilderNodes,
+  getWorkflowEditorArrayConstructorInputs,
   getWorkflowEditorObjectConstructorInputs,
   getWorkflowEditorObjectDecompositionOutputs,
   getWorkflowEditorReferenceDiagnostics,
   getWorkflowEditorReferencedDocumentIds,
   hasWorkflowEditorNodeComposition,
   hasWorkflowEditorWorkflowReference,
+  isWorkflowEditorArrayConstructorNode,
   isWorkflowEditorObjectConstructorNode,
   isWorkflowEditorObjectDecompositionNode,
   isWorkflowEditorDirectedAcyclicGraph,
@@ -57,8 +61,11 @@ import {
   normalizeWorkflowEditorSelection,
   pasteWorkflowEditorClipboardPayload,
   parseWorkflowEditorDocumentFile,
+  removeWorkflowEditorArrayConstructorInput,
   removeWorkflowEditorSelection,
   removeWorkflowEditorNode,
+  removeWorkflowEditorObjectDecompositionOutput,
+  removeWorkflowEditorObjectConstructorInput,
   removeWorkflowEditorEntry,
   renameWorkflowEditorEntry,
   restoreWorkflowEditorComposedNode,
@@ -75,6 +82,8 @@ import {
   upsertWorkflowEditorEntry,
   updateWorkflowEditorNode,
   updateWorkflowEditorNodeWorkflowReference,
+  updateWorkflowEditorObjectDecompositionPropertiesInNode,
+  updateWorkflowEditorObjectConstructorPropertiesInNode,
   validateWorkflowEditorDocument,
   validateWorkflowEditorConnection,
   wouldCreateWorkflowEditorCycle,
@@ -241,6 +250,13 @@ describe("@moritzbrantner/workflow-editor core", () => {
       kind: "array",
       element: { kind: "any" },
     });
+    expect(arrayTemplate?.inputs?.[0]).toEqual(
+      expect.objectContaining({
+        id: "item-add",
+        label: "Add item",
+        metadata: { arrayConstructorRole: "add-item" },
+      }),
+    );
     expect(objectTemplate?.outputs?.[0]?.type).toEqual({ kind: "object" });
     expect(objectDecomposeTemplate?.inputs?.[0]?.type).toEqual({ kind: "object" });
     expect(filterTemplate?.inputs?.[0]?.type).toEqual({
@@ -416,6 +432,17 @@ describe("@moritzbrantner/workflow-editor core", () => {
       "{\n  firstName: employee.firstName\n}",
     );
 
+    const renamedObjectNode = updateWorkflowEditorObjectConstructorPropertiesInNode(objectNode, {
+      firstname: "givenName",
+    });
+    expect(getWorkflowEditorObjectConstructorInputs(renamedObjectNode)[0]).toEqual(
+      expect.objectContaining({ id: "firstname", label: "givenName" }),
+    );
+    expect(renamedObjectNode.outputs?.[0]?.type).toEqual({
+      kind: "object",
+      properties: { givenName: { type: { kind: "string" } } },
+    });
+
     const expanded = addWorkflowEditorObjectConstructorInput(connected, "employee-object", {
       propertyKey: "lastName",
     });
@@ -424,6 +451,40 @@ describe("@moritzbrantner/workflow-editor core", () => {
         findWorkflowEditorNode(expanded, "employee-object")!,
       ),
     ).toHaveLength(2);
+
+    const explicitPortId = addWorkflowEditorObjectConstructorInput(connected, "employee-object", {
+      portId: "trialDays",
+      propertyKey: "trialDays",
+    });
+    expect(
+      getWorkflowEditorObjectConstructorInputs(
+        findWorkflowEditorNode(explicitPortId, "employee-object")!,
+      ),
+    ).toContainEqual(expect.objectContaining({ id: "trialDays", label: "trialDays" }));
+
+    const withoutLastName = removeWorkflowEditorObjectConstructorInput(
+      expanded,
+      "employee-object",
+      "lastname",
+    );
+    expect(
+      getWorkflowEditorObjectConstructorInputs(
+        findWorkflowEditorNode(withoutLastName, "employee-object")!,
+      ),
+    ).toHaveLength(1);
+
+    const withoutFirstName = removeWorkflowEditorObjectConstructorInput(
+      connected,
+      "employee-object",
+      "firstname",
+    );
+    const emptiedObjectNode = findWorkflowEditorNode(withoutFirstName, "employee-object")!;
+
+    expect(withoutFirstName.edges).toHaveLength(0);
+    expect(emptiedObjectNode.outputs?.[0]?.type).toEqual({
+      kind: "object",
+      properties: {},
+    });
   });
 
   test("decomposes object nodes with expandable named outputs", () => {
@@ -498,6 +559,16 @@ describe("@moritzbrantner/workflow-editor core", () => {
       "email = object.email",
     );
 
+    const renamedDecomposeNode = updateWorkflowEditorObjectDecompositionPropertiesInNode(
+      decomposeNode,
+      {
+        email: "score",
+      },
+    );
+    expect(getWorkflowEditorObjectDecompositionOutputs(renamedDecomposeNode)[0]).toEqual(
+      expect.objectContaining({ id: "email", label: "score", type: { kind: "number" } }),
+    );
+
     const expanded = addWorkflowEditorObjectDecompositionOutput(connected, "split-lead", {
       propertyKey: "score",
     });
@@ -507,6 +578,151 @@ describe("@moritzbrantner/workflow-editor core", () => {
       expect.objectContaining({ id: "email", type: { kind: "string" } }),
       expect.objectContaining({ id: "score", type: { kind: "number" } }),
     ]);
+
+    const withoutScore = removeWorkflowEditorObjectDecompositionOutput(
+      expanded,
+      "split-lead",
+      "score",
+    );
+    expect(
+      getWorkflowEditorObjectDecompositionOutputs(
+        findWorkflowEditorNode(withoutScore, "split-lead")!,
+      ),
+    ).toHaveLength(1);
+
+    const withoutEmail = removeWorkflowEditorObjectDecompositionOutput(
+      connected,
+      "split-lead",
+      "email",
+    );
+
+    expect(withoutEmail.edges.map((edge) => edge.id)).toEqual(["lead:value->split-lead:object"]);
+    expect(
+      getWorkflowEditorObjectDecompositionOutputs(
+        findWorkflowEditorNode(withoutEmail, "split-lead")!,
+      ),
+    ).toHaveLength(0);
+  });
+
+  test("constructs array nodes with expandable item inputs", () => {
+    const arrayTemplate = workflowEditorJsonNodeTemplates.find(
+      (template) => template.id === "json-array",
+    )!;
+    const arrayDocument = normalizeWorkflowEditorDocument<Record<string, unknown>>({
+      nodes: [
+        {
+          id: "name",
+          label: "Name",
+          x: 0,
+          y: 0,
+          outputs: [{ id: "value", label: "Value", type: { kind: "string" } }],
+        },
+        {
+          id: "age",
+          label: "Age",
+          x: 0,
+          y: 160,
+          outputs: [{ id: "value", label: "Value", type: { kind: "number" } }],
+        },
+        {
+          ...arrayTemplate,
+          id: "items",
+          x: 240,
+          y: 0,
+        },
+      ],
+      edges: [],
+    });
+
+    const withName = connectWorkflowEditorNodes(arrayDocument, {
+      sourceNodeId: "name",
+      sourcePortId: "value",
+      targetNodeId: "items",
+      targetPortId: "item-add",
+    });
+    const nameArrayNode = findWorkflowEditorNode(withName, "items")!;
+
+    expect(isWorkflowEditorArrayConstructorNode(nameArrayNode)).toBe(true);
+    expect(withName.edges[0]).toEqual(
+      expect.objectContaining({
+        targetNodeId: "items",
+        targetPortId: "item",
+      }),
+    );
+    expect(getWorkflowEditorArrayConstructorInputs(nameArrayNode)).toEqual([
+      expect.objectContaining({
+        id: "item",
+        label: "Item 1",
+        badge: "name",
+        type: { kind: "string" },
+      }),
+    ]);
+    expect(nameArrayNode.outputs?.[0]?.type).toEqual({
+      kind: "array",
+      element: { kind: "string" },
+    });
+    expect(formatWorkflowEditorArrayConstructorExpression(nameArrayNode)).toBe("[\n  name\n]");
+
+    const withAge = connectWorkflowEditorNodes(withName, {
+      sourceNodeId: "age",
+      sourcePortId: "value",
+      targetNodeId: "items",
+      targetPortId: "item",
+    });
+    const mixedArrayNode = findWorkflowEditorNode(withAge, "items")!;
+
+    expect(withAge.edges.at(-1)).toEqual(
+      expect.objectContaining({
+        targetNodeId: "items",
+        targetPortId: "item-2",
+      }),
+    );
+    expect(mixedArrayNode.outputs?.[0]?.type).toEqual({
+      kind: "array",
+      element: {
+        kind: "union",
+        types: [{ kind: "string" }, { kind: "number" }],
+      },
+    });
+
+    const expanded = addWorkflowEditorArrayConstructorInput(withAge, "items");
+    expect(
+      getWorkflowEditorArrayConstructorInputs(findWorkflowEditorNode(expanded, "items")!),
+    ).toHaveLength(3);
+
+    const withoutAge = removeWorkflowEditorArrayConstructorInput(withAge, "items", "item-2");
+    const stringArrayNode = findWorkflowEditorNode(withoutAge, "items")!;
+
+    expect(withoutAge.edges).toHaveLength(1);
+    expect(stringArrayNode.outputs?.[0]?.type).toEqual({
+      kind: "array",
+      element: { kind: "string" },
+    });
+
+    const legacy = normalizeWorkflowEditorDocument<Record<string, unknown>>({
+      nodes: [
+        {
+          id: "legacy-array",
+          label: "Legacy array",
+          kind: "json.array",
+          x: 0,
+          y: 0,
+          inputs: [{ id: "item", label: "Item", type: { kind: "string" } }],
+          outputs: [
+            { id: "value", label: "Value", type: { kind: "array", element: { kind: "string" } } },
+          ],
+        },
+      ],
+      edges: [],
+    });
+    const legacyNode = findWorkflowEditorNode(legacy, "legacy-array")!;
+
+    expect(getWorkflowEditorArrayConstructorInputs(legacyNode)).toEqual([
+      expect.objectContaining({ id: "item", label: "Item 1" }),
+    ]);
+    expect(legacyNode.inputs?.at(-1)).toEqual(
+      expect.objectContaining({ id: "item-add", label: "Add item" }),
+    );
   });
 
   test("normalizes, mutates, indexes, and roundtrips graph data", () => {
@@ -562,7 +778,12 @@ describe("@moritzbrantner/workflow-editor core", () => {
             { id: "object", label: "Object", type: { kind: "object" } },
             { id: "array", label: "Array", type: { kind: "array", element: { kind: "string" } } },
             { id: "ref", label: "Ref", type: { kind: "ref", name: "Lead" } },
-            { id: "custom", label: "Custom", type: { kind: "ref", name: "Incident" }, color: "#123456" },
+            {
+              id: "custom",
+              label: "Custom",
+              type: { kind: "ref", name: "Incident" },
+              color: "#123456",
+            },
           ],
         },
         {
@@ -610,7 +831,9 @@ describe("@moritzbrantner/workflow-editor core", () => {
     expect(uiEdges[0]).toMatchObject({ color: "#0891b2" });
 
     const movedNodes = fromUiWorkflowBuilderNodes(
-      uiNodes.map((node) => (node.id === "source" ? { ...node, minimized: true, x: 24 } : node)),
+      uiNodes.map((node) =>
+        node.id === "source" ? Object.assign({}, node, { minimized: true, x: 24 }) : node,
+      ),
       typedDocument.nodes,
     );
     expect(movedNodes[0]?.outputs?.[0]?.type).toEqual({ kind: "string" });
@@ -702,9 +925,21 @@ describe("@moritzbrantner/workflow-editor core", () => {
     const selected = layoutWorkflowEditorDocument(
       normalizeWorkflowEditorDocument({
         nodes: [
-          { id: "a", label: "A", x: 100, y: 50 },
+          {
+            id: "a",
+            label: "A",
+            x: 100,
+            y: 50,
+            outputs: [{ id: "out", label: "Out", type: { kind: "string" } }],
+          },
           { id: "b", label: "B", x: 0, y: 0 },
-          { id: "c", label: "C", x: 200, y: 100 },
+          {
+            id: "c",
+            label: "C",
+            x: 200,
+            y: 100,
+            inputs: [{ id: "in", label: "In", type: { kind: "string" } }],
+          },
         ],
         edges: [
           {
@@ -725,10 +960,24 @@ describe("@moritzbrantner/workflow-editor core", () => {
       Math.min(...selected.document.nodes.filter((node) => node.id !== "b").map((node) => node.x)),
     ).toBe(100);
 
-    const cyclic = {
+    const cyclic: WorkflowEditorDocument = {
       nodes: [
-        { id: "a", label: "A", x: 0, y: 0 },
-        { id: "b", label: "B", x: 100, y: 0 },
+        {
+          id: "a",
+          label: "A",
+          x: 0,
+          y: 0,
+          inputs: [{ id: "in", label: "In", type: { kind: "string" } }],
+          outputs: [{ id: "out", label: "Out", type: { kind: "string" } }],
+        },
+        {
+          id: "b",
+          label: "B",
+          x: 100,
+          y: 0,
+          inputs: [{ id: "in", label: "In", type: { kind: "string" } }],
+          outputs: [{ id: "out", label: "Out", type: { kind: "string" } }],
+        },
       ],
       edges: [
         {
@@ -868,10 +1117,24 @@ describe("@moritzbrantner/workflow-editor core", () => {
       normalizeWorkflowEditorDocument(invalidDocument as WorkflowEditorDocument),
     ).toThrow(WorkflowEditorDocumentValidationError);
 
-    const cyclic = {
+    const cyclic: WorkflowEditorDocument = {
       nodes: [
-        { id: "a", label: "A", x: 0, y: 0 },
-        { id: "b", label: "B", x: 0, y: 0 },
+        {
+          id: "a",
+          label: "A",
+          x: 0,
+          y: 0,
+          inputs: [{ id: "in", label: "In", type: { kind: "string" } }],
+          outputs: [{ id: "out", label: "Out", type: { kind: "string" } }],
+        },
+        {
+          id: "b",
+          label: "B",
+          x: 0,
+          y: 0,
+          inputs: [{ id: "in", label: "In", type: { kind: "string" } }],
+          outputs: [{ id: "out", label: "Out", type: { kind: "string" } }],
+        },
       ],
       edges: [
         {
@@ -895,6 +1158,42 @@ describe("@moritzbrantner/workflow-editor core", () => {
       "cycle",
     );
     expect(normalizeWorkflowEditorDocument(cyclic, { mode: "repair" }).edges).toHaveLength(1);
+
+    const missingPort: WorkflowEditorDocument = {
+      nodes: [
+        {
+          id: "source",
+          label: "Source",
+          x: 0,
+          y: 0,
+          outputs: [{ id: "out", label: "Out", type: { kind: "string" } }],
+        },
+        {
+          id: "target",
+          label: "Target",
+          x: 240,
+          y: 0,
+          inputs: [{ id: "in", label: "In", type: { kind: "string" } }],
+        },
+      ],
+      edges: [
+        {
+          id: "missing-port",
+          sourceNodeId: "source",
+          sourcePortId: "missing",
+          targetNodeId: "target",
+          targetPortId: "in",
+        },
+      ],
+    };
+
+    expect(
+      validateWorkflowEditorDocument(missingPort).map((diagnostic) => diagnostic.code),
+    ).toContain("missing-edge-port");
+    expect(() => normalizeWorkflowEditorDocument(missingPort)).toThrow(
+      WorkflowEditorDocumentValidationError,
+    );
+    expect(normalizeWorkflowEditorDocument(missingPort, { mode: "repair" }).edges).toHaveLength(0);
   });
 
   test("validates connections and detects ordering and cycles", () => {
@@ -2000,6 +2299,101 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     );
   });
 
+  test("edits JSON string and number source values and keeps null read-only", () => {
+    const stringChange = vi.fn();
+    const stringDocument = normalizeWorkflowEditorDocument({
+      nodes: [
+        {
+          id: "title",
+          label: "Title",
+          kind: "json.string",
+          category: "JSON",
+          x: 0,
+          y: 0,
+          outputs: [{ id: "value", label: "Value", type: { kind: "string" } }],
+          data: { value: "draft" },
+        },
+      ],
+      edges: [],
+    });
+
+    const { unmount } = render(
+      <WorkflowWorkbench
+        document={stringDocument}
+        selectedNodeId="title"
+        onDocumentChange={stringChange}
+      />,
+    );
+
+    fireEvent.change(screen.getAllByLabelText("Value")[0]!, { target: { value: "published" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "Apply" })[0]!);
+    expect(stringChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        nodes: [expect.objectContaining({ id: "title", data: { value: "published" } })],
+      }),
+    );
+
+    unmount();
+
+    const numberChange = vi.fn();
+    const numberDocument = normalizeWorkflowEditorDocument({
+      nodes: [
+        {
+          id: "count",
+          label: "Count",
+          kind: "json.number",
+          category: "JSON",
+          x: 0,
+          y: 0,
+          outputs: [{ id: "value", label: "Value", type: { kind: "number" } }],
+          data: { value: 1 },
+        },
+      ],
+      edges: [],
+    });
+
+    const renderedNumber = render(
+      <WorkflowWorkbench
+        document={numberDocument}
+        selectedNodeId="count"
+        onDocumentChange={numberChange}
+      />,
+    );
+
+    fireEvent.change(screen.getAllByLabelText("Value")[0]!, { target: { value: "42" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "Apply" })[0]!);
+    expect(numberChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        nodes: [expect.objectContaining({ id: "count", data: { value: 42 } })],
+      }),
+    );
+
+    renderedNumber.unmount();
+
+    const nullDocument = normalizeWorkflowEditorDocument({
+      nodes: [
+        {
+          id: "nothing",
+          label: "Nothing",
+          kind: "json.null",
+          category: "JSON",
+          x: 0,
+          y: 0,
+          outputs: [{ id: "value", label: "Value", type: { kind: "null" } }],
+          data: { value: null },
+        },
+      ],
+      edges: [],
+    });
+
+    render(<WorkflowWorkbench document={nullDocument} selectedNodeId="nothing" />);
+
+    const nullValue = screen.getAllByLabelText("Value")[0] as HTMLTextAreaElement;
+
+    expect(nullValue.disabled).toBe(true);
+    expect(nullValue.value).toBe("null");
+  });
+
   test("handles keyboard mutation shortcuts, clipboard shortcuts, and escape", async () => {
     render(
       <StatefulWorkbench
@@ -2217,7 +2611,10 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     );
   });
 
-  test("adds object constructor and decomposition ports from inspector controls", () => {
+  test("adds and removes JSON composition ports from inspector controls", () => {
+    const arrayTemplate = workflowEditorJsonNodeTemplates.find(
+      (template) => template.id === "json-array",
+    )!;
     const objectTemplate = workflowEditorJsonNodeTemplates.find(
       (template) => template.id === "json-object",
     )!;
@@ -2226,12 +2623,13 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     )!;
     const objectDocument = normalizeWorkflowEditorDocument<Record<string, unknown>>({
       nodes: [
+        { ...arrayTemplate, id: "array", x: -280, y: 0 },
         { ...objectTemplate, id: "object", x: 0, y: 0 },
         { ...decomposeTemplate, id: "decompose", x: 280, y: 0 },
       ],
       edges: [],
     });
-    const { unmount } = render(
+    const renderedObject = render(
       <StatefulWorkbench
         initialDocument={objectDocument}
         initialSelection={{
@@ -2248,10 +2646,16 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
         readStatefulDocument().nodes.find((node) => node.id === "object")!,
       ),
     ).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Remove property input property" }));
+    expect(
+      getWorkflowEditorObjectConstructorInputs(
+        readStatefulDocument().nodes.find((node) => node.id === "object")!,
+      ),
+    ).toHaveLength(0);
 
     const updatedDocument = readStatefulDocument();
-    unmount();
-    render(
+    renderedObject.unmount();
+    const renderedDecompose = render(
       <StatefulWorkbench
         initialDocument={updatedDocument}
         initialSelection={{
@@ -2267,6 +2671,122 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
         readStatefulDocument().nodes.find((node) => node.id === "decompose")!,
       ),
     ).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Remove property output property" }));
+    expect(
+      getWorkflowEditorObjectDecompositionOutputs(
+        readStatefulDocument().nodes.find((node) => node.id === "decompose")!,
+      ),
+    ).toHaveLength(0);
+
+    const decomposeUpdatedDocument = readStatefulDocument();
+    renderedDecompose.unmount();
+    render(
+      <StatefulWorkbench
+        initialDocument={decomposeUpdatedDocument}
+        initialSelection={{
+          nodeIds: ["array"],
+          edgeIds: [],
+          primary: { type: "node", id: "array" },
+        }}
+      />,
+    );
+    fireEvent.click(screen.getAllByRole("button", { name: "Add item input" })[0]!);
+    expect(
+      getWorkflowEditorArrayConstructorInputs(
+        readStatefulDocument().nodes.find((node) => node.id === "array")!,
+      ),
+    ).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Remove array item 1" }));
+    expect(
+      getWorkflowEditorArrayConstructorInputs(
+        readStatefulDocument().nodes.find((node) => node.id === "array")!,
+      ),
+    ).toHaveLength(0);
+  });
+
+  test("disables JSON dynamic inspector controls in read-only mode", () => {
+    const arrayTemplate = workflowEditorJsonNodeTemplates.find(
+      (template) => template.id === "json-array",
+    )!;
+    const objectTemplate = workflowEditorJsonNodeTemplates.find(
+      (template) => template.id === "json-object",
+    )!;
+    const decomposeTemplate = workflowEditorJsonNodeTemplates.find(
+      (template) => template.id === "json-object-decompose",
+    )!;
+    let readonlyDocument = normalizeWorkflowEditorDocument<Record<string, unknown>>({
+      nodes: [
+        { ...arrayTemplate, id: "array", x: -280, y: 0 },
+        { ...objectTemplate, id: "object", x: 0, y: 0 },
+        { ...decomposeTemplate, id: "decompose", x: 280, y: 0 },
+      ],
+      edges: [],
+    });
+
+    readonlyDocument = addWorkflowEditorArrayConstructorInput(readonlyDocument, "array");
+    readonlyDocument = addWorkflowEditorObjectConstructorInput(readonlyDocument, "object");
+    readonlyDocument = addWorkflowEditorObjectDecompositionOutput(readonlyDocument, "decompose");
+
+    const renderedObject = render(
+      <StatefulWorkbench
+        initialDocument={readonlyDocument}
+        readOnly
+        initialSelection={{
+          nodeIds: ["object"],
+          edgeIds: [],
+          primary: { type: "node", id: "object" },
+        }}
+      />,
+    );
+
+    expect(
+      (screen.getByRole("button", { name: "Add property input" }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(
+      (screen.getByRole("button", { name: "Remove property input property" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+
+    renderedObject.unmount();
+    const renderedDecompose = render(
+      <StatefulWorkbench
+        initialDocument={readonlyDocument}
+        readOnly
+        initialSelection={{
+          nodeIds: ["decompose"],
+          edgeIds: [],
+          primary: { type: "node", id: "decompose" },
+        }}
+      />,
+    );
+
+    expect(
+      (screen.getByRole("button", { name: "Add property output" }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(
+      (screen.getByRole("button", { name: "Remove property output property" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+
+    renderedDecompose.unmount();
+    render(
+      <StatefulWorkbench
+        initialDocument={readonlyDocument}
+        readOnly
+        initialSelection={{
+          nodeIds: ["array"],
+          edgeIds: [],
+          primary: { type: "node", id: "array" },
+        }}
+      />,
+    );
+
+    expect(
+      (screen.getByRole("button", { name: "Add item input" }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(
+      (screen.getByRole("button", { name: "Remove array item 1" }) as HTMLButtonElement).disabled,
+    ).toBe(true);
   });
 
   test("creates and opens referenced workflows with breadcrumbs in the editor shell", async () => {

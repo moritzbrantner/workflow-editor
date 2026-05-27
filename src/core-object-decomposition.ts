@@ -4,6 +4,8 @@ export {
   formatWorkflowEditorObjectDecompositionExpression,
   getWorkflowEditorObjectDecompositionOutputs,
   isWorkflowEditorObjectDecompositionNode,
+  removeWorkflowEditorObjectDecompositionOutput,
+  removeWorkflowEditorObjectDecompositionOutputFromNode,
   updateWorkflowEditorObjectDecompositionPropertiesInNode,
   type WorkflowEditorObjectDecompositionOutputOptions,
   type WorkflowEditorObjectDecompositionProperty,

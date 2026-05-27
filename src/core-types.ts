@@ -13,6 +13,8 @@ export {
   type WorkflowEditorDocumentValidationOptions,
   type WorkflowEditorDuplicateNodeOptions,
   type WorkflowEditorEdge,
+  type WorkflowEditorArrayConstructorInputOptions,
+  type WorkflowEditorArrayConstructorItem,
   type WorkflowEditorNode,
   type WorkflowEditorNodeComposition,
   type WorkflowEditorNodeTemplate,

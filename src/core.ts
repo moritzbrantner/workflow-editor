@@ -65,6 +65,20 @@ export type WorkflowEditorObjectConstructorInputOptions = {
   type?: WorkflowEditorPortType;
 };
 
+export type WorkflowEditorArrayConstructorItem = {
+  sourceExpression?: string;
+  sourceNodeId?: string;
+  sourcePortId?: string;
+};
+
+export type WorkflowEditorArrayConstructorInputOptions = {
+  portId?: string;
+  sourceExpression?: string;
+  sourceNodeId?: string;
+  sourcePortId?: string;
+  type?: WorkflowEditorPortType;
+};
+
 export type WorkflowEditorObjectDecompositionProperty = {
   key: string;
 };
@@ -164,6 +178,7 @@ export type WorkflowEditorDocumentDiagnosticCode =
   | "duplicate-node-id"
   | "duplicate-edge-id"
   | "missing-edge-node"
+  | "missing-edge-port"
   | "self-edge"
   | "cycle";
 
@@ -348,9 +363,17 @@ export const workflowEditorJsonNodeTemplates = [
     description: "Create a JSON array value.",
     kind: "json.array",
     category: "JSON",
-    inputs: [{ id: "item", label: "Item", type: { kind: "any" } }],
+    inputs: [
+      {
+        id: "item-add",
+        label: "Add item",
+        type: { kind: "any" },
+        badge: "new",
+        metadata: { arrayConstructorRole: "add-item" },
+      },
+    ],
     outputs: [{ id: "value", label: "Value", type: { kind: "array", element: { kind: "any" } } }],
-    data: { items: [] },
+    data: { items: {} },
   },
   {
     id: "json-object",
@@ -521,12 +544,14 @@ export function normalizeWorkflowEditorDocument<
       )
     : [];
   const nodeIds = new Set(nodes.map((node) => node.id));
-  const edges = Array.isArray(document.edges)
+  let edges = Array.isArray(document.edges)
     ? (normalizeWorkflowEditorDagEdges(
         document.edges.flatMap((edge) => (isRecord(edge) ? [edge as WorkflowEditorEdge] : [])),
         nodeIds,
       ) as Array<WorkflowEditorEdge<TEdgeData>>)
     : [];
+  nodes = syncWorkflowEditorNodeBehaviors(nodes, edges);
+  edges = normalizeWorkflowEditorDagEdges(edges, nodeIds, nodes);
   nodes = syncWorkflowEditorNodeBehaviors(nodes, edges);
 
   return {
@@ -646,6 +671,9 @@ export function validateWorkflowEditorDocument<
     validateWorkflowEditorPorts(node.outputs, `${path}.outputs`, nodeId, diagnostics);
   });
 
+  const portLookup = createWorkflowEditorPortLookup(
+    value.nodes.flatMap((node) => (isRecord(node) ? [node as WorkflowEditorNode] : [])),
+  );
   const edgeIds = new Set<string>();
   value.edges.forEach((edge, index) => {
     const path = `$.edges[${index}]`;
@@ -661,7 +689,9 @@ export function validateWorkflowEditorDocument<
 
     const edgeId = typeof edge.id === "string" ? edge.id : undefined;
     const sourceNodeId = typeof edge.sourceNodeId === "string" ? edge.sourceNodeId : undefined;
+    const sourcePortId = typeof edge.sourcePortId === "string" ? edge.sourcePortId : undefined;
     const targetNodeId = typeof edge.targetNodeId === "string" ? edge.targetNodeId : undefined;
+    const targetPortId = typeof edge.targetPortId === "string" ? edge.targetPortId : undefined;
 
     if (!edgeId?.trim()) {
       diagnostics.push({
@@ -709,6 +739,38 @@ export function validateWorkflowEditorDocument<
         code: "missing-edge-node",
         message: `Workflow edge target node does not exist: ${targetNodeId}`,
         path: `${path}.targetNodeId`,
+        edgeId,
+        sourceNodeId,
+        targetNodeId,
+      });
+    }
+
+    if (
+      sourceNodeId &&
+      sourcePortId &&
+      nodeIds.has(sourceNodeId) &&
+      !portLookup.outputPortIdsByNodeId.get(sourceNodeId)?.has(sourcePortId)
+    ) {
+      diagnostics.push({
+        code: "missing-edge-port",
+        message: `Workflow edge source port does not exist: ${sourceNodeId}.${sourcePortId}`,
+        path: `${path}.sourcePortId`,
+        edgeId,
+        sourceNodeId,
+        targetNodeId,
+      });
+    }
+
+    if (
+      targetNodeId &&
+      targetPortId &&
+      nodeIds.has(targetNodeId) &&
+      !portLookup.inputPortIdsByNodeId.get(targetNodeId)?.has(targetPortId)
+    ) {
+      diagnostics.push({
+        code: "missing-edge-port",
+        message: `Workflow edge target port does not exist: ${targetNodeId}.${targetPortId}`,
+        path: `${path}.targetPortId`,
         edgeId,
         sourceNodeId,
         targetNodeId,
@@ -863,6 +925,143 @@ export function hasWorkflowEditorNodeComposition<TNodeData = Record<string, unkn
   );
 }
 
+export function isWorkflowEditorArrayConstructorNode<TNodeData = Record<string, unknown>>(
+  node: WorkflowEditorNode<TNodeData>,
+) {
+  return node.kind === "json.array";
+}
+
+export function getWorkflowEditorArrayConstructorInputs<TNodeData = Record<string, unknown>>(
+  node: WorkflowEditorNode<TNodeData>,
+) {
+  if (!isWorkflowEditorArrayConstructorNode(node)) {
+    return [];
+  }
+
+  return (node.inputs ?? []).filter((input) => !isWorkflowEditorArrayConstructorAddInput(input));
+}
+
+export function addWorkflowEditorArrayConstructorInputToNode<TNodeData = Record<string, unknown>>(
+  node: WorkflowEditorNode<TNodeData>,
+  options: WorkflowEditorArrayConstructorInputOptions = {},
+): WorkflowEditorNode<TNodeData> {
+  if (!isWorkflowEditorArrayConstructorNode(node)) {
+    return node;
+  }
+
+  const syncedNode = syncWorkflowEditorArrayConstructorNode(node);
+  const inputs = syncedNode.inputs ?? [];
+  const usedPortIds = new Set(inputs.map((input) => input.id));
+  const portId = createUniqueId(usedPortIds, workflowEditorPortIdBase(options.portId, "item"));
+  const port = createWorkflowEditorArrayConstructorPort(portId, options);
+  const addInput = inputs.find(isWorkflowEditorArrayConstructorAddInput);
+  const itemInputs = inputs.filter((input) => !isWorkflowEditorArrayConstructorAddInput(input));
+
+  return syncWorkflowEditorArrayConstructorNode({
+    ...syncedNode,
+    inputs: [...itemInputs, port, addInput ?? createWorkflowEditorArrayConstructorAddPort()],
+  });
+}
+
+export function removeWorkflowEditorArrayConstructorInputFromNode<
+  TNodeData = Record<string, unknown>,
+>(node: WorkflowEditorNode<TNodeData>, portId: string): WorkflowEditorNode<TNodeData> {
+  if (!isWorkflowEditorArrayConstructorNode(node)) {
+    return node;
+  }
+
+  const syncedNode = syncWorkflowEditorArrayConstructorNode(node);
+
+  if (
+    (syncedNode.inputs ?? []).some(
+      (input) => input.id === portId && isWorkflowEditorArrayConstructorAddInput(input),
+    )
+  ) {
+    return syncedNode;
+  }
+
+  const items = readWorkflowEditorArrayConstructorItems(syncedNode.data);
+  const { [portId]: _removedItem, ...nextItems } = items;
+  const inputs = (syncedNode.inputs ?? []).filter((input) => input.id !== portId);
+
+  return syncWorkflowEditorArrayConstructorNode({
+    ...syncedNode,
+    inputs,
+    data: {
+      ...(isRecord(syncedNode.data) ? syncedNode.data : {}),
+      items: nextItems,
+    } as TNodeData,
+  });
+}
+
+export function addWorkflowEditorArrayConstructorInput<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+>(
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>,
+  nodeId: string,
+  options: WorkflowEditorArrayConstructorInputOptions = {},
+): WorkflowEditorDocument<TNodeData, TEdgeData> {
+  const node = findWorkflowEditorNode(document, nodeId);
+
+  if (!node) {
+    return document;
+  }
+
+  const nextNode = addWorkflowEditorArrayConstructorInputToNode(node, options);
+
+  return updateWorkflowEditorNode(document, nodeId, {
+    inputs: nextNode.inputs,
+    outputs: nextNode.outputs,
+    data: nextNode.data,
+  } as Partial<WorkflowEditorNode<TNodeData>>);
+}
+
+export function removeWorkflowEditorArrayConstructorInput<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+>(
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>,
+  nodeId: string,
+  portId: string,
+): WorkflowEditorDocument<TNodeData, TEdgeData> {
+  const node = findWorkflowEditorNode(document, nodeId);
+
+  if (!node) {
+    return document;
+  }
+
+  const nextNode = removeWorkflowEditorArrayConstructorInputFromNode(node, portId);
+
+  return normalizeWorkflowEditorDocument({
+    ...document,
+    nodes: document.nodes.map((candidate) => (candidate.id === nodeId ? nextNode : candidate)),
+    edges: document.edges.filter(
+      (edge) => !(edge.targetNodeId === nodeId && edge.targetPortId === portId),
+    ),
+  });
+}
+
+export function formatWorkflowEditorArrayConstructorExpression<TNodeData = Record<string, unknown>>(
+  node: WorkflowEditorNode<TNodeData>,
+) {
+  if (!isWorkflowEditorArrayConstructorNode(node)) {
+    return "[]";
+  }
+
+  const items = readWorkflowEditorArrayConstructorItems(node.data);
+  const entries = getWorkflowEditorArrayConstructorInputs(node).map((input) => {
+    const item = items[input.id];
+    return `  ${item?.sourceExpression || input.badge || input.id}`;
+  });
+
+  if (entries.length === 0) {
+    return "[]";
+  }
+
+  return `[\n${entries.join(",\n")}\n]`;
+}
+
 export function isWorkflowEditorObjectConstructorNode<TNodeData = Record<string, unknown>>(
   node: WorkflowEditorNode<TNodeData>,
 ) {
@@ -902,7 +1101,7 @@ export function addWorkflowEditorObjectConstructorInputToNode<TNodeData = Record
   );
   const portId = createUniqueId(
     usedPortIds,
-    safeWorkflowEditorId((options.portId ?? propertyKey) || "property"),
+    workflowEditorPortIdBase(options.portId, propertyKey || "property"),
   );
   const port = createWorkflowEditorObjectConstructorPort(portId, {
     propertyKey,
@@ -971,6 +1170,37 @@ export function updateWorkflowEditorObjectConstructorPropertiesInNode<
   });
 }
 
+export function removeWorkflowEditorObjectConstructorInputFromNode<
+  TNodeData = Record<string, unknown>,
+>(node: WorkflowEditorNode<TNodeData>, portId: string): WorkflowEditorNode<TNodeData> {
+  if (!isWorkflowEditorObjectConstructorNode(node)) {
+    return node;
+  }
+
+  const syncedNode = syncWorkflowEditorObjectConstructorNode(node);
+
+  if (
+    (syncedNode.inputs ?? []).some(
+      (input) => input.id === portId && isWorkflowEditorObjectConstructorAddInput(input),
+    )
+  ) {
+    return syncedNode;
+  }
+
+  const properties = readWorkflowEditorObjectConstructorProperties(syncedNode.data);
+  const { [portId]: _removedProperty, ...nextProperties } = properties;
+  const inputs = (syncedNode.inputs ?? []).filter((input) => input.id !== portId);
+
+  return syncWorkflowEditorObjectConstructorNode({
+    ...syncedNode,
+    inputs,
+    data: {
+      ...(isRecord(syncedNode.data) ? syncedNode.data : {}),
+      properties: nextProperties,
+    } as TNodeData,
+  });
+}
+
 export function addWorkflowEditorObjectConstructorInput<
   TNodeData = Record<string, unknown>,
   TEdgeData = Record<string, unknown>,
@@ -992,6 +1222,31 @@ export function addWorkflowEditorObjectConstructorInput<
     outputs: nextNode.outputs,
     data: nextNode.data,
   } as Partial<WorkflowEditorNode<TNodeData>>);
+}
+
+export function removeWorkflowEditorObjectConstructorInput<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+>(
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>,
+  nodeId: string,
+  portId: string,
+): WorkflowEditorDocument<TNodeData, TEdgeData> {
+  const node = findWorkflowEditorNode(document, nodeId);
+
+  if (!node) {
+    return document;
+  }
+
+  const nextNode = removeWorkflowEditorObjectConstructorInputFromNode(node, portId);
+
+  return normalizeWorkflowEditorDocument({
+    ...document,
+    nodes: document.nodes.map((candidate) => (candidate.id === nodeId ? nextNode : candidate)),
+    edges: document.edges.filter(
+      (edge) => !(edge.targetNodeId === nodeId && edge.targetPortId === portId),
+    ),
+  });
 }
 
 export function formatWorkflowEditorObjectConstructorExpression<
@@ -1059,7 +1314,7 @@ export function addWorkflowEditorObjectDecompositionOutputToNode<
   );
   const portId = createUniqueId(
     usedPortIds,
-    safeWorkflowEditorId((options.portId ?? propertyKey) || "property"),
+    workflowEditorPortIdBase(options.portId, propertyKey || "property"),
   );
   const port = createWorkflowEditorObjectDecompositionPort(portId, {
     propertyKey,
@@ -1129,6 +1384,37 @@ export function updateWorkflowEditorObjectDecompositionPropertiesInNode<
   });
 }
 
+export function removeWorkflowEditorObjectDecompositionOutputFromNode<
+  TNodeData = Record<string, unknown>,
+>(node: WorkflowEditorNode<TNodeData>, portId: string): WorkflowEditorNode<TNodeData> {
+  if (!isWorkflowEditorObjectDecompositionNode(node)) {
+    return node;
+  }
+
+  const syncedNode = syncWorkflowEditorObjectDecompositionNode(node);
+
+  if (
+    (syncedNode.outputs ?? []).some(
+      (output) => output.id === portId && isWorkflowEditorObjectDecompositionAddOutput(output),
+    )
+  ) {
+    return syncedNode;
+  }
+
+  const properties = readWorkflowEditorObjectDecompositionProperties(syncedNode.data);
+  const { [portId]: _removedProperty, ...nextProperties } = properties;
+  const outputs = (syncedNode.outputs ?? []).filter((output) => output.id !== portId);
+
+  return syncWorkflowEditorObjectDecompositionNode({
+    ...syncedNode,
+    outputs,
+    data: {
+      ...(isRecord(syncedNode.data) ? syncedNode.data : {}),
+      properties: nextProperties,
+    } as TNodeData,
+  });
+}
+
 export function addWorkflowEditorObjectDecompositionOutput<
   TNodeData = Record<string, unknown>,
   TEdgeData = Record<string, unknown>,
@@ -1150,6 +1436,31 @@ export function addWorkflowEditorObjectDecompositionOutput<
     outputs: nextNode.outputs,
     data: nextNode.data,
   } as Partial<WorkflowEditorNode<TNodeData>>);
+}
+
+export function removeWorkflowEditorObjectDecompositionOutput<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+>(
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>,
+  nodeId: string,
+  portId: string,
+): WorkflowEditorDocument<TNodeData, TEdgeData> {
+  const node = findWorkflowEditorNode(document, nodeId);
+
+  if (!node) {
+    return document;
+  }
+
+  const nextNode = removeWorkflowEditorObjectDecompositionOutputFromNode(node, portId);
+
+  return normalizeWorkflowEditorDocument({
+    ...document,
+    nodes: document.nodes.map((candidate) => (candidate.id === nodeId ? nextNode : candidate)),
+    edges: document.edges.filter(
+      (edge) => !(edge.sourceNodeId === nodeId && edge.sourcePortId === portId),
+    ),
+  });
 }
 
 export function formatWorkflowEditorObjectDecompositionExpression<
@@ -1529,12 +1840,22 @@ export function validateWorkflowEditorConnection<
   const sourcePort = context.getOutputPort(connection.sourceNodeId, connection.sourcePortId)!;
   const targetPort = context.getInputPort(connection.targetNodeId, connection.targetPortId)!;
   const typeResolver = createWorkflowEditorTypeResolver(options.typeDefinitions);
+  const expandsToNewTargetPort =
+    (isWorkflowEditorArrayConstructorNode(targetNode) &&
+      (isWorkflowEditorArrayConstructorAddInput(targetPort) ||
+        !!context.getIncomingEdgeToPort(targetNode.id, targetPort.id))) ||
+    (isWorkflowEditorObjectConstructorNode(targetNode) &&
+      (isWorkflowEditorObjectConstructorAddInput(targetPort) ||
+        !!context.getIncomingEdgeToPort(targetNode.id, targetPort.id)));
+  const targetType = expandsToNewTargetPort ? ({ kind: "any" } as const) : targetPort.type;
 
-  if (!typeResolver.isAssignable(sourcePort.type, targetPort.type)) {
+  if (!typeResolver.isAssignable(sourcePort.type, targetType)) {
     return { valid: false, reason: "kind-mismatch" };
   }
 
-  const baseValidity = getWorkflowBuilderConnectionValidity(uiConnection);
+  const baseValidity = expandsToNewTargetPort
+    ? ({ valid: true } as const)
+    : getWorkflowBuilderConnectionValidity(uiConnection);
 
   if (!baseValidity.valid) {
     return baseValidity;
@@ -2040,6 +2361,86 @@ export function toUiWorkflowBuilderViewport(
   return viewport;
 }
 
+function expandWorkflowEditorArrayConstructorConnection<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+>(
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>,
+  connection: WorkflowEditorConnectionInput,
+  context: WorkflowEditorDocumentContext<
+    TNodeData,
+    TEdgeData
+  > = createWorkflowEditorDocumentContext(document),
+): {
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>;
+  connection: WorkflowEditorConnectionInput;
+} {
+  const sourceNode = context.nodeById.get(connection.sourceNodeId);
+  const targetNode = context.nodeById.get(connection.targetNodeId);
+  const sourcePort = context.getOutputPort(connection.sourceNodeId, connection.sourcePortId);
+  const targetPort = context.getInputPort(connection.targetNodeId, connection.targetPortId);
+
+  if (!sourceNode || !targetNode || !sourcePort || !targetPort) {
+    return { document, connection };
+  }
+
+  if (!isWorkflowEditorArrayConstructorNode(targetNode)) {
+    return { document, connection };
+  }
+
+  const targetPortOccupied = !!context.getIncomingEdgeToPort(targetNode.id, targetPort.id);
+  const shouldCreatePort =
+    isWorkflowEditorArrayConstructorAddInput(targetPort) || targetPortOccupied;
+  const source = createWorkflowEditorArrayConstructorSource(sourceNode, sourcePort);
+
+  if (!shouldCreatePort) {
+    const nextTargetNode = syncWorkflowEditorArrayConstructorNode({
+      ...targetNode,
+      inputs: (targetNode.inputs ?? []).map((input) =>
+        input.id === targetPort.id
+          ? createWorkflowEditorArrayConstructorPort(input.id, {
+              sourceExpression: source.expression,
+              sourceNodeId: sourceNode.id,
+              sourcePortId: sourcePort.id,
+              type: sourcePort.type,
+            })
+          : input,
+      ),
+    });
+
+    return {
+      document: {
+        ...document,
+        nodes: document.nodes.map((node) => (node.id === targetNode.id ? nextTargetNode : node)),
+      },
+      connection,
+    };
+  }
+
+  const nextTargetNode = addWorkflowEditorArrayConstructorInputToNode(targetNode, {
+    sourceExpression: source.expression,
+    sourceNodeId: sourceNode.id,
+    sourcePortId: sourcePort.id,
+    type: sourcePort.type,
+  });
+  const nextPort = getWorkflowEditorArrayConstructorInputs(nextTargetNode).at(-1);
+
+  if (!nextPort) {
+    return { document, connection };
+  }
+
+  return {
+    document: {
+      ...document,
+      nodes: document.nodes.map((node) => (node.id === targetNode.id ? nextTargetNode : node)),
+    },
+    connection: {
+      ...connection,
+      targetPortId: nextPort.id,
+    },
+  };
+}
+
 function expandWorkflowEditorObjectConstructorConnection<
   TNodeData = Record<string, unknown>,
   TEdgeData = Record<string, unknown>,
@@ -2196,6 +2597,11 @@ type WorkflowEditorNodeBehavior = {
 
 const workflowEditorNodeBehaviors = [
   {
+    kind: "json.array",
+    syncNodes: syncWorkflowEditorArrayConstructorNodes,
+    expandConnection: expandWorkflowEditorArrayConstructorConnection,
+  },
+  {
     kind: "json.object",
     syncNodes: syncWorkflowEditorObjectConstructorNodes,
     expandConnection: expandWorkflowEditorObjectConstructorConnection,
@@ -2233,6 +2639,50 @@ function expandWorkflowEditorConnectionWithBehaviors<
       ) ?? state,
     { document, connection },
   );
+}
+
+function syncWorkflowEditorArrayConstructorNodes<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+>(nodes: Array<WorkflowEditorNode<TNodeData>>, edges: Array<WorkflowEditorEdge<TEdgeData>>) {
+  const context = createWorkflowEditorDocumentContext({ nodes, edges });
+
+  return nodes.map((node) => {
+    if (!isWorkflowEditorArrayConstructorNode(node)) {
+      return node;
+    }
+
+    let nextNode = syncWorkflowEditorArrayConstructorNode(node);
+
+    for (const input of getWorkflowEditorArrayConstructorInputs(nextNode)) {
+      const incomingEdge = context.getIncomingEdgeToPort(nextNode.id, input.id);
+      const sourceNode = incomingEdge ? context.nodeById.get(incomingEdge.sourceNodeId) : undefined;
+      const sourcePort = incomingEdge
+        ? context.getOutputPort(incomingEdge.sourceNodeId, incomingEdge.sourcePortId)
+        : undefined;
+
+      if (!incomingEdge || !sourceNode || !sourcePort) {
+        continue;
+      }
+
+      const source = createWorkflowEditorArrayConstructorSource(sourceNode, sourcePort);
+      nextNode = syncWorkflowEditorArrayConstructorNode({
+        ...nextNode,
+        inputs: (nextNode.inputs ?? []).map((nextInput) =>
+          nextInput.id === input.id
+            ? createWorkflowEditorArrayConstructorPort(nextInput.id, {
+                sourceExpression: source.expression,
+                sourceNodeId: sourceNode.id,
+                sourcePortId: sourcePort.id,
+                type: sourcePort.type,
+              })
+            : nextInput,
+        ),
+      });
+    }
+
+    return nextNode;
+  });
 }
 
 function syncWorkflowEditorObjectConstructorNodes<
@@ -2317,6 +2767,197 @@ function syncWorkflowEditorObjectDecompositionNodes<
 
     return nextNode;
   });
+}
+
+function syncWorkflowEditorArrayConstructorNode<TNodeData = Record<string, unknown>>(
+  node: WorkflowEditorNode<TNodeData>,
+): WorkflowEditorNode<TNodeData> {
+  if (!isWorkflowEditorArrayConstructorNode(node)) {
+    return node;
+  }
+
+  const items = readWorkflowEditorArrayConstructorItems(node.data);
+  const itemInputs = (node.inputs ?? []).filter(
+    (input) => !isWorkflowEditorArrayConstructorAddInput(input),
+  );
+  const syncedItems: Record<string, WorkflowEditorArrayConstructorItem> = {};
+  const syncedInputs = itemInputs.map((input, index) => {
+    const item = items[input.id] ?? getWorkflowEditorArrayConstructorItem(node, input.id);
+    syncedItems[input.id] = item ?? {};
+
+    return Object.assign({}, input, {
+      label: `Item ${index + 1}`,
+      badge: item?.sourceExpression ?? input.badge,
+      type: input.type ?? { kind: "any" },
+      metadata: {
+        ...(input.metadata ?? {}),
+        arrayConstructorRole: "item",
+      },
+    });
+  });
+  const elementType = getWorkflowEditorArrayConstructorElementType(syncedInputs);
+  const outputs = node.outputs?.length
+    ? node.outputs.map((output) =>
+        output.id === "value"
+          ? {
+              ...output,
+              label: output.label || "Value",
+              type: { kind: "array", element: elementType } as WorkflowEditorPortType,
+            }
+          : output,
+      )
+    : [
+        {
+          id: "value",
+          label: "Value",
+          type: { kind: "array", element: elementType } as WorkflowEditorPortType,
+        },
+      ];
+
+  if (!outputs.some((output) => output.id === "value")) {
+    outputs.push({
+      id: "value",
+      label: "Value",
+      type: { kind: "array", element: elementType },
+    });
+  }
+
+  return {
+    ...node,
+    inputs: [...syncedInputs, createWorkflowEditorArrayConstructorAddPort()],
+    outputs,
+    data: {
+      ...(isRecord(node.data) ? node.data : {}),
+      items: syncedItems,
+    } as TNodeData,
+  };
+}
+
+function createWorkflowEditorArrayConstructorPort(
+  id: string,
+  options: WorkflowEditorArrayConstructorInputOptions,
+): WorkflowEditorPort {
+  return {
+    id,
+    label: "Item",
+    type: options.type ?? { kind: "any" },
+    badge: options.sourceExpression,
+    metadata: {
+      arrayConstructorRole: "item",
+      arrayConstructorItem: {
+        sourceExpression: options.sourceExpression,
+        sourceNodeId: options.sourceNodeId,
+        sourcePortId: options.sourcePortId,
+      } satisfies WorkflowEditorArrayConstructorItem,
+    },
+  };
+}
+
+function createWorkflowEditorArrayConstructorAddPort(): WorkflowEditorPort {
+  return {
+    id: "item-add",
+    label: "Add item",
+    type: { kind: "any" },
+    badge: "new",
+    metadata: { arrayConstructorRole: "add-item" },
+  };
+}
+
+function isWorkflowEditorArrayConstructorAddInput(port: WorkflowEditorPort) {
+  return port.id === "item-add" && port.metadata?.arrayConstructorRole === "add-item";
+}
+
+function getWorkflowEditorArrayConstructorItem<TNodeData = Record<string, unknown>>(
+  node: WorkflowEditorNode<TNodeData>,
+  portId: string,
+) {
+  const items = readWorkflowEditorArrayConstructorItems(node.data);
+  const item = items[portId];
+
+  if (item) {
+    return item;
+  }
+
+  const port = node.inputs?.find((input) => input.id === portId);
+  const metadataItem = isRecord(port?.metadata?.arrayConstructorItem)
+    ? port.metadata.arrayConstructorItem
+    : undefined;
+
+  if (!metadataItem) {
+    return undefined;
+  }
+
+  return {
+    sourceExpression:
+      typeof metadataItem.sourceExpression === "string" ? metadataItem.sourceExpression : undefined,
+    sourceNodeId:
+      typeof metadataItem.sourceNodeId === "string" ? metadataItem.sourceNodeId : undefined,
+    sourcePortId:
+      typeof metadataItem.sourcePortId === "string" ? metadataItem.sourcePortId : undefined,
+  } satisfies WorkflowEditorArrayConstructorItem;
+}
+
+function readWorkflowEditorArrayConstructorItems(
+  data: unknown,
+): Record<string, WorkflowEditorArrayConstructorItem> {
+  if (!isRecord(data) || !isRecord(data.items)) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(data.items).flatMap(([portId, value]) => {
+      if (!isRecord(value)) {
+        return [];
+      }
+
+      return [
+        [
+          portId,
+          {
+            sourceExpression:
+              typeof value.sourceExpression === "string" ? value.sourceExpression : undefined,
+            sourceNodeId: typeof value.sourceNodeId === "string" ? value.sourceNodeId : undefined,
+            sourcePortId: typeof value.sourcePortId === "string" ? value.sourcePortId : undefined,
+          } satisfies WorkflowEditorArrayConstructorItem,
+        ],
+      ];
+    }),
+  );
+}
+
+function getWorkflowEditorArrayConstructorElementType(inputs: WorkflowEditorPort[]) {
+  if (inputs.length === 0) {
+    return { kind: "any" } satisfies WorkflowEditorPortType;
+  }
+
+  if (inputs.some((input) => input.type.kind === "any")) {
+    return { kind: "any" } satisfies WorkflowEditorPortType;
+  }
+
+  const uniqueTypes = new Map<string, WorkflowEditorPortType>();
+
+  for (const input of inputs) {
+    uniqueTypes.set(getWorkflowEditorPortTypeSignature(input.type), input.type);
+  }
+
+  if (uniqueTypes.size === 1) {
+    return [...uniqueTypes.values()][0]!;
+  }
+
+  return { kind: "union", types: [...uniqueTypes.values()] } satisfies WorkflowEditorPortType;
+}
+
+function createWorkflowEditorArrayConstructorSource<TNodeData = Record<string, unknown>>(
+  node: WorkflowEditorNode<TNodeData>,
+  port: WorkflowEditorPort,
+) {
+  const nodeKey = normalizeObjectPropertyKey(node.label || node.id);
+  const portKey = normalizeObjectPropertyKey(port.label || port.id);
+  const expression = isGenericWorkflowEditorPortKey(portKey) ? nodeKey : `${nodeKey}.${portKey}`;
+
+  return {
+    expression,
+  };
 }
 
 function syncWorkflowEditorObjectConstructorNode<TNodeData = Record<string, unknown>>(
@@ -2727,6 +3368,11 @@ function createUniqueObjectPropertyKey(value: unknown, usedPropertyKeys: Readonl
   return candidate;
 }
 
+function workflowEditorPortIdBase(portId: string | undefined, fallback: string) {
+  const explicitPortId = portId?.trim();
+  return explicitPortId || safeWorkflowEditorId(fallback || "port");
+}
+
 function formatWorkflowEditorObjectPropertyKey(key: string) {
   return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key) ? key : JSON.stringify(key);
 }
@@ -2971,6 +3617,38 @@ function cloneWorkflowEditorEdge<TData = Record<string, unknown>>(
   return { ...edge };
 }
 
+function createWorkflowEditorPortLookup(nodes: readonly WorkflowEditorNode<unknown>[]) {
+  const inputPortIdsByNodeId = new Map<string, Set<string>>();
+  const outputPortIdsByNodeId = new Map<string, Set<string>>();
+
+  for (const node of nodes) {
+    const inputs = Array.isArray(node.inputs) ? node.inputs : [];
+    const outputs = Array.isArray(node.outputs) ? node.outputs : [];
+
+    inputPortIdsByNodeId.set(
+      node.id,
+      new Set(
+        inputs.flatMap((input) =>
+          isRecord(input) && typeof input.id === "string" ? [input.id] : [],
+        ),
+      ),
+    );
+    outputPortIdsByNodeId.set(
+      node.id,
+      new Set(
+        outputs.flatMap((output) =>
+          isRecord(output) && typeof output.id === "string" ? [output.id] : [],
+        ),
+      ),
+    );
+  }
+
+  return {
+    inputPortIdsByNodeId,
+    outputPortIdsByNodeId,
+  };
+}
+
 function cloneWorkflowEditorCompositionBoundary(
   boundary: WorkflowEditorCompositionBoundary,
 ): WorkflowEditorCompositionBoundary {
@@ -3202,12 +3880,22 @@ function clampZoom(zoom: number) {
 function normalizeWorkflowEditorDagEdges<TData = Record<string, unknown>>(
   edges: Array<WorkflowEditorEdge<TData>>,
   nodeIds: ReadonlySet<string>,
+  nodes?: ReadonlyArray<WorkflowEditorNode<unknown>>,
 ) {
   const acceptedEdges: Array<WorkflowEditorEdge<TData>> = [];
   const adjacency = new Map<string, string[]>();
+  const portLookup = nodes ? createWorkflowEditorPortLookup(nodes) : null;
 
   for (const edge of edges) {
     if (!nodeIds.has(edge.sourceNodeId) || !nodeIds.has(edge.targetNodeId)) {
+      continue;
+    }
+
+    if (
+      portLookup &&
+      (!portLookup.outputPortIdsByNodeId.get(edge.sourceNodeId)?.has(edge.sourcePortId) ||
+        !portLookup.inputPortIdsByNodeId.get(edge.targetNodeId)?.has(edge.targetPortId))
+    ) {
       continue;
     }
 

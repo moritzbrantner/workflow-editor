@@ -4,6 +4,8 @@ export {
   formatWorkflowEditorObjectConstructorExpression,
   getWorkflowEditorObjectConstructorInputs,
   isWorkflowEditorObjectConstructorNode,
+  removeWorkflowEditorObjectConstructorInput,
+  removeWorkflowEditorObjectConstructorInputFromNode,
   updateWorkflowEditorObjectConstructorPropertiesInNode,
   type WorkflowEditorObjectConstructorInputOptions,
   type WorkflowEditorObjectConstructorProperty,
