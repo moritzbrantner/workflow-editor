@@ -246,7 +246,7 @@ describe("@moritzbrantner/workflow-editor core", () => {
       ]),
     );
     expect(stringTemplate?.outputs?.[0]?.type).toEqual({ kind: "string" });
-    expect(stringTemplate?.variant).toBe("compact");
+    expect(stringTemplate?.minimized).toBe(true);
     expect(arrayTemplate?.outputs?.[0]?.type).toEqual({
       kind: "array",
       element: { kind: "any" },
@@ -2527,11 +2527,11 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     ]);
 
     expect(uiNodes[0]?.packageLabel).toBe("true");
-    expect(uiNodes[0]?.variant).toBe("compact");
+    expect(uiNodes[0]?.minimized).toBe(true);
     expect(uiNodes[0]?.description).toBeUndefined();
     expect(uiNodes[0]?.outputs?.[0]?.badge).toBe("true");
     expect(uiNodes[1]?.packageLabel).toBe('"published"');
-    expect(uiNodes[1]?.variant).toBe("compact");
+    expect(uiNodes[1]?.minimized).toBe(true);
     expect(uiNodes[1]?.outputs?.[0]?.badge).toBe('"published"');
   });
 

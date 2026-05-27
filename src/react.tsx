@@ -1403,8 +1403,12 @@ export function WorkflowWorkbench<
             onDragOver={handleTemplateDragOver}
             onDrop={handleTemplateDrop}
           >
+            <WorkflowWorkbenchNodeLayerStyles
+              nodes={document.nodes}
+              primaryNodeId={primarySelectedNodeId}
+            />
             <WorkflowBuilder
-              className="flex h-full min-h-0 min-w-0 flex-col [&>[data-slot='workflow-builder-surface']]:flex-1 [&>[data-slot='workflow-builder-surface']]:basis-0 [&_[data-slot='workflow-node'][data-minimized='true']]:!h-9 [&_[data-slot='workflow-node'][data-minimized='true']]:!min-h-9 [&_[data-slot='workflow-node'][data-minimized='true']]:!w-44 [&_[data-slot='workflow-node'][data-minimized='true']]:!flex-row [&_[data-slot='workflow-node'][data-minimized='true']]:items-stretch [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:!h-9 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:!min-h-9 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:!flex-1 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:!rounded-lg [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:!border-b-0 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:!px-2 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:!py-1.5 [&_[data-slot='workflow-node'][data-minimized='true']_[data-slot='workflow-node-header']>div]:items-center [&_[data-slot='workflow-node'][data-minimized='true']_[data-slot='workflow-node-header']>div>div:last-child]:!mt-0 [&_[data-slot='workflow-node'][data-minimized='true']_[data-slot='workflow-node-select']>div+div]:hidden [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']]:!absolute [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']]:inset-0 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']]:!h-auto [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']]:!border-t-0 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']]:!bg-transparent [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']]:pointer-events-none [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']>div]:hidden [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']>[data-slot='workflow-node-port']]:pointer-events-auto [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']>[data-slot='workflow-node-port']]:-translate-y-1/2"
+              className="flex h-full min-h-0 min-w-0 flex-col [&>[data-slot='workflow-builder-surface']]:flex-1 [&>[data-slot='workflow-builder-surface']]:basis-0 [&_[data-slot='workflow-node'][data-minimized='true']]:!h-9 [&_[data-slot='workflow-node'][data-minimized='true']]:!min-h-9 [&_[data-slot='workflow-node'][data-minimized='true']]:!w-44 [&_[data-slot='workflow-node'][data-minimized='true']]:!flex-row [&_[data-slot='workflow-node'][data-minimized='true']]:items-stretch [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:relative [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:z-10 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:!h-9 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:!min-h-9 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:!flex-1 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:!rounded-lg [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:!border-b-0 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:!px-2 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:!py-1.5 [&_[data-slot='workflow-node'][data-minimized='true']_[data-slot='workflow-node-header']>div]:items-center [&_[data-slot='workflow-node'][data-minimized='true']_[data-slot='workflow-node-header']>div>div:last-child]:!mt-0 [&_[data-slot='workflow-node'][data-minimized='true']_[data-slot='workflow-node-select']>div+div]:hidden [&_[data-slot='workflow-node'][data-minimized='true']_[data-slot='workflow-node-minimize']]:relative [&_[data-slot='workflow-node'][data-minimized='true']_[data-slot='workflow-node-minimize']]:z-20 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']]:!absolute [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']]:inset-0 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']]:z-0 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']]:!h-auto [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']]:!border-t-0 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']]:!bg-transparent [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']]:pointer-events-none [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']>div]:hidden [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']>[data-slot='workflow-node-port']]:!z-0 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']>[data-slot='workflow-node-port']]:pointer-events-auto [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']>[data-slot='workflow-node-port']]:-translate-y-1/2 [&_[data-slot='workflow-node'][data-compact='true']_[data-slot='workflow-node-port']]:!z-0"
               nodes={uiNodes}
               edges={uiEdges}
               selectedNodeId={primarySelectedNodeId}
@@ -1516,6 +1520,7 @@ export function WorkflowWorkbench<
             />
             <WorkflowJsonPrimitiveNodeControls
               document={document}
+              primaryNodeId={primarySelectedNodeId}
               readOnly={readOnly}
               surfaceLayout={builderSurfaceLayout}
               onFocusNode={selectWorkflowJsonPrimitiveNode}
@@ -1929,6 +1934,40 @@ function getWorkflowEditorWheelDelta(event: WheelEvent) {
   };
 }
 
+function WorkflowWorkbenchNodeLayerStyles<TNodeData extends Record<string, unknown>>({
+  nodes,
+  primaryNodeId,
+}: {
+  nodes: Array<WorkflowEditorNode<TNodeData>>;
+  primaryNodeId?: string;
+}) {
+  const styles = nodes
+    .map((node, index) => {
+      const selector = `[data-slot="workflow-builder-node"][data-node-id="${cssAttributeValue(node.id)}"]`;
+      const layer = getWorkflowEditorNodeLayerIndex(index, node.id, primaryNodeId);
+      const rules = [`${selector} { z-index: ${layer}; }`];
+
+      if (isWorkflowEditorJsonPrimitiveNode(node)) {
+        rules.push(
+          `${selector} [data-slot="workflow-node"][data-minimized="true"] [data-slot="workflow-node-select"] > div { visibility: hidden; }`,
+        );
+      }
+
+      return rules.join("\n");
+    })
+    .join("\n");
+
+  return styles ? <style data-slot="workflow-workbench-layer-styles">{styles}</style> : null;
+}
+
+function cssAttributeValue(value: string) {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+function getWorkflowEditorNodeLayerIndex(index: number, nodeId: string, primaryNodeId?: string) {
+  return nodeId === primaryNodeId ? 10000 : index * 2 + 1;
+}
+
 function WorkflowJsonPrimitiveNodeControls<
   TNodeData extends Record<string, unknown>,
   TEdgeData extends Record<string, unknown>,
@@ -1936,12 +1975,14 @@ function WorkflowJsonPrimitiveNodeControls<
   document,
   onFocusNode,
   onValueChange,
+  primaryNodeId,
   readOnly,
   surfaceLayout,
 }: {
   document: WorkflowEditorDocument<TNodeData, TEdgeData>;
   onFocusNode: (nodeId: string) => void;
   onValueChange: (nodeId: string, value: string | number | boolean | null) => void;
+  primaryNodeId?: string;
   readOnly: boolean;
   surfaceLayout: WorkflowBuilderSurfaceLayout | null;
 }) {
@@ -1951,6 +1992,7 @@ function WorkflowJsonPrimitiveNodeControls<
 
   const viewport = normalizeWorkflowEditorViewport(document.viewport);
   const primitiveNodes = document.nodes.filter(isWorkflowEditorJsonPrimitiveNode);
+  const nodeIndexes = new Map(document.nodes.map((node, index) => [node.id, index]));
 
   if (primitiveNodes.length === 0) {
     return null;
@@ -1958,7 +2000,7 @@ function WorkflowJsonPrimitiveNodeControls<
 
   return (
     <div
-      className="pointer-events-none absolute z-20 overflow-hidden"
+      className="pointer-events-none absolute overflow-hidden"
       style={{
         height: surfaceLayout.height,
         left: surfaceLayout.left,
@@ -1970,6 +2012,11 @@ function WorkflowJsonPrimitiveNodeControls<
         const offset = getWorkflowJsonPrimitiveNodeControlOffset(node);
         const left = viewport.x + (node.x + offset.x) * viewport.zoom - surfaceLayout.scrollLeft;
         const top = viewport.y + (node.y + offset.y) * viewport.zoom - surfaceLayout.scrollTop;
+        const layer = getWorkflowEditorNodeLayerIndex(
+          nodeIndexes.get(node.id) ?? 0,
+          node.id,
+          primaryNodeId,
+        );
 
         return (
           <div
@@ -1981,6 +2028,7 @@ function WorkflowJsonPrimitiveNodeControls<
               transform: `scale(${viewport.zoom})`,
               transformOrigin: "top left",
               width: offset.width,
+              zIndex: layer + 1,
             }}
           >
             <WorkflowJsonPrimitiveNodeValueControl
@@ -2127,6 +2175,11 @@ function getWorkflowJsonPrimitiveNodeControlOffset<TNodeData>(node: WorkflowEdit
   }
 
   const uiNode = toUiWorkflowBuilderNodes([node])[0]!;
+
+  if (uiNode.minimized === true) {
+    return { x: 10, y: 6, width: 96 };
+  }
+
   const outputIndex = Math.max(
     0,
     (node.outputs ?? []).findIndex((output) => output.id === "value"),
