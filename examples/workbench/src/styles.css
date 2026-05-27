@@ -34,15 +34,18 @@ textarea {
 
 .example-shell {
   display: grid;
-  min-height: 100vh;
+  height: 100vh;
+  min-height: 0;
   padding: 0.45rem;
+  overflow: hidden;
 }
 
 .example-editor {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   min-width: 0;
-  min-height: calc(100vh - 0.9rem);
+  min-height: 0;
+  height: 100%;
   gap: 0.35rem;
 }
 

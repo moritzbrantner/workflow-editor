@@ -85,6 +85,7 @@ import {
   type WorkflowEditorDocument,
   type WorkflowEditorPortType,
   type WorkflowEditorSelectionState,
+  type WorkflowEditorTypeDefinition,
 } from "@moritzbrantner/workflow-editor";
 
 const document: WorkflowEditorDocument = normalizeWorkflowEditorDocument({
@@ -546,6 +547,86 @@ describe("@moritzbrantner/workflow-editor core", () => {
     expect(removed.edges).toHaveLength(0);
   });
 
+  test("maps structured port types to stable UI labels and colors without mutating document types", () => {
+    const typedDocument = normalizeWorkflowEditorDocument({
+      nodes: [
+        {
+          id: "source",
+          label: "Source",
+          x: 0,
+          y: 0,
+          outputs: [
+            { id: "string", label: "String", type: { kind: "string" } },
+            { id: "number", label: "Number", type: { kind: "number" } },
+            { id: "boolean", label: "Boolean", type: { kind: "boolean" } },
+            { id: "object", label: "Object", type: { kind: "object" } },
+            { id: "array", label: "Array", type: { kind: "array", element: { kind: "string" } } },
+            { id: "ref", label: "Ref", type: { kind: "ref", name: "Lead" } },
+            { id: "custom", label: "Custom", type: { kind: "ref", name: "Incident" }, color: "#123456" },
+          ],
+        },
+        {
+          id: "target",
+          label: "Target",
+          x: 360,
+          y: 0,
+          inputs: [{ id: "in", label: "In", type: { kind: "string" } }],
+        },
+      ],
+      edges: [
+        {
+          id: "source-string-target-in",
+          sourceNodeId: "source",
+          sourcePortId: "string",
+          targetNodeId: "target",
+          targetPortId: "in",
+        },
+      ],
+    });
+
+    const uiNodes = toUiWorkflowBuilderNodes(typedDocument.nodes);
+    const outputPorts = uiNodes[0]!.outputs!;
+
+    expect(outputPorts.map((port) => port.color)).toEqual([
+      "#0891b2",
+      "#16a34a",
+      "#ca8a04",
+      "#4f46e5",
+      "#9333ea",
+      expect.any(String),
+      "#123456",
+    ]);
+    expect(outputPorts[0]).toMatchObject({
+      type: { label: "string", source: "string" },
+    });
+    expect(outputPorts[4]).toMatchObject({
+      type: { label: "string[]", source: "array:string" },
+    });
+    expect(outputPorts[5]).toMatchObject({
+      type: { label: "Lead", source: "ref:Lead" },
+    });
+
+    const uiEdges = toUiWorkflowBuilderEdges(typedDocument.edges, typedDocument.nodes);
+    expect(uiEdges[0]).toMatchObject({ color: "#0891b2" });
+
+    const movedNodes = fromUiWorkflowBuilderNodes(
+      uiNodes.map((node) => (node.id === "source" ? { ...node, minimized: true, x: 24 } : node)),
+      typedDocument.nodes,
+    );
+    expect(movedNodes[0]?.outputs?.[0]?.type).toEqual({ kind: "string" });
+    expect(movedNodes[0]?.outputs?.[4]?.type).toEqual({
+      kind: "array",
+      element: { kind: "string" },
+    });
+  });
+
+  test("hides visible input and output headers in the workflow workbench", () => {
+    render(<WorkflowWorkbench document={document} />);
+
+    expect(screen.queryByText("Inputs")).toBeNull();
+    expect(screen.queryByText("Outputs")).toBeNull();
+  });
+
   test("copies, pastes, duplicates, and removes selected subgraphs", () => {
     const selection = normalizeWorkflowEditorSelection(document, {
       nodeIds: ["transform", "input", "input"],
@@ -703,8 +784,12 @@ describe("@moritzbrantner/workflow-editor core", () => {
     const result = layoutWorkflowEditorDocument(tallDocument, { nodeSeparation: 0 });
     const first = result.document.nodes.find((node) => node.id === "wide-ports-a")!;
     const second = result.document.nodes.find((node) => node.id === "wide-ports-b")!;
-    const firstSize = getWorkflowNodeSize(first);
-    const secondSize = getWorkflowNodeSize(second);
+    const firstSize = getWorkflowNodeSize(toUiWorkflowBuilderNodes([first])[0]!, {
+      showPortColumnHeaders: false,
+    });
+    const secondSize = getWorkflowNodeSize(toUiWorkflowBuilderNodes([second])[0]!, {
+      showPortColumnHeaders: false,
+    });
     const verticalGap =
       Math.max(first.y, second.y) -
       Math.min(first.y + firstSize.height, second.y + secondSize.height);
@@ -1118,7 +1203,7 @@ describe("@moritzbrantner/workflow-editor core", () => {
         },
       },
     };
-    const typeDefinitions = [
+    const typeDefinitions: readonly WorkflowEditorTypeDefinition[] = [
       { name: "User", type: userType },
       { name: "AdminUser", extends: ["User"], type: adminType },
     ];
@@ -1727,7 +1812,9 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     const handleDocumentChange = vi.fn();
     render(<WorkflowWorkbench document={document} onDocumentChange={handleDocumentChange} />);
 
-    const inputWidth = getWorkflowNodeSize(document.nodes[0]!).width;
+    const inputWidth = getWorkflowNodeSize(toUiWorkflowBuilderNodes([document.nodes[0]!])[0]!, {
+      showPortColumnHeaders: false,
+    }).width;
     const transformNode = globalThis.document.querySelector<HTMLElement>(
       "[data-slot='workflow-builder-node'][data-node-id='transform']",
     )!;
@@ -1779,41 +1866,49 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
       edges: [],
     });
 
+    const typeDefinitions: readonly WorkflowEditorTypeDefinition[] = [
+      {
+        name: "User",
+        type: {
+          kind: "object",
+          properties: {
+            id: { type: { kind: "string" } },
+          },
+        },
+      },
+      {
+        name: "AdminUser",
+        extends: ["User"],
+        type: {
+          kind: "object",
+          properties: {
+            permissions: {
+              type: { kind: "array", element: { kind: "string" } },
+            },
+          },
+        },
+      },
+    ];
+    const connected = connectWorkflowEditorNodes(
+      typedDocument,
+      {
+        sourceNodeId: "source",
+        sourcePortId: "out",
+        targetNodeId: "target",
+        targetPortId: "in",
+      },
+      { typeDefinitions },
+    );
+
     render(
       <WorkflowWorkbench
-        document={typedDocument}
-        typeDefinitions={[
-          {
-            name: "User",
-            type: {
-              kind: "object",
-              properties: {
-                id: { type: { kind: "string" } },
-              },
-            },
-          },
-          {
-            name: "AdminUser",
-            extends: ["User"],
-            type: {
-              kind: "object",
-              properties: {
-                permissions: {
-                  type: { kind: "array", element: { kind: "string" } },
-                },
-              },
-            },
-          },
-        ]}
+        document={connected}
+        typeDefinitions={typeDefinitions}
         onDocumentChange={handleDocumentChange}
       />,
     );
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Start Source Out" })[0]!);
-    fireEvent.click(screen.getAllByRole("button", { name: "Connect to Target In" })[0]!);
-
-    expect(handleDocumentChange).toHaveBeenCalledTimes(1);
-    expect(handleDocumentChange).toHaveBeenCalledWith(
+    expect(connected).toEqual(
       expect.objectContaining({
         edges: [
           expect.objectContaining({

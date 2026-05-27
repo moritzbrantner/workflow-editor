@@ -95,7 +95,7 @@ export type WorkflowEditorTypeDiagnostic = {
   message: string;
 };
 
-export type WorkflowEditorPort = Omit<UiWorkflowNodePort, "kind"> & {
+export type WorkflowEditorPort = Omit<UiWorkflowNodePort, "kind" | "type"> & {
   type: WorkflowEditorPortType;
 };
 
@@ -1510,7 +1510,7 @@ export function validateWorkflowEditorConnection<
   }
 
   const uiConnection = {
-    nodes: toUiWorkflowBuilderNodes(document.nodes),
+    nodes: toUiWorkflowBuilderStructuralNodes(document.nodes),
     edges: toUiWorkflowBuilderEdges(document.edges),
     ...connection,
   };
@@ -1786,10 +1786,28 @@ export function toUiWorkflowBuilderNodes<TData = Record<string, unknown>>(
     tags: node.tags,
     x: node.x,
     y: node.y,
-    inputs: node.inputs,
-    outputs: node.outputs,
+    inputs: node.inputs?.map(toUiWorkflowEditorPort),
+    outputs: node.outputs?.map(toUiWorkflowEditorPort),
     metadata: node.data as Record<string, unknown> | undefined,
   }));
+}
+
+function toUiWorkflowBuilderStructuralNodes<TData = Record<string, unknown>>(
+  nodes: Array<WorkflowEditorNode<TData>>,
+): UiWorkflowBuilderNodeData[] {
+  return nodes.map((node) => ({
+    ...toUiWorkflowBuilderNodes([node])[0]!,
+    inputs: node.inputs?.map(toUiWorkflowBuilderStructuralPort),
+    outputs: node.outputs?.map(toUiWorkflowBuilderStructuralPort),
+  }));
+}
+
+function toUiWorkflowBuilderStructuralPort(port: WorkflowEditorPort): UiWorkflowNodePort {
+  return {
+    ...port,
+    kind: "workflow-port",
+    type: undefined,
+  };
 }
 
 export function fromUiWorkflowBuilderNodes<TData = Record<string, unknown>>(
@@ -1816,8 +1834,8 @@ export function fromUiWorkflowBuilderNodes<TData = Record<string, unknown>>(
       tags: node.tags,
       x: node.x,
       y: node.y,
-      inputs: node.inputs as WorkflowEditorPort[] | undefined,
-      outputs: node.outputs as WorkflowEditorPort[] | undefined,
+      inputs: previousNode?.inputs ?? restoreWorkflowEditorPortsFromUi(node.inputs),
+      outputs: previousNode?.outputs ?? restoreWorkflowEditorPortsFromUi(node.outputs),
       data: (node.metadata as TData | undefined) ?? previousNode?.data,
       workflowRef: previousNode?.workflowRef,
       composition: previousNode?.composition,
@@ -1827,16 +1845,168 @@ export function fromUiWorkflowBuilderNodes<TData = Record<string, unknown>>(
 
 export function toUiWorkflowBuilderEdges<TData = Record<string, unknown>>(
   edges: Array<WorkflowEditorEdge<TData>>,
+  nodes?: Array<WorkflowEditorNode<unknown>>,
 ): UiWorkflowBuilderEdge[] {
+  const nodeById = nodes ? new Map(nodes.map((node) => [node.id, node] as const)) : undefined;
+
   return edges.map((edge) => ({
     id: edge.id,
     sourceNodeId: edge.sourceNodeId,
     sourcePortId: edge.sourcePortId,
     targetNodeId: edge.targetNodeId,
     targetPortId: edge.targetPortId,
+    color: workflowEditorEdgePortColor(edge, nodeById),
     status: edge.status,
     metadata: edge.data as Record<string, unknown> | undefined,
   }));
+}
+
+function toUiWorkflowEditorPort(port: WorkflowEditorPort): UiWorkflowNodePort {
+  return {
+    ...port,
+    type: {
+      label: formatWorkflowEditorPortType(port.type),
+      source: getWorkflowEditorPortTypeSignature(port.type),
+      metadata: { workflowEditorType: port.type },
+    },
+    color: port.color ?? getWorkflowEditorPortTypeColor(port.type),
+  };
+}
+
+function restoreWorkflowEditorPortsFromUi(
+  ports: UiWorkflowNodeData["inputs"] | UiWorkflowNodeData["outputs"] | undefined,
+): WorkflowEditorPort[] | undefined {
+  return ports?.map((port) => {
+    const { kind: _kind, type: _type, ...rest } = port;
+    return {
+      ...rest,
+      type: getWorkflowEditorPortTypeFromUi(port) ?? ({ kind: "unknown" } as const),
+    };
+  });
+}
+
+function getWorkflowEditorPortTypeFromUi(port: UiWorkflowNodePort): WorkflowEditorPortType | null {
+  const metadataType =
+    typeof port.type === "object" && port.type
+      ? port.type.metadata?.workflowEditorType
+      : port.metadata?.workflowEditorType;
+
+  return isWorkflowEditorPortTypeLike(metadataType) ? metadataType : null;
+}
+
+function workflowEditorEdgePortColor<TData = Record<string, unknown>>(
+  edge: WorkflowEditorEdge<TData>,
+  nodeById?: ReadonlyMap<string, WorkflowEditorNode<unknown>>,
+) {
+  if (!nodeById) {
+    return undefined;
+  }
+
+  const sourcePort = nodeById
+    .get(edge.sourceNodeId)
+    ?.outputs?.find((port) => port.id === edge.sourcePortId);
+  const targetPort = nodeById
+    .get(edge.targetNodeId)
+    ?.inputs?.find((port) => port.id === edge.targetPortId);
+  const port = sourcePort ?? targetPort;
+
+  return port ? (port.color ?? getWorkflowEditorPortTypeColor(port.type)) : undefined;
+}
+
+function formatWorkflowEditorPortType(type: WorkflowEditorPortType): string {
+  switch (type.kind) {
+    case "literal":
+      return JSON.stringify(type.value);
+    case "array": {
+      const element = formatWorkflowEditorPortType(type.element);
+      return /^[A-Za-z0-9_]+$/.test(element) ? `${element}[]` : `(${element})[]`;
+    }
+    case "object":
+      return "object";
+    case "union": {
+      const label = type.types.map(formatWorkflowEditorPortType).join(" | ");
+      return label.length <= 36 ? label : "union";
+    }
+    case "intersection": {
+      const label = type.types.map(formatWorkflowEditorPortType).join(" & ");
+      return label.length <= 36 ? label : "intersection";
+    }
+    case "ref":
+      return type.name;
+    default:
+      return type.kind;
+  }
+}
+
+function getWorkflowEditorPortTypeSignature(type: WorkflowEditorPortType): string {
+  switch (type.kind) {
+    case "literal":
+      return `literal:${JSON.stringify(type.value)}`;
+    case "array":
+      return `array:${getWorkflowEditorPortTypeSignature(type.element)}`;
+    case "object": {
+      const properties = type.properties
+        ? Object.entries(type.properties)
+            .sort(([left], [right]) => left.localeCompare(right))
+            .map(
+              ([key, property]) =>
+                `${key}${property.optional ? "?" : ""}:${getWorkflowEditorPortTypeSignature(
+                  property.type,
+                )}`,
+            )
+            .join(",")
+        : "";
+      return `object:{${properties}}`;
+    }
+    case "union":
+      return `union:${type.types.map(getWorkflowEditorPortTypeSignature).join("|")}`;
+    case "intersection":
+      return `intersection:${type.types.map(getWorkflowEditorPortTypeSignature).join("&")}`;
+    case "ref":
+      return `ref:${type.name}`;
+    default:
+      return type.kind;
+  }
+}
+
+function getWorkflowEditorPortTypeColor(type: WorkflowEditorPortType): string {
+  switch (type.kind) {
+    case "string":
+      return "#0891b2";
+    case "number":
+      return "#16a34a";
+    case "boolean":
+      return "#ca8a04";
+    case "array":
+      return "#9333ea";
+    case "object":
+      return "#4f46e5";
+    case "any":
+    case "unknown":
+      return "#71717a";
+    case "never":
+    case "null":
+    case "undefined":
+      return "#a1a1aa";
+    default:
+      return workflowEditorPortTypeFallbackColor(getWorkflowEditorPortTypeSignature(type));
+  }
+}
+
+const workflowEditorPortTypeFallbackColors = [
+  "#0284c7",
+  "#16a34a",
+  "#ca8a04",
+  "#db2777",
+  "#7c3aed",
+  "#ea580c",
+  "#4f46e5",
+  "#0d9488",
+];
+
+function workflowEditorPortTypeFallbackColor(signature: string): string {
+  const hash = Array.from(signature).reduce((value, char) => value + char.charCodeAt(0), 0);
+  return workflowEditorPortTypeFallbackColors[hash % workflowEditorPortTypeFallbackColors.length]!;
 }
 
 export function fromUiWorkflowBuilderEdges<TData = Record<string, unknown>>(

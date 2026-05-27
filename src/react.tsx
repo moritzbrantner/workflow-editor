@@ -22,7 +22,6 @@ import {
   type WorkflowBuilderSelection,
   type InspectorFieldDefinition,
   type InspectorFieldValue,
-  type WorkflowNodeData,
 } from "@moritzbrantner/ui/labs";
 
 import {
@@ -271,7 +270,10 @@ export function WorkflowWorkbench<
   });
   const graphIndex = useMemo(() => createWorkflowEditorGraphIndex(document), [document]);
   const uiNodes = useMemo(() => toUiWorkflowBuilderNodes(document.nodes), [document.nodes]);
-  const uiEdges = useMemo(() => toUiWorkflowBuilderEdges(document.edges), [document.edges]);
+  const uiEdges = useMemo(
+    () => toUiWorkflowBuilderEdges(document.edges, document.nodes),
+    [document.edges, document.nodes],
+  );
 
   const commitDocument = (nextDocument: WorkflowEditorDocument<TNodeData, TEdgeData>) => {
     onDocumentChange?.(nextDocument);
@@ -444,7 +446,9 @@ export function WorkflowWorkbench<
     };
 
     if (position) {
-      const size = getWorkflowNodeSize(node);
+      const size = getWorkflowNodeSize(toUiWorkflowBuilderNodes([node])[0]!, {
+        showPortColumnHeaders: false,
+      });
       node.x = Math.round(position.x - size.width / 2);
       node.y = Math.round(position.y - size.height / 2);
     }
@@ -888,8 +892,9 @@ export function WorkflowWorkbench<
 
   return (
     <div
+      data-slot="workbench-layout"
       className={cn(
-        "grid min-h-[38rem] min-w-0 overflow-hidden rounded-md border border-border bg-background text-foreground",
+        "grid min-h-[38rem] min-w-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-md border border-border bg-background text-foreground",
         className,
       )}
     >
@@ -1009,11 +1014,14 @@ export function WorkflowWorkbench<
           </div>
         </div>
       </div>
-      <main data-slot="workbench-canvas" className="relative min-h-0 overflow-hidden bg-background">
-        <div className="p-3">
+      <main
+        data-slot="workbench-canvas"
+        className="relative grid min-h-0 overflow-hidden bg-background"
+      >
+        <div className="grid min-h-0 min-w-0 p-3">
           <div
             ref={containerRef}
-            className="relative"
+            className="relative min-h-0 min-w-0"
             onPointerDownCapture={startMarquee}
             onPointerUpCapture={clearPendingConnectionAfterTargetClick}
             onPointerMove={updateMarquee}
@@ -1031,13 +1039,15 @@ export function WorkflowWorkbench<
             onWheelCapture={handleCanvasWheel}
           >
             <WorkflowBuilder
+              className="flex h-full min-h-0 min-w-0 flex-col [&>[data-slot='workflow-builder-surface']]:flex-1 [&>[data-slot='workflow-builder-surface']]:basis-0"
               nodes={uiNodes}
               edges={uiEdges}
               selectedNodeId={primarySelectedNodeId}
               selectedEdgeId={primarySelectedEdgeId}
               readOnly={readOnly}
               showMiniMap
-              surfaceHeight="34rem"
+              showPortColumnHeaders={false}
+              surfaceHeight="auto"
               minZoom={workflowEditorMinZoom}
               maxZoom={workflowEditorMaxZoom}
               viewport={document.viewport}
@@ -1474,11 +1484,16 @@ function getWorkflowEditorPortCenter<TNodeData extends Record<string, unknown>>(
     return null;
   }
 
-  const size = getWorkflowNodeSize(node);
+  const uiNode = toUiWorkflowBuilderNodes([node])[0]!;
+  const size = getWorkflowNodeSize(uiNode, { showPortColumnHeaders: false });
 
   return {
     x: node.x + (direction === "input" ? 0 : size.width),
-    y: node.y + getWorkflowNodePortCenterOffset(node, portIndex),
+    y:
+      node.y +
+      getWorkflowNodePortCenterOffset(uiNode, portIndex, {
+        showPortColumnHeaders: false,
+      }),
   };
 }
 
@@ -1531,7 +1546,9 @@ function WorkflowSelectionOverlay<
       {document.nodes
         .filter((node) => selectedNodeIds.has(node.id))
         .map((node) => {
-          const size = getWorkflowNodeSize(node);
+          const size = getWorkflowNodeSize(toUiWorkflowBuilderNodes([node])[0]!, {
+            showPortColumnHeaders: false,
+          });
           return (
             <div
               key={node.id}
@@ -1648,22 +1665,14 @@ function isWorkflowWorkbenchOverlayInteractionTarget(target: EventTarget | null)
 }
 
 function toUiWorkflowNodeTemplate<TData>(template: WorkflowWorkbenchPaletteItem<TData>) {
-  return {
-    id: template.id,
-    label: template.label,
-    description: template.description,
-    kind: template.kind,
-    category: template.category,
-    eyebrow: template.eyebrow,
-    packageLabel: template.packageLabel,
-    status: template.status,
-    tone: template.tone,
-    variant: template.variant ?? "compact",
-    minimized: template.minimized,
-    tags: template.tags,
-    inputs: template.inputs,
-    outputs: template.outputs,
-  } satisfies WorkflowNodeData;
+  return toUiWorkflowBuilderNodes([
+    {
+      ...template,
+      variant: template.variant ?? "compact",
+      x: 0,
+      y: 0,
+    } as WorkflowEditorNode,
+  ])[0]!;
 }
 
 function toUiConnectionInvalidReason(

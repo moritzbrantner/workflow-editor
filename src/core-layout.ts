@@ -4,6 +4,7 @@ import { getWorkflowNodeSize } from "@moritzbrantner/ui/labs";
 import {
   detectWorkflowEditorCycles,
   normalizeWorkflowEditorDocument,
+  toUiWorkflowBuilderNodes,
   type WorkflowEditorDocument,
   type WorkflowEditorNode,
 } from "./core";
@@ -67,7 +68,9 @@ export function layoutWorkflowEditorDocument<
   graph.setDefaultEdgeLabel(() => ({}));
 
   for (const node of nodes) {
-    const size = getWorkflowNodeSize(node);
+    const size = getWorkflowNodeSize(toUiWorkflowBuilderNodes([node])[0]!, {
+      showPortColumnHeaders: false,
+    });
     graph.setNode(node.id, {
       width: resolveLayoutDimension(options.nodeWidth, node, size.width, defaultNodeWidth),
       height: resolveLayoutDimension(options.nodeHeight, node, size.height, defaultNodeHeight),
