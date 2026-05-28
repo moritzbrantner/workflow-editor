@@ -89,6 +89,12 @@ function readStatefulDocument() {
     | never;
 }
 
+function readStatefulSelection() {
+  return JSON.parse(screen.getByTestId("stateful-selection-json").textContent ?? "") as
+    | WorkflowEditorSelectionState
+    | never;
+}
+
 beforeAll(() => {
   vi.stubGlobal(
     "ResizeObserver",
@@ -241,6 +247,166 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     handleDocumentChange.mockClear();
     fireEvent.click(screen.getByRole("button", { name: "Arrange all" }));
     expect(handleDocumentChange).toHaveBeenCalled();
+  });
+
+  test("renames workflow nodes inline from the canvas", async () => {
+    render(
+      <StatefulWorkbench
+        initialSelection={{
+          nodeIds: ["input"],
+          edgeIds: [],
+          primary: { type: "node", id: "input" },
+        }}
+      />,
+    );
+
+    fireEvent.doubleClick(screen.getByRole("button", { name: "Input" }));
+
+    const renameInput = screen.getByLabelText("Input node name") as HTMLInputElement;
+    expect(renameInput.value).toBe("Input");
+
+    fireEvent.change(renameInput, { target: { value: " Source " } });
+    fireEvent.keyDown(renameInput, { key: "Enter" });
+
+    await waitFor(() => {
+      const nextDocument = readStatefulDocument();
+      expect(nextDocument.nodes.find((node) => node.id === "input")).toEqual(
+        expect.objectContaining({ id: "input", label: "Source" }),
+      );
+      expect(readStatefulSelection()).toEqual({
+        nodeIds: ["input"],
+        edgeIds: [],
+        primary: { type: "node", id: "input" },
+      });
+    });
+  });
+
+  test("cancels inline node renames with Escape", () => {
+    const handleDocumentChange = vi.fn();
+    render(
+      <WorkflowWorkbench
+        document={document}
+        selectedNodeId="input"
+        onDocumentChange={handleDocumentChange}
+      />,
+    );
+
+    fireEvent.doubleClick(screen.getByRole("button", { name: "Input" }));
+    const renameInput = screen.getByLabelText("Input node name");
+    fireEvent.change(renameInput, { target: { value: "Source" } });
+    fireEvent.keyDown(renameInput, { key: "Escape" });
+
+    expect(screen.queryByLabelText("Input node name")).toBeNull();
+    expect(handleDocumentChange).not.toHaveBeenCalled();
+  });
+
+  test("commits inline node renames on blur", async () => {
+    render(
+      <StatefulWorkbench
+        initialSelection={{
+          nodeIds: ["input"],
+          edgeIds: [],
+          primary: { type: "node", id: "input" },
+        }}
+      />,
+    );
+
+    fireEvent.doubleClick(screen.getByRole("button", { name: "Input" }));
+    const renameInput = screen.getByLabelText("Input node name");
+    fireEvent.change(renameInput, { target: { value: "Source" } });
+    fireEvent.blur(renameInput);
+
+    await waitFor(() => {
+      expect(readStatefulDocument().nodes.find((node) => node.id === "input")?.label).toBe(
+        "Source",
+      );
+    });
+  });
+
+  test("keeps the existing label for empty inline node rename drafts", () => {
+    const handleDocumentChange = vi.fn();
+    render(
+      <WorkflowWorkbench
+        document={document}
+        selectedNodeId="input"
+        onDocumentChange={handleDocumentChange}
+      />,
+    );
+
+    fireEvent.doubleClick(screen.getByRole("button", { name: "Input" }));
+    const renameInput = screen.getByLabelText("Input node name");
+    fireEvent.change(renameInput, { target: { value: "   " } });
+    fireEvent.blur(renameInput);
+
+    expect(screen.queryByLabelText("Input node name")).toBeNull();
+    expect(handleDocumentChange).not.toHaveBeenCalled();
+  });
+
+  test("does not start inline node renames in read-only mode", () => {
+    const handleDocumentChange = vi.fn();
+    render(
+      <WorkflowWorkbench
+        document={document}
+        selectedNodeId="input"
+        readOnly
+        onDocumentChange={handleDocumentChange}
+      />,
+    );
+
+    fireEvent.doubleClick(screen.getByRole("button", { name: "Input" }));
+
+    expect(screen.queryByLabelText("Input node name")).toBeNull();
+    expect(handleDocumentChange).not.toHaveBeenCalled();
+  });
+
+  test("does not run graph shortcuts while editing inline node names", async () => {
+    render(
+      <StatefulWorkbench
+        initialSelection={{
+          nodeIds: ["input"],
+          edgeIds: [],
+          primary: { type: "node", id: "input" },
+        }}
+      />,
+    );
+
+    fireEvent.doubleClick(screen.getByRole("button", { name: "Input" }));
+    const renameInput = screen.getByLabelText("Input node name");
+    fireEvent.keyDown(renameInput, { key: "d", metaKey: true });
+    fireEvent.change(renameInput, { target: { value: "Source" } });
+    fireEvent.keyDown(renameInput, { key: "Enter" });
+
+    await waitFor(() => {
+      expect(readStatefulDocument().nodes).toHaveLength(3);
+      expect(readStatefulDocument().nodes.find((node) => node.id === "input")?.label).toBe(
+        "Source",
+      );
+    });
+  });
+
+  test("does not open nested workflows when double-clicking a node label to rename", () => {
+    const handleOpenWorkflowReference = vi.fn();
+    render(
+      <WorkflowWorkbench
+        document={normalizeWorkflowEditorDocument({
+          nodes: [
+            {
+              ...document.nodes[0]!,
+              workflowRef: { documentId: "child" },
+            },
+          ],
+          edges: [],
+        })}
+        selectedNodeId="input"
+        documentReferences={[{ id: "child", name: "Child workflow" }]}
+        onOpenWorkflowReference={handleOpenWorkflowReference}
+      />,
+    );
+
+    fireEvent.doubleClick(screen.getByRole("button", { name: "Input" }));
+
+    expect(screen.getByLabelText("Input node name")).not.toBeNull();
+    expect(handleOpenWorkflowReference).not.toHaveBeenCalled();
   });
 
   test("snaps dragged nodes to compatible ports even when the edge already exists", () => {

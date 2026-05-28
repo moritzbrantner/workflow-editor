@@ -2,6 +2,7 @@
 
 import {
   type DragEvent as ReactDragEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type CSSProperties,
   type RefObject,
@@ -108,7 +109,7 @@ const emptyWorkflowEditorSelection: WorkflowEditorSelectionState = {
   edgeIds: [],
 };
 const workflowWorkbenchOverlayInteractionSelector =
-  "[data-slot='workflow-palette-overlay'], [data-slot='workflow-inspector-overlay'], [data-slot='workflow-json-primitive-node-control'], [data-slot='workflow-object-constructor-node-control'], [data-slot='select-content'], [data-slot='dropdown-menu-content']";
+  "[data-slot='workflow-palette-overlay'], [data-slot='workflow-inspector-overlay'], [data-slot='workflow-node-rename-control'], [data-slot='workflow-json-primitive-node-control'], [data-slot='workflow-object-constructor-node-control'], [data-slot='select-content'], [data-slot='dropdown-menu-content']";
 const workflowWorkbenchOverlaySelectionPreservationMs = 1500;
 
 const workflowEditorPaletteDragType = "application/x-workflow-editor-node-template";
@@ -356,6 +357,7 @@ export function WorkflowWorkbench<
   const [paletteDragging, setPaletteDragging] = useState(false);
   const [palettePosition, setPalettePosition] = useState<WorkflowPalettePosition>(null);
   const [paletteSearchValue, setPaletteSearchValue] = useState("");
+  const [renamingNodeId, setRenamingNodeId] = useState<string | null>(null);
   const documentContext = useMemo(() => createWorkflowEditorDocumentContext(document), [document]);
   const externalSelectionProvided =
     selectedNodeIds !== undefined ||
@@ -616,6 +618,14 @@ export function WorkflowWorkbench<
     );
   };
 
+  const updateWorkflowNodeLabel = (nodeId: string, label: string) => {
+    if (readOnly) {
+      return;
+    }
+
+    commitDocument(updateWorkflowEditorNode(document, nodeId, { label }));
+  };
+
   const updateWorkflowObjectConstructorExpressionValue = (nodeId: string, expression: string) => {
     if (readOnly) {
       return;
@@ -844,6 +854,16 @@ export function WorkflowWorkbench<
       window.removeEventListener("mouseup", completeSnap);
     };
   });
+
+  useEffect(() => {
+    if (!renamingNodeId) {
+      return;
+    }
+
+    if (readOnly || !documentContext.nodeById.has(renamingNodeId)) {
+      setRenamingNodeId(null);
+    }
+  }, [documentContext, readOnly, renamingNodeId]);
 
   const deleteSelection = () => {
     if (readOnly) {
@@ -1177,6 +1197,55 @@ export function WorkflowWorkbench<
     window.setTimeout(() => {
       connectionInProgressRef.current = false;
     }, 0);
+  };
+
+  const startNodeRenameFromDoubleClick = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (readOnly) {
+      return;
+    }
+
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+
+    const selectElement = target.closest("[data-slot='workflow-node-select']");
+    if (!selectElement) {
+      return;
+    }
+
+    if (
+      target.closest(
+        "[data-slot='workflow-node-port'], [data-slot='workflow-builder-edge'], [data-slot='workflow-builder-edge-hit'], [data-slot='workflow-builder-edge-handle'], input, textarea, select, [contenteditable='true'], [role='textbox'], [data-slot='dropdown-menu-content']",
+      )
+    ) {
+      return;
+    }
+
+    const interactiveElement = target.closest("button");
+    if (interactiveElement && interactiveElement !== selectElement) {
+      return;
+    }
+
+    const nodeElement = target.closest<HTMLElement>(
+      "[data-slot='workflow-builder-node'][data-node-id]",
+    );
+    const nodeId = nodeElement?.dataset.nodeId;
+
+    if (!nodeId || !documentContext.nodeById.has(nodeId)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    ignoreSelectionClearUntilRef.current =
+      Date.now() + workflowWorkbenchOverlaySelectionPreservationMs;
+    emitSelectionState({
+      nodeIds: [nodeId],
+      edgeIds: [],
+      primary: { type: "node", id: nodeId },
+    });
+    setRenamingNodeId(nodeId);
   };
 
   const handleCanvasWheel = (event: WheelEvent) => {
@@ -1605,6 +1674,7 @@ export function WorkflowWorkbench<
               pendingNodeSnapRef.current = null;
               setMarquee(null);
             }}
+            onDoubleClickCapture={startNodeRenameFromDoubleClick}
             onDragOver={handleTemplateDragOver}
             onDrop={handleTemplateDrop}
           >
@@ -1731,6 +1801,17 @@ export function WorkflowWorkbench<
               readOnly={readOnly}
               onFocusNode={selectWorkflowJsonPrimitiveNode}
               onValueChange={updateWorkflowJsonPrimitiveNodeValue}
+            />
+            <WorkflowNodeRenameControls
+              containerRef={containerRef}
+              document={document}
+              nodeId={renamingNodeId}
+              readOnly={readOnly}
+              onCancel={() => setRenamingNodeId(null)}
+              onCommit={(nodeId, label) => {
+                setRenamingNodeId(null);
+                updateWorkflowNodeLabel(nodeId, label);
+              }}
             />
             <WorkflowObjectConstructorNodeControls
               containerRef={containerRef}
@@ -2112,6 +2193,174 @@ function areWorkflowWorkbenchNodeElementMapsEqual(
   }
 
   return true;
+}
+
+function WorkflowNodeRenameControls<
+  TNodeData extends Record<string, unknown>,
+  TEdgeData extends Record<string, unknown>,
+>({
+  containerRef,
+  document,
+  nodeId,
+  onCancel,
+  onCommit,
+  readOnly,
+}: {
+  containerRef: RefObject<HTMLDivElement | null>;
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>;
+  nodeId: string | null;
+  onCancel: () => void;
+  onCommit: (nodeId: string, label: string) => void;
+  readOnly: boolean;
+}) {
+  const node = nodeId ? document.nodes.find((candidate) => candidate.id === nodeId) : undefined;
+  const editableNodes = node && !readOnly ? [node] : [];
+  const nodeElements = useWorkflowWorkbenchNodeElementMap(containerRef, editableNodes);
+
+  if (!node || readOnly) {
+    return null;
+  }
+
+  const target = nodeElements.get(node.id);
+  if (!target) {
+    return null;
+  }
+
+  const offset = getWorkflowNodeRenameControlOffset(node, target);
+
+  return createPortal(
+    <div
+      className={workflowNodeControlFrameClassName}
+      style={{
+        left: offset.x,
+        top: offset.y,
+        width: offset.width,
+      }}
+    >
+      <WorkflowNodeRenameControl node={node} onCancel={onCancel} onCommit={onCommit} />
+    </div>,
+    target,
+    node.id,
+  );
+}
+
+function WorkflowNodeRenameControl<TNodeData extends Record<string, unknown>>({
+  node,
+  onCancel,
+  onCommit,
+}: {
+  node: WorkflowEditorNode<TNodeData>;
+  onCancel: () => void;
+  onCommit: (nodeId: string, label: string) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const closedRef = useRef(false);
+  const [draft, setDraft] = useState(node.label);
+
+  useEffect(() => {
+    setDraft(node.label);
+    closedRef.current = false;
+  }, [node.id, node.label]);
+
+  useEffect(() => {
+    const input = inputRef.current;
+    if (!input) {
+      return;
+    }
+
+    input.focus();
+    input.select();
+  }, []);
+
+  const commitDraft = () => {
+    if (closedRef.current) {
+      return;
+    }
+
+    closedRef.current = true;
+    const nextLabel = draft.trim();
+
+    if (!nextLabel || nextLabel === node.label) {
+      onCancel();
+      return;
+    }
+
+    onCommit(node.id, nextLabel);
+  };
+
+  const cancelDraft = () => {
+    if (closedRef.current) {
+      return;
+    }
+
+    closedRef.current = true;
+    onCancel();
+  };
+
+  const stopInteractionPropagation = (event: SyntheticEvent) => {
+    event.stopPropagation();
+  };
+
+  const handleKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    event.stopPropagation();
+
+    if (event.key === "Enter") {
+      event.preventDefault();
+      commitDraft();
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      cancelDraft();
+    }
+  };
+
+  return (
+    <div
+      data-slot="workflow-node-rename-control"
+      onPointerDownCapture={stopInteractionPropagation}
+      onMouseDownCapture={stopInteractionPropagation}
+      onClick={stopInteractionPropagation}
+      onDoubleClick={stopInteractionPropagation}
+    >
+      <Input
+        ref={inputRef}
+        aria-label={`${node.label} node name`}
+        className={cn(workflowNodeTextControlClassName, "h-7 w-full text-sm")}
+        value={draft}
+        onBlur={commitDraft}
+        onChange={(event) => setDraft(event.currentTarget.value)}
+        onKeyDown={handleKeyDown}
+      />
+    </div>
+  );
+}
+
+function getWorkflowNodeRenameControlOffset<TNodeData>(
+  node: WorkflowEditorNode<TNodeData>,
+  target: HTMLElement,
+) {
+  const targetRect = target.getBoundingClientRect();
+  const selectElement = target.querySelector<HTMLElement>("[data-slot='workflow-node-select']");
+  const selectRect = selectElement?.getBoundingClientRect();
+
+  if (selectRect && targetRect.width > 0 && selectRect.width > 0) {
+    return {
+      x: Math.max(8, Math.round(selectRect.left - targetRect.left + 8)),
+      y: Math.max(6, Math.round(selectRect.top - targetRect.top + 6)),
+      width: Math.max(96, Math.round(selectRect.width - 16)),
+    };
+  }
+
+  const size = getWorkflowEditorRenderedNodeSize(toUiWorkflowBuilderNodes([node])[0]!);
+  const compact = node.variant === "compact" || toUiWorkflowBuilderNodes([node])[0]?.minimized;
+
+  return {
+    x: compact ? 10 : 12,
+    y: compact ? 6 : 12,
+    width: Math.max(96, size.width - (compact ? 48 : 24)),
+  };
 }
 
 function WorkflowJsonPrimitiveNodeControls<

@@ -331,6 +331,50 @@ test.describe("WorkflowWorkbench desktop", () => {
     expect(document.nodes.map((node) => node.id)).toContain("input-copy");
   });
 
+  test("renames nodes inline from the canvas", async ({ page }, testInfo) => {
+    await gotoWorkflowEditor(page, testInfo);
+    await page.getByRole("button", { name: "Minimize node palette", exact: true }).click();
+
+    const inputSelect = page
+      .locator(
+        '[data-slot="workflow-builder-node"][data-node-id="input"] [data-slot="workflow-node-select"][aria-label="Input"]:visible',
+      )
+      .first();
+    await inputSelect.dblclick();
+
+    const inputName = page.getByLabel("Input node name");
+    await expect(inputName).toBeVisible();
+    await inputName.fill("Source");
+    await page.keyboard.press("Enter");
+
+    await expect(page.getByTestId("document-json")).toContainText('"label":"Source"');
+    await expect(
+      page.locator('[data-slot="workflow-node-select"][aria-label="Source"]:visible'),
+    ).toBeVisible();
+
+    const renamedDocument = await readDocument(page);
+    expect(renamedDocument.nodes.find((node) => node.id === "input")).toEqual(
+      expect.objectContaining({ id: "input", label: "Source" }),
+    );
+
+    const transformSelect = page
+      .locator(
+        '[data-slot="workflow-builder-node"][data-node-id="transform"] [data-slot="workflow-node-select"][aria-label="Transform"]:visible',
+      )
+      .first();
+    await transformSelect.dblclick();
+    const transformName = page.getByLabel("Transform node name");
+    await expect(transformName).toBeVisible();
+    await transformName.fill("Pending");
+    await page.keyboard.press("Escape");
+
+    await expect(page.getByTestId("document-json")).not.toContainText('"label":"Pending"');
+    const cancelledDocument = await readDocument(page);
+    expect(cancelledDocument.nodes.find((node) => node.id === "transform")).toEqual(
+      expect.objectContaining({ id: "transform", label: "Transform" }),
+    );
+  });
+
   test("multi-selects nodes and duplicates, copies, pastes, and deletes the selection", async ({
     page,
   }, testInfo) => {
