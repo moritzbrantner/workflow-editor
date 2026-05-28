@@ -141,6 +141,30 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     expect(readStatefulSelection()).toEqual({ nodeIds: [], edgeIds: [] });
   });
 
+  test("selects pasted subgraphs so delete removes the whole paste", async () => {
+    render(
+      <StatefulWorkbench
+        initialSelection={{
+          nodeIds: ["input", "transform"],
+          edgeIds: [],
+          primary: { type: "node", id: "transform" },
+        }}
+      />,
+    );
+
+    fireEvent.keyDown(window, { key: "c", metaKey: true });
+    fireEvent.keyDown(window, { key: "v", metaKey: true });
+
+    await waitFor(() => expect(readStatefulDocument().nodes).toHaveLength(5));
+    expect(readStatefulDocument().edges).toHaveLength(2);
+    expect(readStatefulSelection().nodeIds).toHaveLength(2);
+
+    fireEvent.keyDown(window, { key: "Delete" });
+
+    await waitFor(() => expect(readStatefulDocument().nodes).toHaveLength(3));
+    expect(readStatefulDocument().edges).toHaveLength(1);
+  });
+
   test("deletes selected nodes and edges from keyboard shortcuts", () => {
     const { unmount } = render(
       <StatefulWorkbench

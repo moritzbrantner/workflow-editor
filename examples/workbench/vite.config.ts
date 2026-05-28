@@ -11,6 +11,10 @@ export default defineConfig({
   root: exampleDir,
   base: "./",
   plugins: [tailwindcss()],
+  build: {
+    // The demo intentionally bundles the local editor, UI kit, and example data in one app.
+    chunkSizeWarningLimit: 700,
+  },
   resolve: {
     alias: {
       "@moritzbrantner/workflow-editor": path.resolve(rootDir, "src/index.ts"),

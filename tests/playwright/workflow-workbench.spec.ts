@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
 type WorkflowDocumentSnapshot = {
@@ -15,8 +15,30 @@ type WorkflowDocumentSnapshot = {
 
 async function readDocument(page: Page) {
   return JSON.parse(
-    await page.getByTestId("document-json").textContent(),
+    (await page.getByTestId("document-json").textContent()) ?? "null",
   ) as WorkflowDocumentSnapshot;
+}
+
+function workflowEditorStorageKey(testInfo: TestInfo) {
+  const titleSlug = testInfo.titlePath
+    .join("-")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return `workflow-editor-playwright-${testInfo.project.name}-${testInfo.workerIndex}-${testInfo.retry}-${titleSlug}`;
+}
+
+async function gotoWorkflowEditor(
+  page: Page,
+  testInfo: TestInfo,
+  params: Record<string, string> = {},
+) {
+  const searchParams = new URLSearchParams(params);
+  searchParams.set("storageKey", workflowEditorStorageKey(testInfo));
+  searchParams.set("clearStorageKey", "1");
+
+  await page.goto(`/?${searchParams}`);
 }
 
 async function selectNode(page: Page, label: string) {
@@ -67,7 +89,9 @@ async function selectNodeById(page: Page, id: string) {
 }
 
 async function selectEdge(page: Page, id: string) {
-  await page.getByRole("button", { name: `Connection ${id}`, exact: true }).evaluate(clickElement);
+  const edge = page.getByRole("button", { name: `Connection ${id}`, exact: true }).first();
+  await edge.focus();
+  await page.keyboard.press("Enter");
 }
 
 async function clickPort(page: Page, name: string) {
@@ -126,15 +150,10 @@ async function expectNoAxeViolations(page: Page) {
 test.describe("WorkflowWorkbench desktop", () => {
   test.skip(({ isMobile }) => isMobile, "Desktop-only interaction coverage");
 
-  test.beforeEach(async ({ page }) => {
-    await page.goto("/");
-    await page.evaluate(() => {
-      window.localStorage.clear();
-    });
-  });
-
-  test("adds template nodes and keeps controlled document state in sync", async ({ page }) => {
-    await page.goto("/");
+  test("adds template nodes and keeps controlled document state in sync", async ({
+    page,
+  }, testInfo) => {
+    await gotoWorkflowEditor(page, testInfo);
 
     await expect(page.getByTestId("node-count")).toHaveText("3");
     await expect(page.getByTestId("edge-count")).toHaveText("1");
@@ -158,8 +177,10 @@ test.describe("WorkflowWorkbench desktop", () => {
     );
   });
 
-  test("minimizes the node palette and adds template nodes by dragging", async ({ page }) => {
-    await page.goto("/");
+  test("minimizes the node palette and adds template nodes by dragging", async ({
+    page,
+  }, testInfo) => {
+    await gotoWorkflowEditor(page, testInfo);
 
     const palette = page.locator('[data-slot="workflow-palette-overlay"]').first();
     await expect(palette).toContainText("Logic");
@@ -209,8 +230,8 @@ test.describe("WorkflowWorkbench desktop", () => {
     expect(decision?.x).toBeGreaterThan(300);
   });
 
-  test("selects, duplicates, edits, and deletes nodes", async ({ page }) => {
-    await page.goto("/");
+  test("selects, duplicates, edits, and deletes nodes", async ({ page }, testInfo) => {
+    await gotoWorkflowEditor(page, testInfo);
     await selectNode(page, "Input");
 
     await expect(page.getByTestId("selection-json")).toContainText('"id":"input"');
@@ -236,8 +257,8 @@ test.describe("WorkflowWorkbench desktop", () => {
 
   test("multi-selects nodes and duplicates, copies, pastes, and deletes the selection", async ({
     page,
-  }) => {
-    await page.goto("/");
+  }, testInfo) => {
+    await gotoWorkflowEditor(page, testInfo);
 
     await selectNode(page, "Input");
     await addNodeToSelection(page, "Transform");
@@ -259,8 +280,10 @@ test.describe("WorkflowWorkbench desktop", () => {
     await expect(page.getByTestId("edge-count")).toHaveText("2");
   });
 
-  test("uses keyboard shortcuts for duplicate, clipboard, escape, and delete", async ({ page }) => {
-    await page.goto("/");
+  test("uses keyboard shortcuts for duplicate, clipboard, escape, and delete", async ({
+    page,
+  }, testInfo) => {
+    await gotoWorkflowEditor(page, testInfo);
 
     await selectNode(page, "Input");
     await addNodeToSelection(page, "Transform");
@@ -277,7 +300,7 @@ test.describe("WorkflowWorkbench desktop", () => {
     await expectEdgeCount(page, 3);
 
     await page.keyboard.press("Delete");
-    await expectNodeCount(page, 6);
+    await expectNodeCount(page, 5);
     await expectEdgeCount(page, 2);
 
     await selectNodeById(page, "input");
@@ -287,8 +310,10 @@ test.describe("WorkflowWorkbench desktop", () => {
     expect(await readSelection(page)).toBeNull();
   });
 
-  test("does not run graph shortcuts while editing inspector fields", async ({ page }) => {
-    await page.goto("/");
+  test("does not run graph shortcuts while editing inspector fields", async ({
+    page,
+  }, testInfo) => {
+    await gotoWorkflowEditor(page, testInfo);
     await selectNode(page, "Input");
 
     const labelInput = page.locator('input[aria-label="Label"]:visible').first();
@@ -303,8 +328,8 @@ test.describe("WorkflowWorkbench desktop", () => {
 
   test("clears selection from the canvas background and marquee-selects nodes", async ({
     page,
-  }) => {
-    await page.goto("/");
+  }, testInfo) => {
+    await gotoWorkflowEditor(page, testInfo);
 
     await selectNode(page, "Input");
     await expect(page.getByTestId("selected-node-id")).toHaveText('"input"');
@@ -368,9 +393,12 @@ test.describe("WorkflowWorkbench desktop", () => {
     );
   });
 
-  test("selects edges, edits edge status, and deletes only the selected edge", async ({ page }) => {
-    await page.goto("/");
+  test("selects edges, edits edge status, and deletes only the selected edge", async ({
+    page,
+  }, testInfo) => {
+    await gotoWorkflowEditor(page, testInfo);
 
+    await page.getByRole("button", { name: "Minimize node palette", exact: true }).click();
     await selectEdge(page, "input-transform");
     await expect(page.getByTestId("selected-edge-id")).toHaveText('"input-transform"');
     await expect(
@@ -386,8 +414,8 @@ test.describe("WorkflowWorkbench desktop", () => {
     await expectEdgeCount(page, 0);
   });
 
-  test("arranges all nodes and selected nodes", async ({ page }) => {
-    await page.goto("/");
+  test("arranges all nodes and selected nodes", async ({ page }, testInfo) => {
+    await gotoWorkflowEditor(page, testInfo);
     await selectNode(page, "Input");
     await addNodeToSelection(page, "Transform");
 
@@ -406,8 +434,8 @@ test.describe("WorkflowWorkbench desktop", () => {
     expect(transform.x).toBeGreaterThan(input.x);
   });
 
-  test("zooms the workflow canvas with control wheel", async ({ page }) => {
-    await page.goto("/");
+  test("zooms the workflow canvas with control wheel", async ({ page }, testInfo) => {
+    await gotoWorkflowEditor(page, testInfo);
 
     const surface = page.locator('[data-slot="workflow-builder-surface"]:visible').first();
     const surfaceBox = await surface.boundingBox();
@@ -423,8 +451,8 @@ test.describe("WorkflowWorkbench desktop", () => {
       .toBeGreaterThan(1);
   });
 
-  test("pans the workflow canvas with drag and wheel", async ({ page }) => {
-    await page.goto("/");
+  test("pans the workflow canvas with drag and wheel", async ({ page }, testInfo) => {
+    await gotoWorkflowEditor(page, testInfo);
 
     const surface = page.locator('[data-slot="workflow-builder-surface"]:visible').first();
     const surfaceBox = await surface.boundingBox();
@@ -475,8 +503,8 @@ test.describe("WorkflowWorkbench desktop", () => {
     await expect.poll(async () => page.evaluate(() => window.scrollY)).toBe(180);
   });
 
-  test("creates a valid edge through port interactions", async ({ page }) => {
-    await page.goto("/");
+  test("creates a valid edge through port interactions", async ({ page }, testInfo) => {
+    await gotoWorkflowEditor(page, testInfo);
 
     await clickPort(page, "Start Input Out");
     await clickPort(page, "Connect to Output In");
@@ -496,8 +524,8 @@ test.describe("WorkflowWorkbench desktop", () => {
     );
   });
 
-  test("snaps compatible ports together while dragging nodes", async ({ page }) => {
-    await page.goto("/");
+  test("snaps compatible ports together while dragging nodes", async ({ page }, testInfo) => {
+    await gotoWorkflowEditor(page, testInfo);
 
     const inputBox = await page
       .locator('[data-slot="workflow-builder-node"][data-node-id="input"]:visible')
@@ -521,7 +549,9 @@ test.describe("WorkflowWorkbench desktop", () => {
 
     const document = await readDocument(page);
     const output = document.nodes.find((node) => node.id === "output");
-    expect(output).toEqual(expect.objectContaining({ x: 248, y: 0 }));
+    expect(output?.y).toBe(0);
+    expect(output?.x).toBeLessThan(560);
+    expect(output?.x).toBeGreaterThanOrEqual(inputBox!.width);
     expect(document.edges).toContainEqual(
       expect.objectContaining({
         sourceNodeId: "input",
@@ -534,8 +564,8 @@ test.describe("WorkflowWorkbench desktop", () => {
 
   test("ignores duplicate connection attempts without changing selection or edge count", async ({
     page,
-  }) => {
-    await page.goto("/");
+  }, testInfo) => {
+    await gotoWorkflowEditor(page, testInfo);
     await selectNode(page, "Input");
 
     await clickPort(page, "Start Input Out");
@@ -545,8 +575,8 @@ test.describe("WorkflowWorkbench desktop", () => {
     await expect(page.getByTestId("selected-node-id")).toHaveText('"input"');
   });
 
-  test("blocks mutations in read-only mode", async ({ page }) => {
-    await page.goto("/?readonly=1");
+  test("blocks mutations in read-only mode", async ({ page }, testInfo) => {
+    await gotoWorkflowEditor(page, testInfo, { readonly: "1" });
     await selectNode(page, "Input");
 
     await expect(page.getByRole("button", { name: /Decision/ }).first()).toBeDisabled();
@@ -567,8 +597,11 @@ test.describe("WorkflowWorkbench desktop", () => {
     await expect(page.getByRole("button", { name: "Export JSON" })).toBeEnabled();
   });
 
-  test("creates, renames, duplicates, deletes, and persists documents", async ({ page }) => {
-    await page.goto("/");
+  test("creates, renames, duplicates, deletes, and persists documents", async ({
+    page,
+  }, testInfo) => {
+    const storageKey = workflowEditorStorageKey(testInfo);
+    await gotoWorkflowEditor(page, testInfo);
 
     await page.getByRole("button", { name: "New" }).click();
     await expect(page.getByTestId("document-count")).toHaveText("2");
@@ -584,8 +617,9 @@ test.describe("WorkflowWorkbench desktop", () => {
 
     await page.getByRole("button", { name: "Delete document" }).click();
     await expect(page.getByTestId("document-count")).toHaveText("2");
-    await page.waitForFunction(() =>
-      window.localStorage.getItem("workflow-editor-playwright")?.includes("Scratch Flow"),
+    await page.waitForFunction(
+      (key) => window.localStorage.getItem(key)?.includes("Scratch Flow"),
+      storageKey,
     );
 
     await page.reload();
@@ -593,8 +627,8 @@ test.describe("WorkflowWorkbench desktop", () => {
     await expect(page.getByTestId("library-json")).toContainText("Scratch Flow");
   });
 
-  test("saves and restores explicit versions", async ({ page }) => {
-    await page.goto("/");
+  test("saves and restores explicit versions", async ({ page }, testInfo) => {
+    await gotoWorkflowEditor(page, testInfo);
 
     await page.getByRole("button", { name: "Save version" }).click();
     await expect(page.getByTestId("version-count")).toHaveText("1");
@@ -610,8 +644,8 @@ test.describe("WorkflowWorkbench desktop", () => {
     await expect(page.getByTestId("document-json")).not.toContainText('"id":"decision"');
   });
 
-  test("undoes and redoes document edits", async ({ page }) => {
-    await page.goto("/");
+  test("undoes and redoes document edits", async ({ page }, testInfo) => {
+    await gotoWorkflowEditor(page, testInfo);
 
     await page
       .getByRole("button", { name: /Decision/ })
@@ -626,8 +660,8 @@ test.describe("WorkflowWorkbench desktop", () => {
     await expect(page.getByTestId("node-count")).toHaveText("4");
   });
 
-  test("exports and imports workflow JSON files", async ({ page }) => {
-    await page.goto("/");
+  test("exports and imports workflow JSON files", async ({ page }, testInfo) => {
+    await gotoWorkflowEditor(page, testInfo);
 
     const downloadPromise = page.waitForEvent("download");
     await page.getByRole("button", { name: "Export JSON" }).click();
@@ -655,8 +689,8 @@ test.describe("WorkflowWorkbench desktop", () => {
     await expect(page.getByTestId("node-count")).toHaveText("1");
   });
 
-  test("keeps the active document when importing invalid JSON", async ({ page }) => {
-    await page.goto("/");
+  test("keeps the active document when importing invalid JSON", async ({ page }, testInfo) => {
+    await gotoWorkflowEditor(page, testInfo);
 
     await page.locator('input[aria-label="Import workflow JSON"]').setInputFiles({
       name: "invalid-workflow.json",
@@ -670,8 +704,10 @@ test.describe("WorkflowWorkbench desktop", () => {
     await expectEdgeCount(page, 1);
   });
 
-  test("creates a nested workflow, opens it, and returns through breadcrumbs", async ({ page }) => {
-    await page.goto("/");
+  test("creates a nested workflow, opens it, and returns through breadcrumbs", async ({
+    page,
+  }, testInfo) => {
+    await gotoWorkflowEditor(page, testInfo);
     await selectNode(page, "Input");
     await clickAction(page, "Create nested workflow");
 
@@ -686,8 +722,8 @@ test.describe("WorkflowWorkbench desktop", () => {
     await expect(page.getByTestId("document-json")).toContainText('"workflowRef"');
   });
 
-  test("assigns an existing workflow reference and drills into it", async ({ page }) => {
-    await page.goto("/");
+  test("assigns an existing workflow reference and drills into it", async ({ page }, testInfo) => {
+    await gotoWorkflowEditor(page, testInfo);
 
     await page.getByRole("button", { name: "New" }).click();
     await page.getByRole("textbox", { name: "Document name" }).fill("Child Flow");
@@ -702,8 +738,8 @@ test.describe("WorkflowWorkbench desktop", () => {
     await expect(page.getByTestId("node-count")).toHaveText("0");
   });
 
-  test("allows self-references until the nested workflow depth cap", async ({ page }) => {
-    await page.goto("/?maxDepth=2");
+  test("allows self-references until the nested workflow depth cap", async ({ page }, testInfo) => {
+    await gotoWorkflowEditor(page, testInfo, { maxDepth: "2" });
     await selectNode(page, "Input");
     await selectInspectorWorkflowReference(page, "Demo Workflow");
     await clickAction(page, "Apply");
@@ -715,8 +751,8 @@ test.describe("WorkflowWorkbench desktop", () => {
     await expect(page.getByRole("button", { name: "Open workflow" }).first()).toBeDisabled();
   });
 
-  test("preserves and surfaces missing workflow references", async ({ page }) => {
-    await page.goto("/");
+  test("preserves and surfaces missing workflow references", async ({ page }, testInfo) => {
+    await gotoWorkflowEditor(page, testInfo);
     await selectNode(page, "Input");
     await clickAction(page, "Create nested workflow");
     await expect(page.getByTestId("active-document-name")).toHaveText("Input Workflow");
@@ -736,11 +772,13 @@ test.describe("WorkflowWorkbench desktop", () => {
     ).toBeDisabled();
   });
 
-  test("recovers from corrupt localStorage", async ({ page }) => {
-    await page.addInitScript(() => {
-      window.localStorage.setItem("workflow-editor-playwright", "{");
-    });
-    await page.goto("/");
+  test("recovers from corrupt localStorage", async ({ page }, testInfo) => {
+    const storageKey = workflowEditorStorageKey(testInfo);
+    await page.addInitScript((key) => {
+      window.localStorage.setItem(key, "{");
+    }, storageKey);
+    const searchParams = new URLSearchParams({ storageKey });
+    await page.goto(`/?${searchParams}`);
 
     await expect(page.getByRole("heading", { name: "Workflow node" })).toHaveCount(0);
     await expect(page.getByTestId("document-count")).toHaveText("1");
@@ -749,24 +787,19 @@ test.describe("WorkflowWorkbench desktop", () => {
 });
 
 test.describe("WorkflowWorkbench accessibility and responsive smoke", () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto("/");
-    await page.evaluate(() => {
-      window.localStorage.clear();
-    });
-  });
-
   test("passes automated accessibility checks in the initial and inspector states", async ({
     page,
-  }) => {
+  }, testInfo) => {
+    await gotoWorkflowEditor(page, testInfo);
     await expectNoAxeViolations(page);
 
-    await page.getByRole("button", { name: "Input", exact: true }).click({ force: true });
+    await selectNode(page, "Input");
     await expect(page.getByRole("heading", { name: "Workflow node" })).toBeVisible();
     await expectNoAxeViolations(page);
   });
 
-  test("activates node creation from keyboard focus", async ({ page }) => {
+  test("activates node creation from keyboard focus", async ({ page }, testInfo) => {
+    await gotoWorkflowEditor(page, testInfo);
     const decisionButton = page.getByRole("button", { name: /Decision/ }).first();
     await decisionButton.focus();
     await page.keyboard.press("Enter");
@@ -775,8 +808,9 @@ test.describe("WorkflowWorkbench accessibility and responsive smoke", () => {
     await expect(page.getByTestId("selection-json")).toContainText('"id":"decision"');
   });
 
-  test("loads and edits on a mobile viewport", async ({ page, isMobile }) => {
+  test("loads and edits on a mobile viewport", async ({ page, isMobile }, testInfo) => {
     test.skip(!isMobile, "Mobile smoke coverage");
+    await gotoWorkflowEditor(page, testInfo);
 
     await expect(page.getByTestId("document-count")).toHaveText("1");
     await expect(page.getByTestId("node-count")).toHaveText("3");

@@ -769,4 +769,124 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     expect(uiNodes[1]?.minimized).toBe(true);
     expect(uiNodes[1]?.outputs?.[0]?.badge).toBe('"published"');
   });
+
+  test("renders palette empty and filtered states with custom workbench chrome", () => {
+    const { rerender } = render(
+      <WorkflowWorkbench
+        document={document}
+        selectedNodeId="input"
+        nodeTemplates={[]}
+        renderInspector={(context) => (
+          <div data-testid="custom-inspector">{context.selectedNode?.label}</div>
+        )}
+        renderToolbarActions={() => <button type="button">Custom action</button>}
+      />,
+    );
+
+    expect(screen.getByText("No node templates")).not.toBeNull();
+    expect(screen.getByTestId("custom-inspector").textContent).toBe("Input");
+    expect(screen.getByRole("button", { name: "Custom action" })).not.toBeNull();
+
+    rerender(
+      <WorkflowWorkbench
+        document={document}
+        nodeTemplates={[
+          {
+            id: "decision",
+            label: "Decision",
+            categoryPath: ["Control", "Branching"],
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Search node palette"), {
+      target: { value: "missing" },
+    });
+    expect(screen.getByText("No matching node templates")).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Minimize node palette" }));
+    expect(screen.queryByLabelText("Search node palette")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Expand node palette" }));
+    expect(screen.getByLabelText("Search node palette")).not.toBeNull();
+  });
+
+  test("adds palette templates from canvas drops and updates viewport from wheel events", () => {
+    const handleDocumentChange = vi.fn();
+    const handleViewportChange = vi.fn();
+    render(
+      <WorkflowWorkbench
+        document={document}
+        nodeTemplates={[{ id: "decision", label: "Decision" }]}
+        onDocumentChange={handleDocumentChange}
+        onViewportChange={handleViewportChange}
+      />,
+    );
+
+    const surface = globalThis.document.querySelector<HTMLElement>(
+      "[data-slot='workflow-builder-surface']",
+    )!;
+    const viewport = globalThis.document.querySelector<HTMLElement>(
+      "[data-slot='workflow-builder-viewport']",
+    )!;
+    viewport.getBoundingClientRect = () =>
+      ({
+        left: 10,
+        top: 20,
+        right: 810,
+        bottom: 620,
+        width: 800,
+        height: 600,
+        x: 10,
+        y: 20,
+        toJSON: () => {},
+      }) as DOMRect;
+
+    fireEvent.drop(surface, {
+      clientX: 210,
+      clientY: 220,
+      dataTransfer: {
+        types: ["application/x-workflow-editor-node-template"],
+        getData: (type: string) =>
+          type === "application/x-workflow-editor-node-template" ? "decision" : "",
+        dropEffect: "none",
+      },
+    });
+
+    expect(handleDocumentChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        nodes: expect.arrayContaining([expect.objectContaining({ id: "decision" })]),
+      }),
+    );
+
+    handleDocumentChange.mockClear();
+    fireEvent.wheel(surface, { deltaX: 12, deltaY: 0 });
+    expect(handleViewportChange).toHaveBeenCalledWith({ x: -12, y: 0, zoom: 1 });
+    expect(handleDocumentChange).toHaveBeenCalledWith(
+      expect.objectContaining({ viewport: { x: -12, y: 0, zoom: 1 } }),
+    );
+  });
+
+  test("deduplicates palette template ids when adding repeated nodes", () => {
+    const handleDocumentChange = vi.fn();
+    render(
+      <WorkflowWorkbench
+        document={normalizeWorkflowEditorDocument({
+          nodes: [{ id: "decision", label: "Decision", x: 0, y: 0 }],
+          edges: [],
+        })}
+        nodeTemplates={[{ id: "decision", label: "Decision" }]}
+        onDocumentChange={handleDocumentChange}
+      />,
+    );
+
+    const decisionButtons = screen.getAllByRole("button", { name: /Decision/u });
+    fireEvent.click(decisionButtons.at(-1)!);
+
+    expect(handleDocumentChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        nodes: expect.arrayContaining([expect.objectContaining({ id: "decision-2" })]),
+      }),
+    );
+  });
 });

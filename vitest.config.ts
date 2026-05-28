@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 const rootDir = fileURLToPath(new URL("./", import.meta.url));
+const workerCount = parseWorkerCount(process.env.WORKFLOW_EDITOR_TEST_WORKERS, 1);
 
 export default defineConfig({
   resolve: {
@@ -36,5 +37,15 @@ export default defineConfig({
     globals: true,
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
     maxConcurrency: 1,
+    maxWorkers: workerCount,
   },
 });
+
+function parseWorkerCount(value: string | undefined, fallback: number) {
+  if (!value) {
+    return fallback;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}

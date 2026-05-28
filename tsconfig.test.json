@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node", "vite/client"]
+  },
+  "include": [
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+    "tests/playwright/**/*.ts",
+    "tests/playwright/app/src/**/*.tsx",
+    "examples/workbench/src/**/*.tsx"
+  ]
+}

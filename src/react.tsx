@@ -17,8 +17,6 @@ import {
   InspectorPanel,
   WorkflowBuilder,
   WorkflowNode,
-  getWorkflowNodePortCenterOffset,
-  getWorkflowNodeSize,
   type WorkflowBuilderConnectionValidity,
   type WorkflowBuilderSelection,
   type InspectorFieldDefinition,
@@ -67,7 +65,6 @@ import {
   type WorkflowEditorEdge,
   type WorkflowEditorNode,
   type WorkflowEditorNodeTemplate,
-  type WorkflowEditorPortType,
   type WorkflowEditorSelection,
   type WorkflowEditorSelectionState,
   type WorkflowEditorTypeDefinition,
@@ -75,6 +72,17 @@ import {
 } from "./core";
 import { layoutWorkflowEditorDocument } from "./core-layout";
 import type { WorkflowEditorDocumentReferenceOption } from "./persistence";
+import {
+  selectionStateToSingleSelection,
+  toggleWorkflowEditorSelectionItem,
+} from "./react-selection";
+import {
+  getWorkflowEditorObjectConstructorRenderedWidth,
+  getWorkflowEditorPortCenterOffset,
+  getWorkflowEditorRenderedNodeSize,
+  snapWorkflowEditorNodePositionToCompatiblePort,
+  snapWorkflowEditorNodeToCompatiblePort,
+} from "./react-snap";
 import { formatShortcutLabel } from "./shortcut-label";
 
 const emptyWorkflowEditorSelection: WorkflowEditorSelectionState = {
@@ -87,13 +95,8 @@ const workflowWorkbenchOverlaySelectionPreservationMs = 1500;
 
 const workflowEditorPaletteDragType = "application/x-workflow-editor-node-template";
 const workflowEditorPanActivationDistance = 3;
-const workflowEditorSnapDistance = 28;
 const workflowEditorMinZoom = 0.5;
 const workflowEditorMaxZoom = 1.75;
-const workflowEditorMinimizedNodeWidth = 176;
-const workflowEditorMinimizedNodeHeight = 36;
-const workflowEditorObjectConstructorMinNodeWidth = 460;
-const workflowEditorObjectConstructorMaxNodeWidth = 640;
 let workflowEditorMemoryClipboard: string | null = null;
 
 export type WorkflowWorkbenchPaletteItem<TData = Record<string, unknown>> =
@@ -1021,7 +1024,7 @@ export function WorkflowWorkbench<
       event.button !== 0 ||
       !(target instanceof Element) ||
       target.closest(
-        "[data-slot='workflow-builder-node'], [data-slot='workflow-node-port'], [data-slot='workflow-builder-edge'], button, input, textarea, select",
+        "[data-slot='workflow-builder-node'], [data-slot='workflow-node-port'], [data-slot='workflow-builder-edge'], [data-slot='workflow-builder-edge-hit'], [data-slot='workflow-builder-edge-handle'], button, input, textarea, select",
       )
     ) {
       return;
@@ -1335,7 +1338,7 @@ export function WorkflowWorkbench<
   const paletteOverlayPosition = paletteMinimized
     ? { top: "0.75rem" }
     : narrowOverlayLayout
-      ? { top: "12rem" }
+      ? { top: "0.75rem" }
       : { top: "0.75rem" };
 
   return (
@@ -1762,290 +1765,6 @@ type WorkflowEditorPoint = {
   x: number;
   y: number;
 };
-
-function snapWorkflowEditorNodeToCompatiblePort<
-  TNodeData extends Record<string, unknown>,
-  TEdgeData extends Record<string, unknown>,
->(
-  document: WorkflowEditorDocument<TNodeData, TEdgeData>,
-  nodeId: string,
-  options: { typeDefinitions?: readonly WorkflowEditorTypeDefinition[] } = {},
-) {
-  const snapCandidate = findWorkflowEditorNodeSnapCandidate(document, nodeId, options);
-
-  if (!snapCandidate) {
-    return document;
-  }
-
-  const snappedDocument = applyWorkflowEditorNodeSnap(document, nodeId, snapCandidate);
-  const validity = validateWorkflowEditorConnection(
-    snappedDocument,
-    snapCandidate.connection,
-    options,
-  );
-
-  return validity.valid
-    ? connectWorkflowEditorNodes(snappedDocument, snapCandidate.connection, options)
-    : snappedDocument;
-}
-
-function snapWorkflowEditorNodePositionToCompatiblePort<
-  TNodeData extends Record<string, unknown>,
-  TEdgeData extends Record<string, unknown>,
->(
-  document: WorkflowEditorDocument<TNodeData, TEdgeData>,
-  nodeId: string,
-  options: { typeDefinitions?: readonly WorkflowEditorTypeDefinition[] } = {},
-) {
-  const snapCandidate = findWorkflowEditorNodeSnapCandidate(document, nodeId, options);
-
-  return snapCandidate ? applyWorkflowEditorNodeSnap(document, nodeId, snapCandidate) : document;
-}
-
-type WorkflowEditorNodeSnapCandidate = {
-  connection: {
-    sourceNodeId: string;
-    sourcePortId: string;
-    targetNodeId: string;
-    targetPortId: string;
-  };
-  distance: number;
-  dx: number;
-  dy: number;
-};
-
-function findWorkflowEditorNodeSnapCandidate<
-  TNodeData extends Record<string, unknown>,
-  TEdgeData extends Record<string, unknown>,
->(
-  document: WorkflowEditorDocument<TNodeData, TEdgeData>,
-  nodeId: string,
-  options: { typeDefinitions?: readonly WorkflowEditorTypeDefinition[] } = {},
-) {
-  const movedNode = document.nodes.find((node) => node.id === nodeId);
-
-  if (!movedNode) {
-    return undefined;
-  }
-
-  let bestCandidate: WorkflowEditorNodeSnapCandidate | undefined;
-
-  const addCandidate = (
-    connection: {
-      sourceNodeId: string;
-      sourcePortId: string;
-      targetNodeId: string;
-      targetPortId: string;
-    },
-    movedPortCenter: WorkflowEditorPoint | null,
-    otherPortCenter: WorkflowEditorPoint | null,
-  ) => {
-    if (!movedPortCenter || !otherPortCenter) {
-      return;
-    }
-
-    const dx = otherPortCenter.x - movedPortCenter.x;
-    const dy = otherPortCenter.y - movedPortCenter.y;
-    const distance = Math.hypot(dx, dy);
-
-    if (distance > workflowEditorSnapDistance) {
-      return;
-    }
-
-    if (
-      !canSnapWorkflowEditorConnection(document, connection, options) ||
-      (bestCandidate && bestCandidate.distance <= distance)
-    ) {
-      return;
-    }
-
-    bestCandidate = { connection, distance, dx, dy };
-  };
-
-  for (const node of document.nodes) {
-    if (node.id === movedNode.id) {
-      continue;
-    }
-
-    for (const output of movedNode.outputs ?? []) {
-      for (const input of node.inputs ?? []) {
-        addCandidate(
-          {
-            sourceNodeId: movedNode.id,
-            sourcePortId: output.id,
-            targetNodeId: node.id,
-            targetPortId: input.id,
-          },
-          getWorkflowEditorPortCenter(movedNode, "output", output.id),
-          getWorkflowEditorPortCenter(node, "input", input.id),
-        );
-      }
-    }
-
-    for (const input of movedNode.inputs ?? []) {
-      for (const output of node.outputs ?? []) {
-        addCandidate(
-          {
-            sourceNodeId: node.id,
-            sourcePortId: output.id,
-            targetNodeId: movedNode.id,
-            targetPortId: input.id,
-          },
-          getWorkflowEditorPortCenter(movedNode, "input", input.id),
-          getWorkflowEditorPortCenter(node, "output", output.id),
-        );
-      }
-    }
-  }
-
-  return bestCandidate;
-}
-
-function canSnapWorkflowEditorConnection<
-  TNodeData extends Record<string, unknown>,
-  TEdgeData extends Record<string, unknown>,
->(
-  document: WorkflowEditorDocument<TNodeData, TEdgeData>,
-  connection: WorkflowEditorNodeSnapCandidate["connection"],
-  options: { typeDefinitions?: readonly WorkflowEditorTypeDefinition[] },
-) {
-  const validity = validateWorkflowEditorConnection(document, connection, options);
-
-  return validity.valid || validity.reason === "duplicate" || validity.reason === "cycle";
-}
-
-function applyWorkflowEditorNodeSnap<
-  TNodeData extends Record<string, unknown>,
-  TEdgeData extends Record<string, unknown>,
->(
-  document: WorkflowEditorDocument<TNodeData, TEdgeData>,
-  nodeId: string,
-  snapCandidate: WorkflowEditorNodeSnapCandidate,
-): WorkflowEditorDocument<TNodeData, TEdgeData> {
-  const movedNode = document.nodes.find((node) => node.id === nodeId);
-
-  if (!movedNode) {
-    return document;
-  }
-
-  const nextX = Math.round(movedNode.x + snapCandidate.dx);
-  const nextY = Math.round(movedNode.y + snapCandidate.dy);
-
-  if (movedNode.x === nextX && movedNode.y === nextY) {
-    return document;
-  }
-
-  return {
-    ...document,
-    nodes: document.nodes.map((node) =>
-      node.id === nodeId
-        ? {
-            ...node,
-            x: nextX,
-            y: nextY,
-          }
-        : node,
-    ),
-  };
-}
-
-function getWorkflowEditorPortCenter<TNodeData extends Record<string, unknown>>(
-  node: WorkflowEditorNode<TNodeData>,
-  direction: "input" | "output",
-  portId: string,
-): WorkflowEditorPoint | null {
-  const ports = direction === "input" ? (node.inputs ?? []) : (node.outputs ?? []);
-  const portIndex = ports.findIndex((port) => port.id === portId);
-
-  if (portIndex === -1) {
-    return null;
-  }
-
-  const uiNode = toUiWorkflowBuilderNodes([node])[0]!;
-  const size = getWorkflowEditorRenderedNodeSize(uiNode);
-
-  return {
-    x: node.x + (direction === "input" ? 0 : size.width),
-    y: node.y + getWorkflowEditorPortCenterOffset(uiNode, direction, portIndex),
-  };
-}
-
-function getWorkflowEditorRenderedNodeSize(
-  node: ReturnType<typeof toUiWorkflowBuilderNodes>[number],
-) {
-  if (node.minimized === true && node.variant !== "compact") {
-    return {
-      width: workflowEditorMinimizedNodeWidth,
-      height: workflowEditorMinimizedNodeHeight,
-    };
-  }
-
-  const size = getWorkflowNodeSize(node, { showPortColumnHeaders: false });
-
-  if (node.kind === "json.object") {
-    return {
-      ...size,
-      width: Math.max(size.width, getWorkflowEditorObjectConstructorRenderedWidth(node)),
-    };
-  }
-
-  return size;
-}
-
-function getWorkflowEditorPortCenterOffset(
-  node: ReturnType<typeof toUiWorkflowBuilderNodes>[number],
-  direction: "input" | "output",
-  portIndex: number,
-) {
-  if (node.minimized === true && node.variant !== "compact") {
-    const portCount =
-      direction === "input" ? (node.inputs?.length ?? 0) : (node.outputs?.length ?? 0);
-    return ((portIndex + 1) / (portCount + 1)) * workflowEditorMinimizedNodeHeight;
-  }
-
-  return getWorkflowNodePortCenterOffset(node, portIndex, {
-    showPortColumnHeaders: false,
-  });
-}
-
-function getWorkflowEditorObjectConstructorRenderedWidth(
-  node: ReturnType<typeof toUiWorkflowBuilderNodes>[number],
-) {
-  const expression = formatWorkflowEditorObjectConstructorExpression({
-    id: node.id,
-    label: node.label,
-    kind: node.kind,
-    x: node.x,
-    y: node.y,
-    inputs: node.inputs?.map((input) => ({
-      ...input,
-      type: getWorkflowEditorPortTypeFromMetadata(input) ?? { kind: "any" },
-    })),
-    outputs: node.outputs?.map((output) => ({
-      ...output,
-      type: getWorkflowEditorPortTypeFromMetadata(output) ?? { kind: "any" },
-    })),
-    data: node.metadata,
-  });
-  const longestLine = Math.max(...expression.split("\n").map((line) => line.length), 0);
-  const expressionWidth = 260 + Math.max(0, longestLine - 24) * 6;
-
-  return Math.min(
-    workflowEditorObjectConstructorMaxNodeWidth,
-    Math.max(workflowEditorObjectConstructorMinNodeWidth, expressionWidth),
-  );
-}
-
-function getWorkflowEditorPortTypeFromMetadata(
-  port: NonNullable<ReturnType<typeof toUiWorkflowBuilderNodes>[number]["inputs"]>[number],
-): WorkflowEditorPortType | null {
-  const metadataType =
-    typeof port.type === "object" && port.type ? port.type.metadata?.workflowEditorType : undefined;
-
-  return metadataType && typeof metadataType === "object" && "kind" in metadataType
-    ? (metadataType as WorkflowEditorPortType)
-    : null;
-}
 
 function getWorkflowEditorPointFromClient(
   container: HTMLDivElement | null,
@@ -2573,59 +2292,6 @@ function WorkflowSelectionOverlay<
       ) : null}
     </div>
   );
-}
-
-function selectionStateToSingleSelection<
-  TNodeData = Record<string, unknown>,
-  TEdgeData = Record<string, unknown>,
->(
-  document: WorkflowEditorDocument<TNodeData, TEdgeData>,
-  selection: WorkflowEditorSelectionState,
-): WorkflowEditorSelection<TNodeData, TEdgeData> {
-  const primary = selection.primary;
-
-  if (primary?.type === "node") {
-    const node = document.nodes.find((candidate) => candidate.id === primary.id);
-    return node ? { type: "node", id: primary.id, node } : null;
-  }
-
-  if (primary?.type === "edge") {
-    const edge = document.edges.find((candidate) => candidate.id === primary.id);
-    return edge ? { type: "edge", id: primary.id, edge } : null;
-  }
-
-  const node = document.nodes.find((candidate) => candidate.id === selection.nodeIds[0]);
-  if (node) {
-    return { type: "node", id: node.id, node };
-  }
-
-  const edge = document.edges.find((candidate) => candidate.id === selection.edgeIds[0]);
-  return edge ? { type: "edge", id: edge.id, edge } : null;
-}
-
-function toggleWorkflowEditorSelectionItem(
-  selection: WorkflowEditorSelectionState,
-  item: NonNullable<WorkflowEditorSelectionState["primary"]>,
-): WorkflowEditorSelectionState {
-  if (item.type === "node") {
-    const hasNode = selection.nodeIds.includes(item.id);
-    return {
-      nodeIds: hasNode
-        ? selection.nodeIds.filter((nodeId) => nodeId !== item.id)
-        : [...selection.nodeIds, item.id],
-      edgeIds: selection.edgeIds,
-      primary: item,
-    };
-  }
-
-  const hasEdge = selection.edgeIds.includes(item.id);
-  return {
-    nodeIds: selection.nodeIds,
-    edgeIds: hasEdge
-      ? selection.edgeIds.filter((edgeId) => edgeId !== item.id)
-      : [...selection.edgeIds, item.id],
-    primary: item,
-  };
 }
 
 function normalizeRect(rect: WorkflowSelectionMarquee) {

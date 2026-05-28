@@ -12,6 +12,7 @@ import {
   type WorkflowEditorDocumentPathItem,
   type WorkflowEditorDocument,
   type WorkflowEditorLibrary,
+  type WorkflowEditorNodeTemplate,
   type WorkflowWorkbenchSelection,
 } from "@moritzbrantner/workflow-editor";
 
@@ -86,10 +87,22 @@ const nodeTemplates = [
     categoryPath: ["Integration", "Outbound"],
     inputs: [{ id: "in", label: "In", type: { kind: "string" } }],
   },
-];
+] satisfies WorkflowEditorNodeTemplate[];
 
 function App() {
   const searchParams = new URLSearchParams(window.location.search);
+  const storageKey = searchParams.get("storageKey") ?? "workflow-editor-playwright";
+  if (searchParams.get("clearStorageKey") === "1") {
+    window.localStorage.removeItem(storageKey);
+    searchParams.delete("clearStorageKey");
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${searchParams.size > 0 ? `?${searchParams}` : ""}${
+        window.location.hash
+      }`,
+    );
+  }
   const readOnly = searchParams.get("readonly") === "1";
   const maxDepth = Number(searchParams.get("maxDepth") ?? 64);
   const [library, setLibrary] = useState<WorkflowEditorLibrary>(initialLibrary);
@@ -128,7 +141,7 @@ function App() {
         Workflow editor Playwright fixture
       </h1>
       <WorkflowEditor
-        storageKey="workflow-editor-playwright"
+        storageKey={storageKey}
         initialLibrary={initialLibrary}
         readOnly={readOnly}
         maxNestedWorkflowDepth={Number.isFinite(maxDepth) ? maxDepth : 64}

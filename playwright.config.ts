@@ -8,12 +8,13 @@ delete process.env.NO_COLOR;
 
 const rootDir = fileURLToPath(new URL("./", import.meta.url));
 const isCi = Boolean(process.env.CI);
+const workerCount = parseWorkerCount(process.env.WORKFLOW_EDITOR_TEST_WORKERS, isCi ? 1 : 2);
 
 export default defineConfig({
   testDir: "tests/playwright",
   fullyParallel: true,
   retries: isCi ? 2 : 0,
-  workers: isCi ? 1 : undefined,
+  workers: workerCount,
   reporter: [["list"]],
   use: {
     baseURL: "http://127.0.0.1:4174",
@@ -39,3 +40,12 @@ export default defineConfig({
   resolveSnapshotPath: (testInfo, snapshotPath) =>
     path.join(testInfo.snapshotDir, path.basename(snapshotPath)),
 });
+
+function parseWorkerCount(value: string | undefined, fallback: number) {
+  if (!value) {
+    return fallback;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
