@@ -243,7 +243,7 @@ export function getWorkflowEditorRenderedNodeSize(
     };
   }
 
-  const size = getWorkflowNodeSize(node, { showPortColumnHeaders: false });
+  const size = getWorkflowNodeSize(node);
 
   if (node.kind === "json.object") {
     return {
@@ -278,9 +278,7 @@ export function getWorkflowEditorPortCenterOffset(
     return ((portIndex + 1) / (portCount + 1)) * workflowEditorMinimizedNodeHeight;
   }
 
-  const offset = getWorkflowNodePortCenterOffset(node, portIndex, {
-    showPortColumnHeaders: false,
-  });
+  const offset = getWorkflowNodePortCenterOffset(node, portIndex);
 
   if (
     node.kind === "json.object" &&
@@ -394,8 +392,7 @@ function getWorkflowEditorObjectConstructorExpression(
 function getWorkflowEditorPortTypeFromMetadata(
   port: NonNullable<ReturnType<typeof toUiWorkflowBuilderNodes>[number]["inputs"]>[number],
 ): WorkflowEditorPortType | null {
-  const metadataType =
-    typeof port.type === "object" && port.type ? port.type.metadata?.workflowEditorType : undefined;
+  const metadataType = port.metadata?.workflowEditorType;
 
   return metadataType && typeof metadataType === "object" && "kind" in metadataType
     ? (metadataType as WorkflowEditorPortType)

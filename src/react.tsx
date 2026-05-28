@@ -1731,11 +1731,9 @@ export function WorkflowWorkbench<
               selectedEdgeId={primarySelectedEdgeId}
               readOnly={readOnly}
               showMiniMap
-              showPortColumnHeaders={false}
               surfaceHeight="auto"
               minZoom={workflowEditorMinZoom}
               maxZoom={workflowEditorMaxZoom}
-              measurePorts="dom"
               viewport={document.viewport}
               toolbarLabel="Workflow"
               onNodesChange={(nodes) => {
@@ -1831,6 +1829,7 @@ export function WorkflowWorkbench<
               }}
             />
             <WorkflowNodeActionMenus
+              containerRef={containerRef}
               document={document}
               readOnly={readOnly}
               onDeleteNode={deleteNode}
@@ -2142,8 +2141,10 @@ function WorkflowWorkbenchNodeLayerStyles<TNodeData extends Record<string, unkno
   objectConstructorExpressionDrafts?: Record<string, string>;
   primaryNodeId?: string;
 }) {
-  const styles = nodes
-    .map((node, index) => {
+  const styles = [
+    `[data-slot="workflow-builder-node"] [data-slot="workflow-node"] > div:nth-child(2):not([data-slot]) > div > div:first-child { display: none; }`,
+    `[data-slot="workflow-builder-node"] [data-slot="workflow-node-menu-trigger"] { visibility: hidden; pointer-events: none; }`,
+    ...nodes.map((node, index) => {
       const selector = `[data-slot="workflow-builder-node"][data-node-id="${cssAttributeValue(node.id)}"]`;
       const layer = getWorkflowEditorNodeLayerIndex(index, node.id, primaryNodeId);
       const rules = [`${selector} { z-index: ${layer}; }`];
@@ -2184,8 +2185,8 @@ function WorkflowWorkbenchNodeLayerStyles<TNodeData extends Record<string, unkno
       }
 
       return rules.join("\n");
-    })
-    .join("\n");
+    }),
+  ].join("\n");
 
   return styles ? <style data-slot="workflow-workbench-layer-styles">{styles}</style> : null;
 }
@@ -2843,15 +2844,18 @@ function WorkflowNodeActionMenus<
   TNodeData extends Record<string, unknown>,
   TEdgeData extends Record<string, unknown>,
 >({
+  containerRef,
   document,
   readOnly,
   onDeleteNode,
 }: {
+  containerRef: RefObject<HTMLDivElement | null>;
   document: WorkflowEditorDocument<TNodeData, TEdgeData>;
   readOnly: boolean;
   onDeleteNode: (nodeId: string) => void;
 }) {
   const [openNodeId, setOpenNodeId] = useState<string | null>(null);
+  const nodeElements = useWorkflowWorkbenchNodeElementMap(containerRef, document.nodes);
 
   if (document.nodes.length === 0) {
     return null;
@@ -2862,22 +2866,24 @@ function WorkflowNodeActionMenus<
   };
 
   return (
-    <div
-      data-slot="workflow-node-action-menu-layer"
-      className="pointer-events-none absolute inset-0 z-30"
-    >
+    <>
       {document.nodes.map((node) => {
-        const size = getWorkflowEditorRenderedNodeSize(toUiWorkflowBuilderNodes([node])[0]!);
+        const target = nodeElements.get(node.id);
+        if (!target) {
+          return null;
+        }
+
+        const offset = getWorkflowNodeActionMenuOffset(node, target);
         const open = openNodeId === node.id;
 
-        return (
+        return createPortal(
           <div
             key={node.id}
             data-slot="workflow-node-action-menu"
-            className="pointer-events-auto absolute"
+            className="pointer-events-auto absolute z-30"
             style={{
-              left: Math.round(node.x + size.width - 34),
-              top: Math.round(node.y + 8),
+              left: offset.x,
+              top: offset.y,
             }}
             onClick={stopInteractionPropagation}
             onMouseDown={stopInteractionPropagation}
@@ -2919,11 +2925,57 @@ function WorkflowNodeActionMenus<
                 </button>
               </div>
             ) : null}
-          </div>
+          </div>,
+          target,
+          node.id,
         );
       })}
-    </div>
+    </>
   );
+}
+
+function getWorkflowNodeActionMenuOffset<TNodeData>(
+  node: WorkflowEditorNode<TNodeData>,
+  target: HTMLElement,
+) {
+  const targetRect = target.getBoundingClientRect();
+  const builtInTrigger = target.querySelector<HTMLElement>(
+    "[data-slot='workflow-node-menu-trigger']",
+  );
+  const triggerRect = builtInTrigger?.getBoundingClientRect();
+
+  if (triggerRect && targetRect.width > 0 && triggerRect.width > 0) {
+    const scaleX = target.offsetWidth > 0 ? targetRect.width / target.offsetWidth : 1;
+    const scaleY = target.offsetHeight > 0 ? targetRect.height / target.offsetHeight : scaleX;
+
+    return {
+      x: Math.round((triggerRect.left - targetRect.left) / Math.max(scaleX, 0.001)),
+      y: Math.round((triggerRect.top - targetRect.top) / Math.max(scaleY, 0.001)),
+    };
+  }
+
+  const minimizeButton = target.querySelector<HTMLElement>("[data-slot='workflow-node-minimize']");
+  const minimizeRect = minimizeButton?.getBoundingClientRect();
+
+  if (minimizeRect && targetRect.width > 0 && minimizeRect.width > 0) {
+    const scaleX = target.offsetWidth > 0 ? targetRect.width / target.offsetWidth : 1;
+    const scaleY = target.offsetHeight > 0 ? targetRect.height / target.offsetHeight : scaleX;
+    const actionButtonWidth = 24;
+    const gap = 6;
+
+    return {
+      x: Math.round(
+        (minimizeRect.left - targetRect.left) / Math.max(scaleX, 0.001) - actionButtonWidth - gap,
+      ),
+      y: Math.round((minimizeRect.top - targetRect.top) / Math.max(scaleY, 0.001)),
+    };
+  }
+
+  const size = getWorkflowEditorRenderedNodeSize(toUiWorkflowBuilderNodes([node])[0]!);
+  return {
+    x: Math.round(size.width - 34),
+    y: 8,
+  };
 }
 
 function WorkflowSelectionOverlay<

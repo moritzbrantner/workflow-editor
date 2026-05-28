@@ -2028,7 +2028,7 @@ export function validateWorkflowEditorConnection<
 }
 
 function isWorkflowEditorUiTypeMismatch(reason: WorkflowEditorConnectionInvalidReason | undefined) {
-  return reason === "kind-mismatch" || reason === "type-mismatch";
+  return reason === "kind-mismatch";
 }
 
 export function connectWorkflowEditorNodes<
@@ -2310,7 +2310,6 @@ function toUiWorkflowBuilderStructuralPort(port: WorkflowEditorPort): UiWorkflow
   return {
     ...port,
     kind: "workflow-port",
-    type: undefined,
   };
 }
 
@@ -2354,16 +2353,19 @@ export function toUiWorkflowBuilderEdges<TData = Record<string, unknown>>(
 ): UiWorkflowBuilderEdge[] {
   const nodeById = nodes ? new Map(nodes.map((node) => [node.id, node] as const)) : undefined;
 
-  return edges.map((edge) => ({
-    id: edge.id,
-    sourceNodeId: edge.sourceNodeId,
-    sourcePortId: edge.sourcePortId,
-    targetNodeId: edge.targetNodeId,
-    targetPortId: edge.targetPortId,
-    color: workflowEditorEdgePortColor(edge, nodeById),
-    status: edge.status,
-    metadata: edge.data as Record<string, unknown> | undefined,
-  }));
+  return edges.map(
+    (edge) =>
+      ({
+        id: edge.id,
+        sourceNodeId: edge.sourceNodeId,
+        sourcePortId: edge.sourcePortId,
+        targetNodeId: edge.targetNodeId,
+        targetPortId: edge.targetPortId,
+        color: workflowEditorEdgePortColor(edge, nodeById),
+        status: edge.status,
+        metadata: edge.data as Record<string, unknown> | undefined,
+      }) as UiWorkflowBuilderEdge & { color?: string },
+  );
 }
 
 function toUiWorkflowEditorPort(
@@ -2377,6 +2379,7 @@ function toUiWorkflowEditorPort(
 
   return {
     ...port,
+    kind: formatWorkflowEditorPortType(port.type),
     required: port.required ?? (options.direction === "input" && port.optional ? false : undefined),
     badge:
       port.badge ??
@@ -2388,6 +2391,18 @@ function toUiWorkflowEditorPort(
       metadata: { workflowEditorType: port.type },
     },
     color: port.color ?? getWorkflowEditorPortTypeColor(port.type),
+    metadata: {
+      ...port.metadata,
+      workflowEditorType: port.type,
+      workflowEditorPortColor: port.color ?? getWorkflowEditorPortTypeColor(port.type),
+    },
+  } as UiWorkflowNodePort & {
+    color?: string;
+    type?: {
+      label?: string;
+      source: string;
+      metadata?: Record<string, unknown>;
+    };
   };
 }
 
@@ -2422,7 +2437,7 @@ function restoreWorkflowEditorPortsFromUi(
   ports: UiWorkflowNodeData["inputs"] | UiWorkflowNodeData["outputs"] | undefined,
 ): WorkflowEditorPort[] | undefined {
   return ports?.map((port) => {
-    const { kind: _kind, type: _type, ...rest } = port;
+    const { kind: _kind, ...rest } = port;
     return {
       ...rest,
       type: getWorkflowEditorPortTypeFromUi(port) ?? ({ kind: "unknown" } as const),
@@ -2431,10 +2446,11 @@ function restoreWorkflowEditorPortsFromUi(
 }
 
 function getWorkflowEditorPortTypeFromUi(port: UiWorkflowNodePort): WorkflowEditorPortType | null {
+  const legacyPort = port as UiWorkflowNodePort & {
+    type?: { metadata?: Record<string, unknown> };
+  };
   const metadataType =
-    typeof port.type === "object" && port.type
-      ? port.type.metadata?.workflowEditorType
-      : port.metadata?.workflowEditorType;
+    legacyPort.type?.metadata?.workflowEditorType ?? port.metadata?.workflowEditorType;
 
   return isWorkflowEditorPortTypeLike(metadataType) ? metadataType : null;
 }

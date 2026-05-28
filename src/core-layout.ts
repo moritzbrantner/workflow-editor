@@ -168,9 +168,7 @@ function getWorkflowEditorLayoutNodeSize<TNodeData = Record<string, unknown>>(
     };
   }
 
-  return getWorkflowNodeSize(toUiWorkflowBuilderNodes([node])[0]!, {
-    showPortColumnHeaders: false,
-  });
+  return getWorkflowNodeSize(toUiWorkflowBuilderNodes([node])[0]!);
 }
 
 function resolveLayoutDimension<TNodeData = Record<string, unknown>>(

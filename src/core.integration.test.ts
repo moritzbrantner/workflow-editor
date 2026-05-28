@@ -1379,12 +1379,8 @@ describe("@moritzbrantner/workflow-editor core", () => {
     const result = layoutWorkflowEditorDocument(tallDocument, { nodeSeparation: 0 });
     const first = result.document.nodes.find((node) => node.id === "wide-ports-a")!;
     const second = result.document.nodes.find((node) => node.id === "wide-ports-b")!;
-    const firstSize = getWorkflowNodeSize(toUiWorkflowBuilderNodes([first])[0]!, {
-      showPortColumnHeaders: false,
-    });
-    const secondSize = getWorkflowNodeSize(toUiWorkflowBuilderNodes([second])[0]!, {
-      showPortColumnHeaders: false,
-    });
+    const firstSize = getWorkflowNodeSize(toUiWorkflowBuilderNodes([first])[0]!);
+    const secondSize = getWorkflowNodeSize(toUiWorkflowBuilderNodes([second])[0]!);
     const verticalGap =
       Math.max(first.y, second.y) -
       Math.min(first.y + firstSize.height, second.y + secondSize.height);

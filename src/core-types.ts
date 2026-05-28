@@ -113,6 +113,7 @@ export type WorkflowEditorTypeDiagnostic = {
 
 export type WorkflowEditorPort = Omit<UiWorkflowNodePort, "kind" | "type"> & {
   type: WorkflowEditorPortType;
+  color?: string;
   optional?: boolean;
   defaultValue?: WorkflowEditorPortDefaultValue;
 };

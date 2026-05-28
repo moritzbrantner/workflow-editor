@@ -115,8 +115,9 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
   test("hides visible input and output headers in the workflow workbench", () => {
     render(<WorkflowWorkbench document={document} />);
 
-    expect(screen.queryByText("Inputs")).toBeNull();
-    expect(screen.queryByText("Outputs")).toBeNull();
+    for (const header of [...screen.getAllByText("Inputs"), ...screen.getAllByText("Outputs")]) {
+      expect(getComputedStyle(header).display).toBe("none");
+    }
   });
 
   test("renders, selects, changes document state, and respects read-only mode", () => {
@@ -409,13 +410,26 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     expect(handleOpenWorkflowReference).not.toHaveBeenCalled();
   });
 
+  test("uses the visible node action menu for node deletion", async () => {
+    render(<StatefulWorkbench />);
+
+    expect(screen.queryByRole("button", { name: "Open Input menu" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Input node actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+
+    await waitFor(() => {
+      expect(readStatefulDocument().nodes.map((node) => node.id)).toEqual(["transform", "output"]);
+    });
+  });
+
   test("snaps dragged nodes to compatible ports even when the edge already exists", () => {
     const handleDocumentChange = vi.fn();
     render(<WorkflowWorkbench document={document} onDocumentChange={handleDocumentChange} />);
 
-    const inputWidth = getWorkflowNodeSize(toUiWorkflowBuilderNodes([document.nodes[0]!])[0]!, {
-      showPortColumnHeaders: false,
-    }).width;
+    const inputWidth = getWorkflowNodeSize(
+      toUiWorkflowBuilderNodes([document.nodes[0]!])[0]!,
+    ).width;
     const transformNode = globalThis.document.querySelector<HTMLElement>(
       "[data-slot='workflow-builder-node'][data-node-id='transform']",
     )!;
