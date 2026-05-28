@@ -185,20 +185,49 @@ test.describe("WorkflowWorkbench desktop", () => {
     const palette = page.locator('[data-slot="workflow-palette-overlay"]').first();
     await expect(palette).toContainText("Logic");
     await expect(palette).toContainText("Branches");
+    const canvasBox = await page.locator('[data-slot="workbench-canvas"]').first().boundingBox();
     const expandedPaletteBox = await palette.boundingBox();
     expect(expandedPaletteBox?.width).toBeGreaterThan(300);
+    expect(canvasBox).not.toBeNull();
+    expect(expandedPaletteBox).not.toBeNull();
+    expect(expandedPaletteBox!.x - canvasBox!.x).toBeLessThan(32);
+    expect(expandedPaletteBox!.y - canvasBox!.y).toBeLessThan(32);
 
     await page.getByRole("button", { name: "Minimize node palette", exact: true }).click();
     await expect(palette).toContainText("Node palette");
     await expect(page.getByRole("button", { name: /Decision/ })).toHaveCount(0);
-    const canvasBox = await page.locator('[data-slot="workbench-canvas"]').first().boundingBox();
     const minimizedPaletteBox = await palette.boundingBox();
     expect(minimizedPaletteBox).not.toBeNull();
-    expect(canvasBox).not.toBeNull();
     expect(minimizedPaletteBox!.x - canvasBox!.x).toBeLessThan(32);
     expect(minimizedPaletteBox!.y - canvasBox!.y).toBeLessThan(32);
     expect(minimizedPaletteBox!.width).toBeLessThan(expandedPaletteBox!.width);
     await page.getByRole("button", { name: "Expand node palette", exact: true }).click();
+    await expect(page.getByLabel("Search node palette")).toBeVisible();
+
+    const paletteHeader = page.locator('[data-slot="workflow-palette-header"]').first();
+    const headerBox = await paletteHeader.boundingBox();
+    expect(headerBox).not.toBeNull();
+    await page.mouse.move(headerBox!.x + 48, headerBox!.y + headerBox!.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(headerBox!.x + 188, headerBox!.y + headerBox!.height / 2 + 80, {
+      steps: 8,
+    });
+    await page.mouse.up();
+    const draggedPaletteBox = await palette.boundingBox();
+    expect(draggedPaletteBox).not.toBeNull();
+    expect(draggedPaletteBox!.x - expandedPaletteBox!.x).toBeGreaterThan(80);
+    expect(draggedPaletteBox!.y - expandedPaletteBox!.y).toBeGreaterThan(40);
+
+    await page.getByRole("button", { name: "Pin node palette", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Bottom right", exact: true }).click();
+    const bottomRightPaletteBox = await palette.boundingBox();
+    expect(bottomRightPaletteBox).not.toBeNull();
+    expect(
+      canvasBox!.x + canvasBox!.width - (bottomRightPaletteBox!.x + bottomRightPaletteBox!.width),
+    ).toBeLessThan(40);
+    expect(
+      canvasBox!.y + canvasBox!.height - (bottomRightPaletteBox!.y + bottomRightPaletteBox!.height),
+    ).toBeLessThan(40);
 
     const paletteSearch = page.getByLabel("Search node palette");
     await expect(paletteSearch).toBeVisible();
@@ -228,6 +257,53 @@ test.describe("WorkflowWorkbench desktop", () => {
       }),
     );
     expect(decision?.x).toBeGreaterThan(300);
+  });
+
+  test("hides JSON primitive value controls while minimized", async ({ page }, testInfo) => {
+    await gotoWorkflowEditor(page, testInfo);
+
+    const palette = page.locator('[data-slot="workflow-palette-overlay"]').first();
+    const paletteSearch = page.getByLabel("Search node palette");
+    await paletteSearch.fill("string");
+    await palette
+      .getByRole("button", { name: /String/ })
+      .first()
+      .click();
+    await expect(page.getByTestId("node-count")).toHaveText("4");
+
+    await page.getByRole("button", { name: "Expand String", exact: true }).click();
+    const valueInput = page.getByLabel("String JSON value");
+    await expect(valueInput).toBeVisible();
+
+    await page.getByRole("button", { name: "Minimize String", exact: true }).click();
+    await expect(valueInput).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Expand String", exact: true }).click();
+    await expect(valueInput).toBeVisible();
+  });
+
+  test("hides object constructor expression controls while minimized", async ({
+    page,
+  }, testInfo) => {
+    await gotoWorkflowEditor(page, testInfo);
+
+    const palette = page.locator('[data-slot="workflow-palette-overlay"]').first();
+    const paletteSearch = page.getByLabel("Search node palette");
+    await paletteSearch.fill("object");
+    await palette
+      .getByRole("button", { name: /Object/ })
+      .first()
+      .click();
+    await expect(page.getByTestId("node-count")).toHaveText("4");
+
+    const expressionInput = page.getByLabel("Object object expression");
+    await expect(expressionInput).toBeVisible();
+
+    await page.getByRole("button", { name: "Minimize Object", exact: true }).click();
+    await expect(expressionInput).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Expand Object", exact: true }).click();
+    await expect(expressionInput).toBeVisible();
   });
 
   test("selects, duplicates, edits, and deletes nodes", async ({ page }, testInfo) => {

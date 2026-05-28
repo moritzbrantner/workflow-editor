@@ -66,7 +66,7 @@ const initialLibrary = createWorkflowEditorLibrary({
   ],
 });
 
-const nodeTemplates = [
+const nodeTemplates: WorkflowEditorNodeTemplate<Record<string, unknown>>[] = [
   {
     id: "decision",
     label: "Decision",
@@ -87,7 +87,35 @@ const nodeTemplates = [
     categoryPath: ["Integration", "Outbound"],
     inputs: [{ id: "in", label: "In", type: { kind: "string" } }],
   },
-] satisfies WorkflowEditorNodeTemplate[];
+  {
+    id: "json-string",
+    label: "String",
+    description: "Create a JSON string value.",
+    kind: "json.string",
+    category: "JSON",
+    minimized: true,
+    outputs: [{ id: "value", label: "Value", type: { kind: "string" } }],
+    data: { value: "hello" },
+  },
+  {
+    id: "json-object",
+    label: "Object",
+    description: "Construct a JSON object from named input properties.",
+    kind: "json.object",
+    category: "JSON",
+    inputs: [
+      {
+        id: "property",
+        label: "Add property",
+        type: { kind: "any" },
+        badge: "new",
+        metadata: { objectConstructorRole: "add-property" },
+      },
+    ],
+    outputs: [{ id: "value", label: "Object", type: { kind: "object" } }],
+    data: { properties: {} },
+  },
+];
 
 function App() {
   const searchParams = new URLSearchParams(window.location.search);
