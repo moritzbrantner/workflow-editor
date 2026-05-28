@@ -35,6 +35,7 @@ import type {
   WorkflowEditorNodeTemplate,
   WorkflowEditorObjectConstructorSchema,
   WorkflowEditorObjectConstructorProperty,
+  WorkflowEditorObjectConstructorExpressionDiagnostic,
   WorkflowEditorObjectConstructorExpressionEntry,
   WorkflowEditorObjectConstructorInputOptions,
   WorkflowEditorObjectDecompositionOutputOptions,
@@ -79,6 +80,7 @@ export type {
   WorkflowEditorNodeComposition,
   WorkflowEditorNodeTemplate,
   WorkflowEditorObjectConstructorExpressionEntry,
+  WorkflowEditorObjectConstructorExpressionDiagnostic,
   WorkflowEditorObjectConstructorInputOptions,
   WorkflowEditorObjectConstructorProperty,
   WorkflowEditorObjectConstructorSchema,
@@ -981,6 +983,10 @@ export function updateWorkflowEditorObjectConstructorSchemaInNode<
 export function parseWorkflowEditorObjectConstructorExpression(
   expression: string,
 ): WorkflowEditorObjectConstructorExpressionEntry[] | null {
+  if (validateWorkflowEditorObjectConstructorExpression(expression).length > 0) {
+    return null;
+  }
+
   const source = expression.trim();
 
   if (!source || source === "{}") {
@@ -1020,6 +1026,97 @@ export function parseWorkflowEditorObjectConstructorExpression(
 
     return [{ key, sourceExpression }];
   });
+}
+
+export function validateWorkflowEditorObjectConstructorExpression(
+  expression: string,
+): WorkflowEditorObjectConstructorExpressionDiagnostic[] {
+  const source = expression.trim();
+
+  if (!source || source === "{}") {
+    return [];
+  }
+
+  const startsWithObject = source.startsWith("{");
+  const endsWithObject = source.endsWith("}");
+
+  if (startsWithObject !== endsWithObject) {
+    return [
+      {
+        code: "invalid-object-expression",
+        message: "Object expressions must start and end with braces.",
+      },
+    ];
+  }
+
+  if (!isWorkflowEditorExpressionBalanced(source)) {
+    return [
+      {
+        code: "unbalanced-expression",
+        message: "Expression has unbalanced braces, brackets, parentheses, or quotes.",
+      },
+    ];
+  }
+
+  const body = startsWithObject ? source.slice(1, -1).trim() : source;
+
+  if (!body) {
+    return [];
+  }
+
+  const entries = splitWorkflowEditorExpressionList(body);
+
+  if (!entries) {
+    return [
+      {
+        code: "unbalanced-expression",
+        message: "Expression has unbalanced braces, brackets, parentheses, or quotes.",
+      },
+    ];
+  }
+
+  const diagnostics: WorkflowEditorObjectConstructorExpressionDiagnostic[] = [];
+
+  entries.forEach((entry, index) => {
+    const trimmedEntry = entry.trim();
+
+    if (!trimmedEntry) {
+      return;
+    }
+
+    const separatorIndex = findWorkflowEditorTopLevelCharacter(entry, ":");
+
+    if (separatorIndex === -1) {
+      diagnostics.push({
+        code: "invalid-property",
+        index,
+        message: "Object properties must use key: value syntax.",
+      });
+      return;
+    }
+
+    const rawKey = entry.slice(0, separatorIndex).trim();
+    const sourceExpression = entry.slice(separatorIndex + 1).trim();
+    const key = parseWorkflowEditorObjectConstructorExpressionKey(rawKey);
+
+    if (!key) {
+      diagnostics.push({
+        code: "invalid-property-key",
+        index,
+        message: "Object property keys must be identifiers or quoted strings.",
+      });
+    }
+
+    if (!sourceExpression) {
+      diagnostics.push({
+        code: "missing-property-value",
+        index,
+        message: "Object property values cannot be empty.",
+      });
+    }
+  });
+
+  return diagnostics;
 }
 
 export function updateWorkflowEditorObjectConstructorExpressionInNode<

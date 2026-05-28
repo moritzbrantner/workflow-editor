@@ -15,11 +15,15 @@ const workflowEditorSnapDistance = 28;
 const workflowEditorMinimizedNodeWidth = 176;
 const workflowEditorMinimizedNodeHeight = 36;
 const workflowEditorObjectConstructorMinNodeWidth = 460;
-const workflowEditorObjectConstructorMaxNodeWidth = 640;
 const workflowEditorNodePortHeight = 64;
 const workflowEditorNodePortGap = 8;
 const workflowEditorObjectConstructorMinOutputPanelHeight = 148;
-const workflowEditorObjectConstructorMaxOutputPanelHeight = 260;
+const workflowEditorObjectConstructorValidationHeight = 20;
+
+type WorkflowEditorObjectConstructorLayoutOptions = {
+  objectConstructorExpression?: string;
+  objectConstructorValidationMessage?: string;
+};
 
 type WorkflowEditorPoint = {
   x: number;
@@ -230,6 +234,7 @@ function getWorkflowEditorPortCenter<TNodeData extends Record<string, unknown>>(
 
 export function getWorkflowEditorRenderedNodeSize(
   node: ReturnType<typeof toUiWorkflowBuilderNodes>[number],
+  options: WorkflowEditorObjectConstructorLayoutOptions = {},
 ) {
   if (node.minimized === true && node.variant !== "compact") {
     return {
@@ -243,8 +248,18 @@ export function getWorkflowEditorRenderedNodeSize(
   if (node.kind === "json.object") {
     return {
       ...size,
-      height: Math.max(size.height, getWorkflowEditorObjectConstructorRenderedHeight(node, size)),
-      width: Math.max(size.width, getWorkflowEditorObjectConstructorRenderedWidth(node)),
+      height: Math.max(
+        size.height,
+        getWorkflowEditorObjectConstructorRenderedHeight(node, size, options),
+      ),
+      width: Math.max(
+        size.width,
+        getWorkflowEditorObjectConstructorRenderedWidth(
+          node,
+          options.objectConstructorExpression,
+          options.objectConstructorValidationMessage,
+        ),
+      ),
     };
   }
 
@@ -255,6 +270,7 @@ export function getWorkflowEditorPortCenterOffset(
   node: ReturnType<typeof toUiWorkflowBuilderNodes>[number],
   direction: "input" | "output",
   portIndex: number,
+  options: WorkflowEditorObjectConstructorLayoutOptions = {},
 ) {
   if (node.minimized === true && node.variant !== "compact") {
     const portCount =
@@ -274,7 +290,12 @@ export function getWorkflowEditorPortCenterOffset(
     return (
       offset -
       workflowEditorNodePortHeight / 2 +
-      getWorkflowEditorObjectConstructorOutputPanelHeight(node) / 2
+      getWorkflowEditorObjectConstructorOutputPanelHeight(
+        node,
+        options.objectConstructorExpression,
+        options.objectConstructorValidationMessage,
+      ) /
+        2
     );
   }
 
@@ -283,39 +304,56 @@ export function getWorkflowEditorPortCenterOffset(
 
 export function getWorkflowEditorObjectConstructorRenderedWidth(
   node: ReturnType<typeof toUiWorkflowBuilderNodes>[number],
+  expressionOverride?: string,
+  validationMessage?: string,
 ) {
-  const expression = getWorkflowEditorObjectConstructorExpression(node);
-  const longestLine = Math.max(...expression.split("\n").map((line) => line.length), 0);
+  const expression = expressionOverride ?? getWorkflowEditorObjectConstructorExpression(node);
+  const longestLine = Math.max(
+    ...expression.split("\n").map((line) => line.length),
+    validationMessage?.length ?? 0,
+    0,
+  );
   const expressionWidth = 260 + Math.max(0, longestLine - 24) * 6;
 
-  return Math.min(
-    workflowEditorObjectConstructorMaxNodeWidth,
-    Math.max(workflowEditorObjectConstructorMinNodeWidth, expressionWidth),
-  );
+  return Math.max(workflowEditorObjectConstructorMinNodeWidth, expressionWidth);
 }
 
 export function getWorkflowEditorObjectConstructorOutputPanelHeight(
   node: ReturnType<typeof toUiWorkflowBuilderNodes>[number],
+  expressionOverride?: string,
+  validationMessage?: string,
 ) {
-  const expression = getWorkflowEditorObjectConstructorExpression(node);
+  const expression = expressionOverride ?? getWorkflowEditorObjectConstructorExpression(node);
   const lineCount = Math.max(3, expression.split("\n").length);
-  const expressionHeight = 58 + lineCount * 16;
+  const validationHeight = validationMessage ? workflowEditorObjectConstructorValidationHeight : 0;
+  const expressionHeight = 58 + lineCount * 16 + validationHeight;
 
-  return Math.min(
-    workflowEditorObjectConstructorMaxOutputPanelHeight,
-    Math.max(workflowEditorObjectConstructorMinOutputPanelHeight, expressionHeight),
-  );
+  return Math.max(workflowEditorObjectConstructorMinOutputPanelHeight, expressionHeight);
 }
 
 export function getWorkflowEditorObjectConstructorTextAreaHeight(
   node: ReturnType<typeof toUiWorkflowBuilderNodes>[number],
+  expressionOverride?: string,
+  validationMessage?: string,
 ) {
-  return Math.max(76, getWorkflowEditorObjectConstructorOutputPanelHeight(node) - 52);
+  const validationHeight = validationMessage ? workflowEditorObjectConstructorValidationHeight : 0;
+
+  return Math.max(
+    76,
+    getWorkflowEditorObjectConstructorOutputPanelHeight(
+      node,
+      expressionOverride,
+      validationMessage,
+    ) -
+      52 -
+      validationHeight,
+  );
 }
 
 function getWorkflowEditorObjectConstructorRenderedHeight(
   node: ReturnType<typeof toUiWorkflowBuilderNodes>[number],
   size: { height: number },
+  options: WorkflowEditorObjectConstructorLayoutOptions = {},
 ) {
   const inputCount = node.inputs?.length ?? 0;
   const outputCount = node.outputs?.length ?? 0;
@@ -323,7 +361,11 @@ function getWorkflowEditorObjectConstructorRenderedHeight(
   const currentPortColumnHeight =
     portCount * workflowEditorNodePortHeight +
     Math.max(portCount - 1, 0) * workflowEditorNodePortGap;
-  const expandedOutputHeight = getWorkflowEditorObjectConstructorOutputPanelHeight(node);
+  const expandedOutputHeight = getWorkflowEditorObjectConstructorOutputPanelHeight(
+    node,
+    options.objectConstructorExpression,
+    options.objectConstructorValidationMessage,
+  );
 
   return size.height + Math.max(0, expandedOutputHeight - currentPortColumnHeight);
 }

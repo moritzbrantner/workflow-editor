@@ -689,7 +689,7 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     expect(screen.queryByLabelText("Schema")).toBeNull();
   });
 
-  test("edits object constructor expressions from rendered workflow nodes", () => {
+  test("edits object constructor expressions live from rendered workflow nodes", () => {
     const handleDocumentChange = vi.fn();
     const objectTemplate = workflowEditorJsonNodeTemplates.find(
       (template) => template.id === "json-object",
@@ -710,7 +710,6 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     fireEvent.change(screen.getByLabelText("Object object expression"), {
       target: { value: "{ name: profile.name, age: profile.age }" },
     });
-    fireEvent.blur(screen.getByLabelText("Object object expression"));
 
     const nextDocument = handleDocumentChange.mock.calls.at(-1)?.[0] as WorkflowEditorDocument;
     const profileNode = findWorkflowEditorNode(nextDocument, "profile")!;
@@ -731,6 +730,34 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
         age: { type: { kind: "any" } },
       },
     });
+  });
+
+  test("shows object constructor expression validation without changing schema", () => {
+    const handleDocumentChange = vi.fn();
+    const objectTemplate = workflowEditorJsonNodeTemplates.find(
+      (template) => template.id === "json-object",
+    )!;
+    const objectDocument = normalizeWorkflowEditorDocument<Record<string, unknown>>({
+      nodes: [{ ...objectTemplate, id: "profile", x: 0, y: 0 }],
+      edges: [],
+    });
+
+    render(
+      <WorkflowWorkbench
+        document={objectDocument}
+        selectedNodeId="profile"
+        onDocumentChange={handleDocumentChange}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Object object expression"), {
+      target: { value: "{ name profile.name }" },
+    });
+
+    expect(screen.getByRole("alert").textContent).toBe(
+      "Object properties must use key: value syntax.",
+    );
+    expect(handleDocumentChange).not.toHaveBeenCalled();
   });
 
   test("edits JSON string and number source values and keeps null read-only", () => {

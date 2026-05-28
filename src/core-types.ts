@@ -47,6 +47,17 @@ export type WorkflowEditorObjectConstructorExpressionEntry = {
   sourceExpression: string;
 };
 
+export type WorkflowEditorObjectConstructorExpressionDiagnostic = {
+  code:
+    | "invalid-object-expression"
+    | "unbalanced-expression"
+    | "invalid-property"
+    | "invalid-property-key"
+    | "missing-property-value";
+  message: string;
+  index?: number;
+};
+
 export type WorkflowEditorObjectConstructorInputOptions = {
   portId?: string;
   propertyKey?: string;

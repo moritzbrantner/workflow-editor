@@ -84,6 +84,7 @@ import {
   updateWorkflowEditorObjectConstructorPropertiesInNode,
   updateWorkflowEditorNodeWorkflowReference,
   validateWorkflowEditorConnection,
+  validateWorkflowEditorObjectConstructorExpression,
   type WorkflowEditorConnectionInput,
   type WorkflowEditorDocument,
   type WorkflowEditorEdge,
@@ -365,6 +366,9 @@ export function WorkflowWorkbench<
   const [palettePosition, setPalettePosition] = useState<WorkflowPalettePosition>(null);
   const [paletteSearchValue, setPaletteSearchValue] = useState("");
   const [renamingNodeId, setRenamingNodeId] = useState<string | null>(null);
+  const [objectConstructorExpressionDrafts, setObjectConstructorExpressionDrafts] = useState<
+    Record<string, string>
+  >({});
   const documentContext = useMemo(() => createWorkflowEditorDocumentContext(document), [document]);
   const externalSelectionProvided =
     selectedNodeIds !== undefined ||
@@ -642,6 +646,12 @@ export function WorkflowWorkbench<
     }
 
     commitDocument(updateWorkflowEditorObjectConstructorExpression(document, nodeId, expression));
+  };
+
+  const updateWorkflowObjectConstructorExpressionDraft = (nodeId: string, expression: string) => {
+    setObjectConstructorExpressionDrafts((current) =>
+      current[nodeId] === expression ? current : { ...current, [nodeId]: expression },
+    );
   };
 
   const selectWorkflowJsonPrimitiveNode = (nodeId: string) => {
@@ -1710,6 +1720,7 @@ export function WorkflowWorkbench<
           >
             <WorkflowWorkbenchNodeLayerStyles
               nodes={document.nodes}
+              objectConstructorExpressionDrafts={objectConstructorExpressionDrafts}
               primaryNodeId={primarySelectedNodeId}
             />
             <WorkflowBuilder
@@ -1851,7 +1862,9 @@ export function WorkflowWorkbench<
             <WorkflowObjectConstructorNodeControls
               containerRef={containerRef}
               document={document}
+              expressionDrafts={objectConstructorExpressionDrafts}
               readOnly={readOnly}
+              onDraftChange={updateWorkflowObjectConstructorExpressionDraft}
               onFocusNode={selectWorkflowJsonPrimitiveNode}
               onValueChange={updateWorkflowObjectConstructorExpressionValue}
             />
@@ -2122,9 +2135,11 @@ function getWorkflowEditorWheelDelta(event: WheelEvent) {
 
 function WorkflowWorkbenchNodeLayerStyles<TNodeData extends Record<string, unknown>>({
   nodes,
+  objectConstructorExpressionDrafts,
   primaryNodeId,
 }: {
   nodes: Array<WorkflowEditorNode<TNodeData>>;
+  objectConstructorExpressionDrafts?: Record<string, string>;
   primaryNodeId?: string;
 }) {
   const styles = nodes
@@ -2141,9 +2156,25 @@ function WorkflowWorkbenchNodeLayerStyles<TNodeData extends Record<string, unkno
 
       if (isWorkflowEditorObjectConstructorNode(node) && node.minimized !== true) {
         const uiNode = toUiWorkflowBuilderNodes([node])[0]!;
-        const width = getWorkflowEditorObjectConstructorRenderedWidth(uiNode);
-        const height = getWorkflowEditorRenderedNodeSize(uiNode).height;
-        const outputPanelHeight = getWorkflowEditorObjectConstructorOutputPanelHeight(uiNode);
+        const expressionDraft = objectConstructorExpressionDrafts?.[node.id];
+        const validationMessage =
+          expressionDraft === undefined
+            ? undefined
+            : validateWorkflowEditorObjectConstructorExpression(expressionDraft)[0]?.message;
+        const width = getWorkflowEditorObjectConstructorRenderedWidth(
+          uiNode,
+          expressionDraft,
+          validationMessage,
+        );
+        const height = getWorkflowEditorRenderedNodeSize(uiNode, {
+          objectConstructorExpression: expressionDraft,
+          objectConstructorValidationMessage: validationMessage,
+        }).height;
+        const outputPanelHeight = getWorkflowEditorObjectConstructorOutputPanelHeight(
+          uiNode,
+          expressionDraft,
+          validationMessage,
+        );
         rules.push(
           `${selector}, ${selector} > [data-slot="workflow-node"] { width: ${width}px !important; }`,
           `${selector} { height: ${height}px !important; }`,
@@ -2610,13 +2641,17 @@ function WorkflowObjectConstructorNodeControls<
 >({
   containerRef,
   document,
+  expressionDrafts,
   onFocusNode,
+  onDraftChange,
   onValueChange,
   readOnly,
 }: {
   containerRef: RefObject<HTMLDivElement | null>;
   document: WorkflowEditorDocument<TNodeData, TEdgeData>;
+  expressionDrafts: Record<string, string>;
   onFocusNode: (nodeId: string) => void;
+  onDraftChange: (nodeId: string, value: string) => void;
   onValueChange: (nodeId: string, value: string) => void;
   readOnly: boolean;
 }) {
@@ -2639,7 +2674,16 @@ function WorkflowObjectConstructorNodeControls<
           return null;
         }
 
-        const offset = getWorkflowObjectConstructorNodeControlOffset(node);
+        const expressionDraft = expressionDrafts[node.id];
+        const validationMessage =
+          expressionDraft === undefined
+            ? undefined
+            : validateWorkflowEditorObjectConstructorExpression(expressionDraft)[0]?.message;
+        const offset = getWorkflowObjectConstructorNodeControlOffset(
+          node,
+          expressionDraft,
+          validationMessage,
+        );
 
         return createPortal(
           <div
@@ -2655,6 +2699,7 @@ function WorkflowObjectConstructorNodeControls<
             <WorkflowObjectConstructorExpressionControl
               node={node}
               readOnly={readOnly}
+              onDraftChange={onDraftChange}
               onFocusNode={onFocusNode}
               onValueChange={onValueChange}
             />
@@ -2669,21 +2714,29 @@ function WorkflowObjectConstructorNodeControls<
 
 function WorkflowObjectConstructorExpressionControl<TNodeData extends Record<string, unknown>>({
   node,
+  onDraftChange,
   onFocusNode,
   onValueChange,
   readOnly,
 }: {
   node: WorkflowEditorNode<TNodeData>;
+  onDraftChange: (nodeId: string, value: string) => void;
   onFocusNode: (nodeId: string) => void;
   onValueChange: (nodeId: string, value: string) => void;
   readOnly: boolean;
 }) {
   const expression = formatWorkflowEditorObjectConstructorExpression(node);
   const [draft, setDraft] = useState(expression);
+  const [focused, setFocused] = useState(false);
+  const validationMessage = validateWorkflowEditorObjectConstructorExpression(draft)[0]?.message;
+  const validationMessageId = `${node.id}-object-expression-validation`;
 
   useEffect(() => {
-    setDraft(expression);
-  }, [node.id, expression]);
+    if (!focused && !validationMessage) {
+      setDraft(expression);
+      onDraftChange(node.id, expression);
+    }
+  }, [focused, node.id, expression, onDraftChange, validationMessage]);
 
   const handleInteractionStart = (event: ReactPointerEvent<HTMLDivElement>) => {
     event.stopPropagation();
@@ -2693,27 +2746,41 @@ function WorkflowObjectConstructorExpressionControl<TNodeData extends Record<str
     event.stopPropagation();
   };
   const commitDraft = () => {
-    if (draft !== expression) {
+    if (!validationMessage && draft !== expression) {
       onValueChange(node.id, draft);
+    }
+  };
+  const updateDraft = (value: string) => {
+    setDraft(value);
+    onDraftChange(node.id, value);
+
+    if (!validateWorkflowEditorObjectConstructorExpression(value)[0]) {
+      onValueChange(node.id, value);
     }
   };
 
   return (
     <div
       data-slot="workflow-object-constructor-node-control"
-      className="h-full"
+      className="flex h-full flex-col gap-1"
       onPointerDownCapture={handleInteractionStart}
       onMouseDownCapture={stopInteractionPropagation}
       onClick={stopInteractionPropagation}
     >
       <Textarea
         aria-label={`${node.label} object expression`}
-        className={cn(workflowNodeTextareaControlClassName, "h-full min-h-full w-full")}
+        aria-describedby={validationMessage ? validationMessageId : undefined}
+        aria-invalid={validationMessage ? true : undefined}
+        className={cn(workflowNodeTextareaControlClassName, "min-h-0 w-full flex-1")}
         disabled={readOnly}
         spellCheck={false}
         value={draft}
-        onBlur={commitDraft}
-        onChange={(event) => setDraft(event.currentTarget.value)}
+        onBlur={() => {
+          setFocused(false);
+          commitDraft();
+        }}
+        onChange={(event) => updateDraft(event.currentTarget.value)}
+        onFocus={() => setFocused(true)}
         onKeyDown={(event) => {
           if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
             event.preventDefault();
@@ -2721,28 +2788,51 @@ function WorkflowObjectConstructorExpressionControl<TNodeData extends Record<str
           }
         }}
       />
+      {validationMessage ? (
+        <div
+          id={validationMessageId}
+          className="min-h-4 truncate text-[11px] leading-4 text-red-600"
+          role="alert"
+        >
+          {validationMessage}
+        </div>
+      ) : null}
     </div>
   );
 }
 
 function getWorkflowObjectConstructorNodeControlOffset<TNodeData>(
   node: WorkflowEditorNode<TNodeData>,
+  expressionDraft?: string,
+  validationMessage?: string,
 ) {
   const uiNode = toUiWorkflowBuilderNodes([node])[0]!;
-  const size = getWorkflowEditorRenderedNodeSize(uiNode);
+  const size = getWorkflowEditorRenderedNodeSize(uiNode, {
+    objectConstructorExpression: expressionDraft,
+    objectConstructorValidationMessage: validationMessage,
+  });
   const outputIndex = Math.max(
     0,
     (node.outputs ?? []).findIndex((output) => output.id === "value"),
   );
-  const portCenterY = getWorkflowEditorPortCenterOffset(uiNode, "output", outputIndex);
-  const outputPanelHeight = getWorkflowEditorObjectConstructorOutputPanelHeight(uiNode);
+  const portCenterY = getWorkflowEditorPortCenterOffset(uiNode, "output", outputIndex, {
+    objectConstructorExpression: expressionDraft,
+    objectConstructorValidationMessage: validationMessage,
+  });
+  const outputPanelHeight = getWorkflowEditorObjectConstructorOutputPanelHeight(
+    uiNode,
+    expressionDraft,
+    validationMessage,
+  );
   const outputPanelTop = portCenterY - outputPanelHeight / 2;
   const outputColumnX = size.width / 2 + 6;
   const x = Math.round(outputColumnX + 10);
   const width = Math.max(156, Math.round(size.width - x - 26));
 
   return {
-    height: getWorkflowEditorObjectConstructorTextAreaHeight(uiNode),
+    height:
+      getWorkflowEditorObjectConstructorTextAreaHeight(uiNode, expressionDraft, validationMessage) +
+      (validationMessage ? 20 : 0),
     x,
     y: Math.max(12, Math.round(outputPanelTop + 42)),
     width,

@@ -13,6 +13,8 @@ export {
   updateWorkflowEditorObjectConstructorPropertiesInNode,
   updateWorkflowEditorObjectConstructorSchema,
   updateWorkflowEditorObjectConstructorSchemaInNode,
+  validateWorkflowEditorObjectConstructorExpression,
+  type WorkflowEditorObjectConstructorExpressionDiagnostic,
   type WorkflowEditorObjectConstructorExpressionEntry,
   type WorkflowEditorObjectConstructorInputOptions,
   type WorkflowEditorObjectConstructorProperty,

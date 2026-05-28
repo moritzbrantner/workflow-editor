@@ -89,6 +89,7 @@ import {
   updateWorkflowEditorObjectConstructorSchemaInNode,
   validateWorkflowEditorDocument,
   validateWorkflowEditorConnection,
+  validateWorkflowEditorObjectConstructorExpression,
   wouldCreateWorkflowEditorCycle,
   workflowEditorCollectionNodeTemplates,
   workflowEditorControlFlowNodeTemplates,
@@ -716,6 +717,23 @@ describe("@moritzbrantner/workflow-editor core", () => {
     expect(formatWorkflowEditorObjectConstructorExpression(objectNode)).toBe(
       "{\n  firstName: employee.firstName,\n  age: employee.age\n}",
     );
+  });
+
+  test("validates object constructor expressions before applying them", () => {
+    expect(validateWorkflowEditorObjectConstructorExpression("{ name: profile.name }")).toEqual([]);
+    expect(parseWorkflowEditorObjectConstructorExpression("{ name profile.name }")).toBeNull();
+    expect(validateWorkflowEditorObjectConstructorExpression("{ name profile.name }")).toEqual([
+      expect.objectContaining({
+        code: "invalid-property",
+        message: "Object properties must use key: value syntax.",
+      }),
+    ]);
+    expect(validateWorkflowEditorObjectConstructorExpression("{ name: }")).toEqual([
+      expect.objectContaining({
+        code: "missing-property-value",
+        message: "Object property values cannot be empty.",
+      }),
+    ]);
   });
 
   test("updates object constructor expressions and removes stale edges", () => {
