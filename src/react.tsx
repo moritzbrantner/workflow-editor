@@ -4,6 +4,7 @@ import {
   type DragEvent as ReactDragEvent,
   type PointerEvent as ReactPointerEvent,
   type CSSProperties,
+  type RefObject,
   type ReactNode,
   type SyntheticEvent,
   useEffect,
@@ -23,8 +24,11 @@ import {
   DropdownMenuTrigger,
   Input,
   SearchField,
+  Textarea,
+  Toggle,
   cn,
 } from "@moritzbrantner/ui";
+import { createPortal } from "react-dom";
 import {
   InspectorPanel,
   WorkflowBuilder,
@@ -111,6 +115,15 @@ const workflowEditorPanActivationDistance = 3;
 const workflowEditorMinZoom = 0.5;
 const workflowEditorMaxZoom = 1.75;
 let workflowEditorMemoryClipboard: string | null = null;
+const workflowNodeControlFrameClassName = "pointer-events-auto absolute z-20";
+const workflowNodeTextControlClassName =
+  "border-zinc-300 bg-white/95 text-[11px] font-medium text-zinc-950 shadow-sm [--ui-input-height:1.5rem] [--ui-input-padding-x:0.5rem] [--ui-input-radius:0.25rem] focus-visible:ring-zinc-950/35 disabled:opacity-70";
+const workflowNodeTextareaControlClassName =
+  "!h-16 !min-h-16 resize-none rounded border-zinc-300 bg-white/95 px-2 py-1.5 font-mono text-[11px] leading-4 text-zinc-950 shadow-sm focus-visible:ring-zinc-950/35 disabled:bg-white/95 disabled:opacity-70";
+const workflowNodeToggleGroupControlClassName =
+  "h-6 w-full overflow-hidden rounded border border-zinc-300 bg-white/95 p-0 shadow-sm";
+const workflowNodeToggleItemClassName =
+  "h-full min-w-0 flex-1 rounded-none border-0 px-2 text-[11px] font-semibold uppercase text-zinc-700 shadow-none data-[state=on]:bg-zinc-950 data-[state=on]:text-white";
 
 export type WorkflowWorkbenchPaletteItem<TData = Record<string, unknown>> =
   WorkflowEditorNodeTemplate<TData>;
@@ -341,8 +354,6 @@ export function WorkflowWorkbench<
   const [paletteDragging, setPaletteDragging] = useState(false);
   const [palettePosition, setPalettePosition] = useState<WorkflowPalettePosition>(null);
   const [paletteSearchValue, setPaletteSearchValue] = useState("");
-  const [builderSurfaceLayout, setBuilderSurfaceLayout] =
-    useState<WorkflowBuilderSurfaceLayout | null>(null);
   const documentContext = useMemo(() => createWorkflowEditorDocumentContext(document), [document]);
   const externalSelectionProvided =
     selectedNodeIds !== undefined ||
@@ -517,55 +528,6 @@ export function WorkflowWorkbench<
       ownerDocument.removeEventListener("mousedown", preservePortalSelection, true);
       ownerDocument.removeEventListener("click", preservePortalSelection, true);
       ownerDocument.removeEventListener("focusin", preservePortalSelection, true);
-    };
-  }, []);
-
-  useEffect(() => {
-    const container = containerRef.current;
-    const surface = container?.querySelector<HTMLElement>("[data-slot='workflow-builder-surface']");
-
-    if (!container || !surface) {
-      return;
-    }
-
-    const syncSurfaceLayout = () => {
-      const containerRect = container.getBoundingClientRect();
-      const surfaceRect = surface.getBoundingClientRect();
-      const nextLayout: WorkflowBuilderSurfaceLayout = {
-        height: surfaceRect.height,
-        left: surfaceRect.left - containerRect.left,
-        scrollLeft: surface.scrollLeft,
-        scrollTop: surface.scrollTop,
-        top: surfaceRect.top - containerRect.top,
-        width: surfaceRect.width,
-      };
-
-      setBuilderSurfaceLayout((current) =>
-        current &&
-        current.height === nextLayout.height &&
-        current.left === nextLayout.left &&
-        current.scrollLeft === nextLayout.scrollLeft &&
-        current.scrollTop === nextLayout.scrollTop &&
-        current.top === nextLayout.top &&
-        current.width === nextLayout.width
-          ? current
-          : nextLayout,
-      );
-    };
-
-    syncSurfaceLayout();
-    surface.addEventListener("scroll", syncSurfaceLayout, { passive: true });
-    window.addEventListener("resize", syncSurfaceLayout);
-
-    const resizeObserver =
-      typeof ResizeObserver === "function" ? new ResizeObserver(syncSurfaceLayout) : null;
-    resizeObserver?.observe(container);
-    resizeObserver?.observe(surface);
-
-    return () => {
-      surface.removeEventListener("scroll", syncSurfaceLayout);
-      window.removeEventListener("resize", syncSurfaceLayout);
-      resizeObserver?.disconnect();
     };
   }, []);
 
@@ -1762,18 +1724,16 @@ export function WorkflowWorkbench<
               selection={selection}
             />
             <WorkflowJsonPrimitiveNodeControls
+              containerRef={containerRef}
               document={document}
-              primaryNodeId={primarySelectedNodeId}
               readOnly={readOnly}
-              surfaceLayout={builderSurfaceLayout}
               onFocusNode={selectWorkflowJsonPrimitiveNode}
               onValueChange={updateWorkflowJsonPrimitiveNodeValue}
             />
             <WorkflowObjectConstructorNodeControls
+              containerRef={containerRef}
               document={document}
-              primaryNodeId={primarySelectedNodeId}
               readOnly={readOnly}
-              surfaceLayout={builderSurfaceLayout}
               onFocusNode={selectWorkflowJsonPrimitiveNode}
               onValueChange={updateWorkflowObjectConstructorExpressionValue}
             />
@@ -1931,15 +1891,6 @@ type WorkflowCanvasPanState = {
   startClientY: number;
   viewport: WorkflowEditorViewport;
   panning: boolean;
-};
-
-type WorkflowBuilderSurfaceLayout = {
-  height: number;
-  left: number;
-  scrollLeft: number;
-  scrollTop: number;
-  top: number;
-  width: number;
 };
 
 type WorkflowPaletteCorner = "top-left" | "top-right" | "bottom-left" | "bottom-right";
@@ -2100,70 +2051,107 @@ function isWorkflowEditorDetachedNodeControlVisible<TNodeData extends Record<str
   return toUiWorkflowBuilderNodes([node])[0]?.minimized !== true;
 }
 
+function useWorkflowWorkbenchNodeElementMap<TNodeData extends Record<string, unknown>>(
+  containerRef: RefObject<HTMLDivElement | null>,
+  nodes: ReadonlyArray<WorkflowEditorNode<TNodeData>>,
+) {
+  const nodeFingerprint = nodes.map((node) => node.id).join("\u001f");
+  const [nodeElements, setNodeElements] = useState<Map<string, HTMLElement>>(() => new Map());
+
+  useEffect(() => {
+    const container = containerRef.current;
+
+    if (!container || nodes.length === 0) {
+      setNodeElements((current) => (current.size === 0 ? current : new Map()));
+      return;
+    }
+
+    const nextElements = new Map<string, HTMLElement>();
+
+    for (const node of nodes) {
+      const builderNode = container.querySelector<HTMLElement>(
+        `[data-slot="workflow-builder-node"][data-node-id="${cssAttributeValue(node.id)}"]`,
+      );
+      const workflowNode =
+        builderNode?.firstElementChild instanceof HTMLElement &&
+        builderNode.firstElementChild.dataset.slot === "workflow-node"
+          ? builderNode.firstElementChild
+          : builderNode?.querySelector<HTMLElement>("[data-slot='workflow-node']");
+
+      if (workflowNode) {
+        nextElements.set(node.id, workflowNode);
+      }
+    }
+
+    setNodeElements((current) =>
+      areWorkflowWorkbenchNodeElementMapsEqual(current, nextElements) ? current : nextElements,
+    );
+  }, [containerRef, nodeFingerprint, nodes]);
+
+  return nodeElements;
+}
+
+function areWorkflowWorkbenchNodeElementMapsEqual(
+  current: ReadonlyMap<string, HTMLElement>,
+  next: ReadonlyMap<string, HTMLElement>,
+) {
+  if (current.size !== next.size) {
+    return false;
+  }
+
+  for (const [id, element] of next) {
+    if (current.get(id) !== element) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 function WorkflowJsonPrimitiveNodeControls<
   TNodeData extends Record<string, unknown>,
   TEdgeData extends Record<string, unknown>,
 >({
+  containerRef,
   document,
   onFocusNode,
   onValueChange,
-  primaryNodeId,
   readOnly,
-  surfaceLayout,
 }: {
+  containerRef: RefObject<HTMLDivElement | null>;
   document: WorkflowEditorDocument<TNodeData, TEdgeData>;
   onFocusNode: (nodeId: string) => void;
   onValueChange: (nodeId: string, value: string | number | boolean | null) => void;
-  primaryNodeId?: string;
   readOnly: boolean;
-  surfaceLayout: WorkflowBuilderSurfaceLayout | null;
 }) {
-  if (!surfaceLayout) {
-    return null;
-  }
-
-  const viewport = normalizeWorkflowEditorViewport(document.viewport);
   const primitiveNodes = document.nodes.filter(
     (node) =>
       isWorkflowEditorJsonPrimitiveNode(node) && isWorkflowEditorDetachedNodeControlVisible(node),
   );
-  const nodeIndexes = new Map(document.nodes.map((node, index) => [node.id, index]));
+  const nodeElements = useWorkflowWorkbenchNodeElementMap(containerRef, primitiveNodes);
 
   if (primitiveNodes.length === 0) {
     return null;
   }
 
   return (
-    <div
-      className="pointer-events-none absolute overflow-hidden"
-      style={{
-        height: surfaceLayout.height,
-        left: surfaceLayout.left,
-        top: surfaceLayout.top,
-        width: surfaceLayout.width,
-      }}
-    >
+    <>
       {primitiveNodes.map((node) => {
-        const offset = getWorkflowJsonPrimitiveNodeControlOffset(node);
-        const left = viewport.x + (node.x + offset.x) * viewport.zoom - surfaceLayout.scrollLeft;
-        const top = viewport.y + (node.y + offset.y) * viewport.zoom - surfaceLayout.scrollTop;
-        const layer = getWorkflowEditorNodeLayerIndex(
-          nodeIndexes.get(node.id) ?? 0,
-          node.id,
-          primaryNodeId,
-        );
+        const target = nodeElements.get(node.id);
+        if (!target) {
+          return null;
+        }
 
-        return (
+        const offset = getWorkflowJsonPrimitiveNodeControlOffset(node);
+
+        return createPortal(
           <div
             key={node.id}
-            className="pointer-events-auto absolute"
+            className={workflowNodeControlFrameClassName}
             style={{
-              left,
-              top,
-              transform: `scale(${viewport.zoom})`,
-              transformOrigin: "top left",
+              left: offset.x,
+              top: offset.y,
               width: offset.width,
-              zIndex: layer,
             }}
           >
             <WorkflowJsonPrimitiveNodeValueControl
@@ -2172,10 +2160,12 @@ function WorkflowJsonPrimitiveNodeControls<
               onFocusNode={onFocusNode}
               onValueChange={onValueChange}
             />
-          </div>
+          </div>,
+          target,
+          node.id,
         );
       })}
-    </div>
+    </>
   );
 }
 
@@ -2206,8 +2196,6 @@ function WorkflowJsonPrimitiveNodeValueControl<TNodeData extends Record<string, 
   const stopInteractionPropagation = (event: SyntheticEvent) => {
     event.stopPropagation();
   };
-  const controlClassName =
-    "h-6 w-full rounded border border-zinc-300 bg-white/95 px-2 text-[11px] font-medium text-zinc-950 shadow-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-zinc-950/35 disabled:cursor-not-allowed disabled:opacity-70";
 
   switch (node.kind) {
     case "json.string":
@@ -2220,7 +2208,7 @@ function WorkflowJsonPrimitiveNodeValueControl<TNodeData extends Record<string, 
         >
           <Input
             aria-label={label}
-            className={controlClassName}
+            className={workflowNodeTextControlClassName}
             disabled={readOnly}
             value={typeof value === "string" ? value : ""}
             onChange={(event) => onValueChange(node.id, event.currentTarget.value)}
@@ -2237,7 +2225,7 @@ function WorkflowJsonPrimitiveNodeValueControl<TNodeData extends Record<string, 
         >
           <Input
             aria-label={label}
-            className={controlClassName}
+            className={workflowNodeTextControlClassName}
             disabled={readOnly}
             inputMode="decimal"
             type="number"
@@ -2262,28 +2250,22 @@ function WorkflowJsonPrimitiveNodeValueControl<TNodeData extends Record<string, 
           data-slot="workflow-json-primitive-node-control"
           role="group"
           aria-label={label}
-          className="inline-flex h-6 w-full overflow-hidden rounded border border-zinc-300 bg-white/95 text-[11px] font-semibold shadow-sm"
+          className={cn("inline-flex", workflowNodeToggleGroupControlClassName)}
           onPointerDownCapture={handleInteractionStart}
           onMouseDownCapture={stopInteractionPropagation}
           onClick={stopInteractionPropagation}
         >
           {[false, true].map((option) => (
-            <button
+            <Toggle
               key={String(option)}
-              type="button"
               aria-label={`Set ${node.label} to ${option ? "true" : "false"}`}
-              aria-pressed={booleanValue === option}
-              className={cn(
-                "min-w-0 flex-1 px-2 uppercase outline-none transition-colors focus-visible:ring-2 focus-visible:ring-zinc-950/35 disabled:cursor-not-allowed",
-                booleanValue === option
-                  ? "bg-zinc-950 text-white"
-                  : "bg-white text-zinc-700 hover:bg-zinc-100",
-              )}
+              className={workflowNodeToggleItemClassName}
               disabled={readOnly}
-              onClick={() => onValueChange(node.id, option)}
+              pressed={booleanValue === option}
+              onPressedChange={() => onValueChange(node.id, option)}
             >
               {option ? "true" : "false"}
-            </button>
+            </Toggle>
           ))}
         </div>
       );
@@ -2296,7 +2278,13 @@ function WorkflowJsonPrimitiveNodeValueControl<TNodeData extends Record<string, 
           onMouseDownCapture={stopInteractionPropagation}
           onClick={stopInteractionPropagation}
         >
-          <Input aria-label={label} className={controlClassName} disabled value="null" readOnly />
+          <Input
+            aria-label={label}
+            className={workflowNodeTextControlClassName}
+            disabled
+            value="null"
+            readOnly
+          />
         </div>
       );
     default:
@@ -2330,67 +2318,47 @@ function WorkflowObjectConstructorNodeControls<
   TNodeData extends Record<string, unknown>,
   TEdgeData extends Record<string, unknown>,
 >({
+  containerRef,
   document,
   onFocusNode,
   onValueChange,
-  primaryNodeId,
   readOnly,
-  surfaceLayout,
 }: {
+  containerRef: RefObject<HTMLDivElement | null>;
   document: WorkflowEditorDocument<TNodeData, TEdgeData>;
   onFocusNode: (nodeId: string) => void;
   onValueChange: (nodeId: string, value: string) => void;
-  primaryNodeId?: string;
   readOnly: boolean;
-  surfaceLayout: WorkflowBuilderSurfaceLayout | null;
 }) {
-  if (!surfaceLayout) {
-    return null;
-  }
-
-  const viewport = normalizeWorkflowEditorViewport(document.viewport);
   const objectNodes = document.nodes.filter(
     (node) =>
       isWorkflowEditorObjectConstructorNode(node) &&
       isWorkflowEditorDetachedNodeControlVisible(node),
   );
-  const nodeIndexes = new Map(document.nodes.map((node, index) => [node.id, index]));
+  const nodeElements = useWorkflowWorkbenchNodeElementMap(containerRef, objectNodes);
 
   if (objectNodes.length === 0) {
     return null;
   }
 
   return (
-    <div
-      className="pointer-events-none absolute overflow-hidden"
-      style={{
-        height: surfaceLayout.height,
-        left: surfaceLayout.left,
-        top: surfaceLayout.top,
-        width: surfaceLayout.width,
-      }}
-    >
+    <>
       {objectNodes.map((node) => {
-        const offset = getWorkflowObjectConstructorNodeControlOffset(node);
-        const left = viewport.x + (node.x + offset.x) * viewport.zoom - surfaceLayout.scrollLeft;
-        const top = viewport.y + (node.y + offset.y) * viewport.zoom - surfaceLayout.scrollTop;
-        const layer = getWorkflowEditorNodeLayerIndex(
-          nodeIndexes.get(node.id) ?? 0,
-          node.id,
-          primaryNodeId,
-        );
+        const target = nodeElements.get(node.id);
+        if (!target) {
+          return null;
+        }
 
-        return (
+        const offset = getWorkflowObjectConstructorNodeControlOffset(node);
+
+        return createPortal(
           <div
             key={node.id}
-            className="pointer-events-auto absolute"
+            className={workflowNodeControlFrameClassName}
             style={{
-              left,
-              top,
-              transform: `scale(${viewport.zoom})`,
-              transformOrigin: "top left",
+              left: offset.x,
+              top: offset.y,
               width: offset.width,
-              zIndex: layer,
             }}
           >
             <WorkflowObjectConstructorExpressionControl
@@ -2399,10 +2367,12 @@ function WorkflowObjectConstructorNodeControls<
               onFocusNode={onFocusNode}
               onValueChange={onValueChange}
             />
-          </div>
+          </div>,
+          target,
+          node.id,
         );
       })}
-    </div>
+    </>
   );
 }
 
@@ -2444,9 +2414,9 @@ function WorkflowObjectConstructorExpressionControl<TNodeData extends Record<str
       onMouseDownCapture={stopInteractionPropagation}
       onClick={stopInteractionPropagation}
     >
-      <textarea
+      <Textarea
         aria-label={`${node.label} object expression`}
-        className="h-16 w-full resize-none rounded border border-zinc-300 bg-white/95 px-2 py-1.5 font-mono text-[11px] leading-4 text-zinc-950 shadow-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-zinc-950/35 disabled:cursor-not-allowed disabled:opacity-70"
+        className={workflowNodeTextareaControlClassName}
         disabled={readOnly}
         spellCheck={false}
         value={draft}
