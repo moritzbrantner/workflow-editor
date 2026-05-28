@@ -1142,6 +1142,70 @@ describe("@moritzbrantner/workflow-editor core", () => {
     });
   });
 
+  test("marks optional inputs and shows defaults only while unconnected", () => {
+    const optionalDocument = normalizeWorkflowEditorDocument({
+      nodes: [
+        {
+          id: "source",
+          label: "Source",
+          x: 0,
+          y: 0,
+          outputs: [{ id: "out", label: "Out", type: { kind: "number" } }],
+        },
+        {
+          id: "target",
+          label: "Target",
+          x: 240,
+          y: 0,
+          inputs: [
+            {
+              id: "limit",
+              label: "Limit",
+              type: { kind: "number" },
+              optional: true,
+              defaultValue: 10,
+            },
+            {
+              id: "mode",
+              label: "Mode",
+              type: { kind: "string" },
+              optional: true,
+            },
+          ],
+        },
+      ],
+      edges: [],
+    });
+
+    const unconnectedInputs = toUiWorkflowBuilderNodes(
+      optionalDocument.nodes,
+      optionalDocument.edges,
+    )[1]!.inputs!;
+
+    expect(unconnectedInputs[0]).toMatchObject({
+      badge: "default 10",
+      required: false,
+    });
+    expect(unconnectedInputs[1]).toMatchObject({
+      badge: "optional",
+      required: false,
+    });
+
+    const connectedDocument = connectWorkflowEditorNodes(optionalDocument, {
+      sourceNodeId: "source",
+      sourcePortId: "out",
+      targetNodeId: "target",
+      targetPortId: "limit",
+    });
+    const connectedInputs = toUiWorkflowBuilderNodes(
+      connectedDocument.nodes,
+      connectedDocument.edges,
+    )[1]!.inputs!;
+
+    expect(connectedInputs[0]?.badge).toBe("optional");
+    expect(connectedInputs[1]?.badge).toBe("optional");
+  });
+
   test("copies, pastes, duplicates, and removes selected subgraphs", () => {
     const selection = normalizeWorkflowEditorSelection(document, {
       nodeIds: ["transform", "input", "input"],

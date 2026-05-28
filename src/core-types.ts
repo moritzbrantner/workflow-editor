@@ -22,6 +22,14 @@ export type WorkflowEditorPortProperty = {
   optional?: boolean;
 };
 
+export type WorkflowEditorPortDefaultValue =
+  | string
+  | number
+  | boolean
+  | null
+  | WorkflowEditorPortDefaultValue[]
+  | { [key: string]: WorkflowEditorPortDefaultValue };
+
 export type WorkflowEditorObjectConstructorSchema = Extract<
   WorkflowEditorPortType,
   { kind: "object" }
@@ -94,6 +102,8 @@ export type WorkflowEditorTypeDiagnostic = {
 
 export type WorkflowEditorPort = Omit<UiWorkflowNodePort, "kind" | "type"> & {
   type: WorkflowEditorPortType;
+  optional?: boolean;
+  defaultValue?: WorkflowEditorPortDefaultValue;
 };
 
 export type WorkflowEditorWorkflowReference = {

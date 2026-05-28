@@ -4,7 +4,10 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 const rootDir = fileURLToPath(new URL("./", import.meta.url));
-const workerCount = parseWorkerCount(process.env.WORKFLOW_EDITOR_TEST_WORKERS, 1);
+const workerCount = parseWorkerCount(
+  process.env.WORKFLOW_EDITOR_TEST_WORKERS ?? process.env.WORKFLOW_EDITOR_WORKERS,
+  1,
+);
 
 export default defineConfig({
   resolve: {
@@ -20,6 +23,13 @@ export default defineConfig({
     },
   },
   test: {
+    benchmark: {
+      include: [
+        "src/**/*.bench.{ts,tsx}",
+        "src/**/*.benchmark.{ts,tsx}",
+        "benchmarks/**/*.{ts,tsx}",
+      ],
+    },
     coverage: {
       provider: "v8",
       reporter: ["text", "json-summary", "html"],

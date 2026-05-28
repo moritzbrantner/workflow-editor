@@ -105,6 +105,7 @@ export {
   type WorkflowEditorObjectConstructorProperty,
   type WorkflowEditorObjectConstructorSchema,
   type WorkflowEditorPort,
+  type WorkflowEditorPortDefaultValue,
   type WorkflowEditorPortProperty,
   type WorkflowEditorPortType,
   type WorkflowEditorPasteOptions,

@@ -7,8 +7,13 @@ delete process.env.FORCE_COLOR;
 delete process.env.NO_COLOR;
 
 const rootDir = fileURLToPath(new URL("./", import.meta.url));
+const workerCount = parseWorkerCount(
+  process.env.WORKFLOW_EDITOR_PLAYWRIGHT_WORKERS ??
+    process.env.WORKFLOW_EDITOR_TEST_WORKERS ??
+    process.env.WORKFLOW_EDITOR_WORKERS,
+  1,
+);
 const isCi = Boolean(process.env.CI);
-const workerCount = parseWorkerCount(process.env.WORKFLOW_EDITOR_TEST_WORKERS, isCi ? 1 : 2);
 
 export default defineConfig({
   testDir: "tests/playwright",

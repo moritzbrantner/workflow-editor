@@ -13,7 +13,13 @@ import {
   useRef,
   useState,
 } from "react";
-import { Maximize2Icon, Minimize2Icon, PinIcon } from "lucide-react";
+import {
+  Maximize2Icon,
+  Minimize2Icon,
+  MoreHorizontalIcon,
+  PinIcon,
+  Trash2Icon,
+} from "lucide-react";
 
 import {
   Badge,
@@ -66,6 +72,7 @@ import {
   normalizeWorkflowEditorSelection,
   pasteWorkflowEditorClipboardPayload,
   removeWorkflowEditorArrayConstructorInput,
+  removeWorkflowEditorNode,
   removeWorkflowEditorObjectDecompositionOutput,
   removeWorkflowEditorObjectConstructorInput,
   removeWorkflowEditorSelection,
@@ -431,7 +438,10 @@ export function WorkflowWorkbench<
     return edge ? [edge] : [];
   });
   const graphIndex = useMemo(() => createWorkflowEditorGraphIndex(document), [document]);
-  const uiNodes = useMemo(() => toUiWorkflowBuilderNodes(document.nodes), [document.nodes]);
+  const uiNodes = useMemo(
+    () => toUiWorkflowBuilderNodes(document.nodes, document.edges),
+    [document.edges, document.nodes],
+  );
   const uiEdges = useMemo(
     () => toUiWorkflowBuilderEdges(document.edges, document.nodes),
     [document.edges, document.nodes],
@@ -874,6 +884,26 @@ export function WorkflowWorkbench<
       commitDocument(removeWorkflowEditorSelection(document, selection));
       emitSelectionState(emptyWorkflowEditorSelection);
     }
+  };
+
+  const deleteNode = (nodeId: string) => {
+    if (readOnly) {
+      return;
+    }
+
+    const nextDocument = removeWorkflowEditorNode(document, nodeId);
+    commitDocument(nextDocument);
+    emitSelectionState(
+      {
+        nodeIds: selection.nodeIds.filter((selectedNodeId) => selectedNodeId !== nodeId),
+        edgeIds: selection.edgeIds,
+        primary:
+          selection.primary?.type === "node" && selection.primary.id === nodeId
+            ? undefined
+            : selection.primary,
+      },
+      nextDocument,
+    );
   };
 
   const duplicateSelection = () => {
@@ -1788,6 +1818,11 @@ export function WorkflowWorkbench<
               onDoubleClick={() => {
                 openSelectedNodeWorkflow();
               }}
+            />
+            <WorkflowNodeActionMenus
+              document={document}
+              readOnly={readOnly}
+              onDeleteNode={deleteNode}
             />
             <WorkflowSelectionOverlay
               document={document}
@@ -2712,6 +2747,93 @@ function getWorkflowObjectConstructorNodeControlOffset<TNodeData>(
     y: Math.max(12, Math.round(outputPanelTop + 42)),
     width,
   };
+}
+
+function WorkflowNodeActionMenus<
+  TNodeData extends Record<string, unknown>,
+  TEdgeData extends Record<string, unknown>,
+>({
+  document,
+  readOnly,
+  onDeleteNode,
+}: {
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>;
+  readOnly: boolean;
+  onDeleteNode: (nodeId: string) => void;
+}) {
+  const [openNodeId, setOpenNodeId] = useState<string | null>(null);
+
+  if (document.nodes.length === 0) {
+    return null;
+  }
+
+  const stopInteractionPropagation = (event: SyntheticEvent) => {
+    event.stopPropagation();
+  };
+
+  return (
+    <div
+      data-slot="workflow-node-action-menu-layer"
+      className="pointer-events-none absolute inset-0 z-30"
+    >
+      {document.nodes.map((node) => {
+        const size = getWorkflowEditorRenderedNodeSize(toUiWorkflowBuilderNodes([node])[0]!);
+        const open = openNodeId === node.id;
+
+        return (
+          <div
+            key={node.id}
+            data-slot="workflow-node-action-menu"
+            className="pointer-events-auto absolute"
+            style={{
+              left: Math.round(node.x + size.width - 34),
+              top: Math.round(node.y + 8),
+            }}
+            onClick={stopInteractionPropagation}
+            onMouseDown={stopInteractionPropagation}
+            onPointerDown={stopInteractionPropagation}
+          >
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              className="size-6 border border-zinc-300 bg-white/85 text-zinc-700 shadow-sm hover:bg-white"
+              aria-expanded={open}
+              aria-haspopup="menu"
+              aria-label={`${node.label} node actions`}
+              onClick={() => setOpenNodeId((current) => (current === node.id ? null : node.id))}
+            >
+              <MoreHorizontalIcon className="size-3.5" aria-hidden="true" />
+            </Button>
+            {open ? (
+              <div
+                role="menu"
+                data-slot="workflow-node-action-menu-content"
+                className="absolute right-0 top-7 z-[20010] grid w-36 gap-1 rounded-md bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10"
+              >
+                <div className="truncate px-1.5 py-1 text-xs font-medium text-muted-foreground">
+                  {node.label}
+                </div>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex items-center gap-2 rounded-sm px-1.5 py-1.5 text-left text-sm text-destructive outline-none transition-colors hover:bg-destructive/10 focus:bg-destructive/10 disabled:pointer-events-none disabled:opacity-50"
+                  disabled={readOnly}
+                  onClick={() => {
+                    setOpenNodeId(null);
+                    onDeleteNode(node.id);
+                  }}
+                >
+                  <Trash2Icon className="size-4" aria-hidden="true" />
+                  Delete
+                </button>
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 function WorkflowSelectionOverlay<

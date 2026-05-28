@@ -131,6 +131,18 @@ export function App() {
   `selectedNodeId`, `selectedEdgeId`, and `onSelectionChange(...)` props remain
   available for single-selection integrations.
 
+## Development
+
+Tests and benchmarks default to one worker to keep memory use predictable. Override the cap with
+`WORKFLOW_EDITOR_WORKERS`, or use the narrower `WORKFLOW_EDITOR_TEST_WORKERS` and
+`WORKFLOW_EDITOR_PLAYWRIGHT_WORKERS` variables when needed.
+
+```sh
+WORKFLOW_EDITOR_WORKERS=2 bun run test
+WORKFLOW_EDITOR_WORKERS=2 bun run bench
+WORKFLOW_EDITOR_PLAYWRIGHT_WORKERS=2 bun run test:playwright
+```
+
 ## Clipboard and Layout
 
 ```ts

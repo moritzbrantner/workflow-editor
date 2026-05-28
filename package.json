@@ -102,7 +102,8 @@
     "check-types:tests": "tsc --noEmit -p tsconfig.test.json",
     "pack:check": "bun pm pack --dry-run",
     "smoke:package": "node scripts/smoke-package-exports.mjs",
-    "test": "vitest run",
+    "test": "$(dirname $(command -v npm))/node node_modules/vitest/vitest.mjs run",
+    "bench": "$(dirname $(command -v npm))/node node_modules/vitest/vitest.mjs bench --passWithNoTests",
     "test:coverage": "$(dirname $(command -v npm))/node node_modules/vitest/vitest.mjs run --coverage",
     "test:playwright": "playwright test",
     "verify": "bun run format:check && bun run lint && bun run check-types && bun run check-types:tests && bun run test && bun run test:playwright && bun run example:build && bun run build && bun run smoke:package && bun run pack:check"

@@ -196,6 +196,16 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     expect(readStatefulDocument().edges).toHaveLength(0);
   });
 
+  test("deletes a workflow node from its node action menu", () => {
+    render(<StatefulWorkbench />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Input node actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+
+    expect(readStatefulDocument().nodes.map((node) => node.id)).toEqual(["transform", "output"]);
+    expect(readStatefulDocument().edges).toHaveLength(0);
+  });
+
   test("ignores global shortcuts from editable inspector fields", () => {
     render(
       <StatefulWorkbench

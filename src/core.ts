@@ -40,6 +40,7 @@ import type {
   WorkflowEditorObjectDecompositionOutputOptions,
   WorkflowEditorObjectDecompositionProperty,
   WorkflowEditorPort,
+  WorkflowEditorPortDefaultValue,
   WorkflowEditorPortProperty,
   WorkflowEditorPortType,
   WorkflowEditorTypeDefinition,
@@ -84,6 +85,7 @@ export type {
   WorkflowEditorObjectDecompositionOutputOptions,
   WorkflowEditorObjectDecompositionProperty,
   WorkflowEditorPort,
+  WorkflowEditorPortDefaultValue,
   WorkflowEditorPortProperty,
   WorkflowEditorPortType,
   WorkflowEditorSelection,
@@ -2158,7 +2160,10 @@ export function topologicallySortWorkflowEditorNodes<
 
 export function toUiWorkflowBuilderNodes<TData = Record<string, unknown>>(
   nodes: Array<WorkflowEditorNode<TData>>,
+  edges?: readonly WorkflowEditorEdge<unknown>[],
 ): UiWorkflowBuilderNodeData[] {
+  const connectedInputs = edges ? createWorkflowEditorConnectedInputLookup(edges) : undefined;
+
   return nodes.map((node) => {
     const jsonPrimitiveValue = formatWorkflowEditorJsonPrimitiveNodeValue(node);
 
@@ -2177,7 +2182,12 @@ export function toUiWorkflowBuilderNodes<TData = Record<string, unknown>>(
       tags: node.tags,
       x: node.x,
       y: node.y,
-      inputs: node.inputs?.map(toUiWorkflowEditorPort),
+      inputs: node.inputs?.map((port) =>
+        toUiWorkflowEditorPort(port, {
+          connected: connectedInputs?.has(workflowEditorPortKey(node.id, port.id)) ?? false,
+          direction: "input",
+        }),
+      ),
       outputs: node.outputs?.map((port) =>
         toUiWorkflowEditorPort({
           ...port,
@@ -2259,9 +2269,22 @@ export function toUiWorkflowBuilderEdges<TData = Record<string, unknown>>(
   }));
 }
 
-function toUiWorkflowEditorPort(port: WorkflowEditorPort): UiWorkflowNodePort {
+function toUiWorkflowEditorPort(
+  port: WorkflowEditorPort,
+  options: { connected?: boolean; direction?: "input" | "output" } = {},
+): UiWorkflowNodePort {
+  const defaultValueBadge =
+    options.direction === "input" && options.connected !== true
+      ? formatWorkflowEditorPortDefaultValue(port)
+      : undefined;
+
   return {
     ...port,
+    required: port.required ?? (options.direction === "input" && port.optional ? false : undefined),
+    badge:
+      port.badge ??
+      defaultValueBadge ??
+      (options.direction === "input" && port.optional ? "optional" : undefined),
     type: {
       label: formatWorkflowEditorPortType(port.type),
       source: getWorkflowEditorPortTypeSignature(port.type),
@@ -2269,6 +2292,33 @@ function toUiWorkflowEditorPort(port: WorkflowEditorPort): UiWorkflowNodePort {
     },
     color: port.color ?? getWorkflowEditorPortTypeColor(port.type),
   };
+}
+
+function createWorkflowEditorConnectedInputLookup(edges: readonly WorkflowEditorEdge<unknown>[]) {
+  return new Set(edges.map((edge) => workflowEditorPortKey(edge.targetNodeId, edge.targetPortId)));
+}
+
+function workflowEditorPortKey(nodeId: string, portId: string) {
+  return `${nodeId}:${portId}`;
+}
+
+function formatWorkflowEditorPortDefaultValue(port: WorkflowEditorPort): string | undefined {
+  if (!("defaultValue" in port)) {
+    return undefined;
+  }
+
+  if (port.defaultValue === undefined) {
+    return undefined;
+  }
+
+  return `default ${formatWorkflowEditorPortDefaultValueLiteral(port.defaultValue)}`;
+}
+
+function formatWorkflowEditorPortDefaultValueLiteral(
+  value: WorkflowEditorPortDefaultValue,
+): string {
+  const serialized = JSON.stringify(value);
+  return serialized.length > 24 ? `${serialized.slice(0, 21)}...` : serialized;
 }
 
 function restoreWorkflowEditorPortsFromUi(
@@ -4080,7 +4130,52 @@ function validateWorkflowEditorPorts(
         nodeId,
       });
     }
+
+    if (port.optional !== undefined && typeof port.optional !== "boolean") {
+      diagnostics.push({
+        code: "invalid-node",
+        message: "Workflow node port optional flag must be a boolean",
+        path: `${portPath}.optional`,
+        nodeId,
+      });
+    }
+
+    if ("defaultValue" in port && !isWorkflowEditorPortDefaultValueLike(port.defaultValue)) {
+      diagnostics.push({
+        code: "invalid-node",
+        message: "Workflow node port default value must be JSON-serializable",
+        path: `${portPath}.defaultValue`,
+        nodeId,
+      });
+    }
   });
+}
+
+function isWorkflowEditorPortDefaultValueLike(
+  value: unknown,
+  depth = 0,
+): value is WorkflowEditorPortDefaultValue {
+  if (depth > 100) {
+    return false;
+  }
+
+  if (
+    typeof value === "string" ||
+    typeof value === "boolean" ||
+    value === null ||
+    (typeof value === "number" && Number.isFinite(value))
+  ) {
+    return true;
+  }
+
+  if (Array.isArray(value)) {
+    return value.every((item) => isWorkflowEditorPortDefaultValueLike(item, depth + 1));
+  }
+
+  return (
+    isRecord(value) &&
+    Object.values(value).every((item) => isWorkflowEditorPortDefaultValueLike(item, depth + 1))
+  );
 }
 
 function isWorkflowEditorPortTypeLike(value: unknown, depth = 0): value is WorkflowEditorPortType {
