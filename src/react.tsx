@@ -2141,13 +2141,25 @@ function WorkflowWorkbenchNodeLayerStyles<TNodeData extends Record<string, unkno
   objectConstructorExpressionDrafts?: Record<string, string>;
   primaryNodeId?: string;
 }) {
+  // The UI node body has no data-slot; constrain these overrides to its grid
+  // container so INPUTS/OUTPUTS labels stay hidden without affecting portals.
   const styles = [
-    `[data-slot="workflow-builder-node"] [data-slot="workflow-node"] > div:nth-child(2):not([data-slot]) > div > div:first-child { display: none; }`,
-    `[data-slot="workflow-builder-node"] [data-slot="workflow-node-menu-trigger"] { visibility: hidden; pointer-events: none; }`,
+    `[data-slot="workbench-layout"] [data-slot="workflow-node"]:not([data-compact="true"]) > div.grid:not([data-slot]) > div > div:first-child { display: none !important; }`,
+    `[data-slot="workbench-layout"] [data-slot="workflow-builder-node"] [data-slot="workflow-node-menu-trigger"] { visibility: hidden; pointer-events: none; }`,
     ...nodes.map((node, index) => {
       const selector = `[data-slot="workflow-builder-node"][data-node-id="${cssAttributeValue(node.id)}"]`;
       const layer = getWorkflowEditorNodeLayerIndex(index, node.id, primaryNodeId);
       const rules = [`${selector} { z-index: ${layer}; }`];
+      const uiNode = toUiWorkflowBuilderNodes([node])[0]!;
+
+      rules.push(...getWorkflowEditorPortColorRules(selector, uiNode));
+
+      if ((node.inputs ?? []).length === 0) {
+        rules.push(
+          `${selector} [data-slot="workflow-node"]:not([data-compact="true"]):not([data-minimized="true"]) > div.grid:not([data-slot]) { grid-template-columns: minmax(0, 1fr) !important; }`,
+          `${selector} [data-slot="workflow-node"]:not([data-compact="true"]):not([data-minimized="true"]) > div.grid:not([data-slot]) > div:first-child { display: none !important; }`,
+        );
+      }
 
       if (isWorkflowEditorJsonPrimitiveNode(node)) {
         rules.push(
@@ -2156,7 +2168,6 @@ function WorkflowWorkbenchNodeLayerStyles<TNodeData extends Record<string, unkno
       }
 
       if (isWorkflowEditorObjectConstructorNode(node) && node.minimized !== true) {
-        const uiNode = toUiWorkflowBuilderNodes([node])[0]!;
         const expressionDraft = objectConstructorExpressionDrafts?.[node.id];
         const validationMessage =
           expressionDraft === undefined
@@ -2189,6 +2200,56 @@ function WorkflowWorkbenchNodeLayerStyles<TNodeData extends Record<string, unkno
   ].join("\n");
 
   return styles ? <style data-slot="workflow-workbench-layer-styles">{styles}</style> : null;
+}
+
+function getWorkflowEditorPortColorRules(
+  selector: string,
+  node: ReturnType<typeof toUiWorkflowBuilderNodes>[number],
+) {
+  const rules: string[] = [];
+
+  for (const direction of ["input", "output"] as const) {
+    const ports = direction === "input" ? (node.inputs ?? []) : (node.outputs ?? []);
+    const minimizedColor = readUiWorkflowNodePortColor(ports[0]);
+
+    if (minimizedColor) {
+      rules.push(
+        `${selector} [data-slot="workflow-node-minimized-port"][data-port-direction="${direction}"] { color: ${minimizedColor}; border-color: ${minimizedColor}; }`,
+      );
+    }
+
+    for (const port of ports) {
+      const color = readUiWorkflowNodePortColor(port);
+
+      if (!color) {
+        continue;
+      }
+
+      const portSelector = `${selector} [data-slot="workflow-node-port"][data-port-direction="${direction}"][data-port-id="${cssAttributeValue(port.id)}"]`;
+      rules.push(
+        `${portSelector} { border-color: color-mix(in oklch, ${color} 58%, var(--border)); background-color: color-mix(in oklch, ${color} ${direction === "input" ? "9%" : "6%"}, transparent); }`,
+        `${portSelector} [data-slot="workflow-node-port-dot"] { color: ${color}; }`,
+      );
+    }
+  }
+
+  return rules;
+}
+
+function readUiWorkflowNodePortColor(
+  port:
+    | NonNullable<ReturnType<typeof toUiWorkflowBuilderNodes>[number]["inputs"]>[number]
+    | undefined,
+) {
+  const color =
+    (port as { color?: unknown } | undefined)?.color ??
+    (port?.metadata as { workflowEditorPortColor?: unknown } | undefined)?.workflowEditorPortColor;
+
+  return typeof color === "string" && isSafeWorkflowEditorCssValue(color) ? color : undefined;
+}
+
+function isSafeWorkflowEditorCssValue(value: string) {
+  return value.length <= 120 && !/[;{}\n\r<>]/.test(value);
 }
 
 function cssAttributeValue(value: string) {
@@ -2446,10 +2507,7 @@ function WorkflowJsonPrimitiveNodeControls<
   onValueChange: (nodeId: string, value: string | number | boolean | null) => void;
   readOnly: boolean;
 }) {
-  const primitiveNodes = document.nodes.filter(
-    (node) =>
-      isWorkflowEditorJsonPrimitiveNode(node) && isWorkflowEditorDetachedNodeControlVisible(node),
-  );
+  const primitiveNodes = document.nodes.filter(isWorkflowEditorJsonPrimitiveNode);
   const nodeElements = useWorkflowWorkbenchNodeElementMap(containerRef, primitiveNodes);
 
   if (primitiveNodes.length === 0) {
@@ -2615,23 +2673,28 @@ function WorkflowJsonPrimitiveNodeValueControl<TNodeData extends Record<string, 
 }
 
 function getWorkflowJsonPrimitiveNodeControlOffset<TNodeData>(node: WorkflowEditorNode<TNodeData>) {
+  const uiNode = toUiWorkflowBuilderNodes([node])[0]!;
+
+  if (uiNode.minimized === true && node.variant !== "compact") {
+    const size = getWorkflowEditorRenderedNodeSize(uiNode);
+
+    return {
+      x: 8,
+      y: 6,
+      width: Math.max(104, Math.min(128, size.width - 56)),
+    };
+  }
+
   if (node.variant === "compact") {
     return { x: 58, y: 13, width: 112 };
   }
 
-  const uiNode = toUiWorkflowBuilderNodes([node])[0]!;
-
-  const outputIndex = Math.max(
-    0,
-    (node.outputs ?? []).findIndex((output) => output.id === "value"),
-  );
   const size = getWorkflowEditorRenderedNodeSize(uiNode);
-  const portCenterY = getWorkflowEditorPortCenterOffset(uiNode, "output", outputIndex);
-  const width = Math.min(170, Math.max(112, size.width - 48));
+  const width = Math.min(170, Math.max(112, size.width - 64));
 
   return {
-    x: Math.max(12, size.width - width - 24),
-    y: Math.max(12, portCenterY - 12),
+    x: 12,
+    y: 42,
     width,
   };
 }

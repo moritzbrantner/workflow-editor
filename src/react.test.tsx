@@ -961,6 +961,34 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     expect(nullValue.value).toBe("null");
   });
 
+  test("keeps JSON primitive value controls visible while minimized", async () => {
+    const primitiveDocument = normalizeWorkflowEditorDocument({
+      nodes: [
+        {
+          id: "title",
+          label: "Title",
+          kind: "json.string",
+          category: "JSON",
+          minimized: true,
+          x: 0,
+          y: 0,
+          outputs: [{ id: "value", label: "Value", type: { kind: "string" } }],
+          data: { value: "draft" },
+        },
+      ],
+      edges: [],
+    });
+
+    render(<StatefulWorkbench initialDocument={primitiveDocument} />);
+
+    const valueInput = await screen.findByLabelText("Title JSON value");
+    fireEvent.change(valueInput, { target: { value: "published" } });
+
+    expect(readStatefulDocument().nodes.find((node) => node.id === "title")?.data).toMatchObject({
+      value: "published",
+    });
+  });
+
   test("indicates JSON primitive source values on workflow nodes", () => {
     const uiNodes = toUiWorkflowBuilderNodes([
       {

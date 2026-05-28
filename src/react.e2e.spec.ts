@@ -259,7 +259,9 @@ test.describe("WorkflowWorkbench desktop", () => {
     expect(decision?.x).toBeGreaterThan(300);
   });
 
-  test("hides JSON primitive value controls while minimized", async ({ page }, testInfo) => {
+  test("keeps JSON primitive value controls visible while minimized", async ({
+    page,
+  }, testInfo) => {
     await gotoWorkflowEditor(page, testInfo);
 
     const palette = page.locator('[data-slot="workflow-palette-overlay"]').first();
@@ -271,14 +273,16 @@ test.describe("WorkflowWorkbench desktop", () => {
       .click();
     await expect(page.getByTestId("node-count")).toHaveText("4");
 
-    await page.getByRole("button", { name: "Expand String", exact: true }).click();
     const valueInput = page.getByLabel("String JSON value");
     await expect(valueInput).toBeVisible();
 
-    await page.getByRole("button", { name: "Minimize String", exact: true }).click();
-    await expect(valueInput).toHaveCount(0);
+    await valueInput.fill("published");
+    await expect(valueInput).toHaveValue("published");
 
     await page.getByRole("button", { name: "Expand String", exact: true }).click();
+    await expect(valueInput).toBeVisible();
+
+    await page.getByRole("button", { name: "Minimize String", exact: true }).click();
     await expect(valueInput).toBeVisible();
   });
 
