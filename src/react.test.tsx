@@ -429,7 +429,7 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
         nodes: [
           expect.objectContaining({
             id: "flag",
-            data: { value: true },
+            data: expect.objectContaining({ sourceName: "booleanValue", value: true }),
           }),
         ],
       }),
@@ -597,7 +597,12 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Apply" })[0]!);
     expect(stringChange).toHaveBeenCalledWith(
       expect.objectContaining({
-        nodes: [expect.objectContaining({ id: "title", data: { value: "published" } })],
+        nodes: [
+          expect.objectContaining({
+            id: "title",
+            data: expect.objectContaining({ sourceName: "stringValue", value: "published" }),
+          }),
+        ],
       }),
     );
 
@@ -632,7 +637,12 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Apply" })[0]!);
     expect(numberChange).toHaveBeenCalledWith(
       expect.objectContaining({
-        nodes: [expect.objectContaining({ id: "count", data: { value: 42 } })],
+        nodes: [
+          expect.objectContaining({
+            id: "count",
+            data: expect.objectContaining({ sourceName: "numberValue", value: 42 }),
+          }),
+        ],
       }),
     );
 
@@ -720,19 +730,22 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Set Flag to true" }));
-    expect(readStatefulDocument().nodes.find((node) => node.id === "flag")?.data).toEqual({
+    expect(readStatefulDocument().nodes.find((node) => node.id === "flag")?.data).toMatchObject({
+      sourceName: "booleanValue",
       value: true,
     });
 
     fireEvent.change(screen.getByLabelText("Title JSON value"), {
       target: { value: "published" },
     });
-    expect(readStatefulDocument().nodes.find((node) => node.id === "title")?.data).toEqual({
+    expect(readStatefulDocument().nodes.find((node) => node.id === "title")?.data).toMatchObject({
+      sourceName: "stringValue",
       value: "published",
     });
 
     fireEvent.change(screen.getByLabelText("Count JSON value"), { target: { value: "42" } });
-    expect(readStatefulDocument().nodes.find((node) => node.id === "count")?.data).toEqual({
+    expect(readStatefulDocument().nodes.find((node) => node.id === "count")?.data).toMatchObject({
+      sourceName: "numberValue",
       value: 42,
     });
 

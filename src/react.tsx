@@ -93,7 +93,9 @@ import {
   toggleWorkflowEditorSelectionItem,
 } from "./react-selection";
 import {
+  getWorkflowEditorObjectConstructorOutputPanelHeight,
   getWorkflowEditorObjectConstructorRenderedWidth,
+  getWorkflowEditorObjectConstructorTextAreaHeight,
   getWorkflowEditorPortCenterOffset,
   getWorkflowEditorRenderedNodeSize,
   snapWorkflowEditorNodePositionToCompatiblePort,
@@ -119,7 +121,7 @@ const workflowNodeControlFrameClassName = "pointer-events-auto absolute z-20";
 const workflowNodeTextControlClassName =
   "border-zinc-300 bg-white/95 text-[11px] font-medium text-zinc-950 shadow-sm [--ui-input-height:1.5rem] [--ui-input-padding-x:0.5rem] [--ui-input-radius:0.25rem] focus-visible:ring-zinc-950/35 disabled:opacity-70";
 const workflowNodeTextareaControlClassName =
-  "!h-16 !min-h-16 resize-none rounded border-zinc-300 bg-white/95 px-2 py-1.5 font-mono text-[11px] leading-4 text-zinc-950 shadow-sm focus-visible:ring-zinc-950/35 disabled:bg-white/95 disabled:opacity-70";
+  "resize-none rounded border-zinc-300 bg-white/95 px-2 py-1.5 font-mono text-[11px] leading-4 text-zinc-950 shadow-sm focus-visible:ring-zinc-950/35 disabled:bg-white/95 disabled:opacity-70";
 const workflowNodeToggleGroupControlClassName =
   "h-6 w-full overflow-hidden rounded border border-zinc-300 bg-white/95 p-0 shadow-sm";
 const workflowNodeToggleItemClassName =
@@ -2022,11 +2024,15 @@ function WorkflowWorkbenchNodeLayerStyles<TNodeData extends Record<string, unkno
       }
 
       if (isWorkflowEditorObjectConstructorNode(node) && node.minimized !== true) {
-        const width = getWorkflowEditorObjectConstructorRenderedWidth(
-          toUiWorkflowBuilderNodes([node])[0]!,
-        );
+        const uiNode = toUiWorkflowBuilderNodes([node])[0]!;
+        const width = getWorkflowEditorObjectConstructorRenderedWidth(uiNode);
+        const height = getWorkflowEditorRenderedNodeSize(uiNode).height;
+        const outputPanelHeight = getWorkflowEditorObjectConstructorOutputPanelHeight(uiNode);
         rules.push(
           `${selector}, ${selector} > [data-slot="workflow-node"] { width: ${width}px !important; }`,
+          `${selector} { height: ${height}px !important; }`,
+          `${selector} > [data-slot="workflow-node"] { height: ${height}px !important; }`,
+          `${selector} [data-slot="workflow-node-port"][data-port-direction="output"][data-port-id="value"] { height: ${outputPanelHeight}px !important; min-height: ${outputPanelHeight}px !important; }`,
         );
       }
 
@@ -2356,6 +2362,7 @@ function WorkflowObjectConstructorNodeControls<
             key={node.id}
             className={workflowNodeControlFrameClassName}
             style={{
+              height: offset.height,
               left: offset.x,
               top: offset.y,
               width: offset.width,
@@ -2410,13 +2417,14 @@ function WorkflowObjectConstructorExpressionControl<TNodeData extends Record<str
   return (
     <div
       data-slot="workflow-object-constructor-node-control"
+      className="h-full"
       onPointerDownCapture={handleInteractionStart}
       onMouseDownCapture={stopInteractionPropagation}
       onClick={stopInteractionPropagation}
     >
       <Textarea
         aria-label={`${node.label} object expression`}
-        className={workflowNodeTextareaControlClassName}
+        className={cn(workflowNodeTextareaControlClassName, "h-full min-h-full w-full")}
         disabled={readOnly}
         spellCheck={false}
         value={draft}
@@ -2438,17 +2446,21 @@ function getWorkflowObjectConstructorNodeControlOffset<TNodeData>(
 ) {
   const uiNode = toUiWorkflowBuilderNodes([node])[0]!;
   const size = getWorkflowEditorRenderedNodeSize(uiNode);
-
   const outputIndex = Math.max(
     0,
     (node.outputs ?? []).findIndex((output) => output.id === "value"),
   );
   const portCenterY = getWorkflowEditorPortCenterOffset(uiNode, "output", outputIndex);
-  const width = Math.min(220, Math.max(132, size.width - 48));
+  const outputPanelHeight = getWorkflowEditorObjectConstructorOutputPanelHeight(uiNode);
+  const outputPanelTop = portCenterY - outputPanelHeight / 2;
+  const outputColumnX = size.width / 2 + 6;
+  const x = Math.round(outputColumnX + 10);
+  const width = Math.max(156, Math.round(size.width - x - 26));
 
   return {
-    x: Math.max(12, size.width - width - 24),
-    y: Math.max(12, portCenterY - 32),
+    height: getWorkflowEditorObjectConstructorTextAreaHeight(uiNode),
+    x,
+    y: Math.max(12, Math.round(outputPanelTop + 42)),
     width,
   };
 }

@@ -16,6 +16,10 @@ const workflowEditorMinimizedNodeWidth = 176;
 const workflowEditorMinimizedNodeHeight = 36;
 const workflowEditorObjectConstructorMinNodeWidth = 460;
 const workflowEditorObjectConstructorMaxNodeWidth = 640;
+const workflowEditorNodePortHeight = 64;
+const workflowEditorNodePortGap = 8;
+const workflowEditorObjectConstructorMinOutputPanelHeight = 148;
+const workflowEditorObjectConstructorMaxOutputPanelHeight = 260;
 
 type WorkflowEditorPoint = {
   x: number;
@@ -239,6 +243,7 @@ export function getWorkflowEditorRenderedNodeSize(
   if (node.kind === "json.object") {
     return {
       ...size,
+      height: Math.max(size.height, getWorkflowEditorObjectConstructorRenderedHeight(node, size)),
       width: Math.max(size.width, getWorkflowEditorObjectConstructorRenderedWidth(node)),
     };
   }
@@ -257,15 +262,76 @@ export function getWorkflowEditorPortCenterOffset(
     return ((portIndex + 1) / (portCount + 1)) * workflowEditorMinimizedNodeHeight;
   }
 
-  return getWorkflowNodePortCenterOffset(node, portIndex, {
+  const offset = getWorkflowNodePortCenterOffset(node, portIndex, {
     showPortColumnHeaders: false,
   });
+
+  if (
+    node.kind === "json.object" &&
+    direction === "output" &&
+    node.outputs?.[portIndex]?.id === "value"
+  ) {
+    return (
+      offset -
+      workflowEditorNodePortHeight / 2 +
+      getWorkflowEditorObjectConstructorOutputPanelHeight(node) / 2
+    );
+  }
+
+  return offset;
 }
 
 export function getWorkflowEditorObjectConstructorRenderedWidth(
   node: ReturnType<typeof toUiWorkflowBuilderNodes>[number],
 ) {
-  const expression = formatWorkflowEditorObjectConstructorExpression({
+  const expression = getWorkflowEditorObjectConstructorExpression(node);
+  const longestLine = Math.max(...expression.split("\n").map((line) => line.length), 0);
+  const expressionWidth = 260 + Math.max(0, longestLine - 24) * 6;
+
+  return Math.min(
+    workflowEditorObjectConstructorMaxNodeWidth,
+    Math.max(workflowEditorObjectConstructorMinNodeWidth, expressionWidth),
+  );
+}
+
+export function getWorkflowEditorObjectConstructorOutputPanelHeight(
+  node: ReturnType<typeof toUiWorkflowBuilderNodes>[number],
+) {
+  const expression = getWorkflowEditorObjectConstructorExpression(node);
+  const lineCount = Math.max(3, expression.split("\n").length);
+  const expressionHeight = 58 + lineCount * 16;
+
+  return Math.min(
+    workflowEditorObjectConstructorMaxOutputPanelHeight,
+    Math.max(workflowEditorObjectConstructorMinOutputPanelHeight, expressionHeight),
+  );
+}
+
+export function getWorkflowEditorObjectConstructorTextAreaHeight(
+  node: ReturnType<typeof toUiWorkflowBuilderNodes>[number],
+) {
+  return Math.max(76, getWorkflowEditorObjectConstructorOutputPanelHeight(node) - 52);
+}
+
+function getWorkflowEditorObjectConstructorRenderedHeight(
+  node: ReturnType<typeof toUiWorkflowBuilderNodes>[number],
+  size: { height: number },
+) {
+  const inputCount = node.inputs?.length ?? 0;
+  const outputCount = node.outputs?.length ?? 0;
+  const portCount = Math.max(inputCount, outputCount, 1);
+  const currentPortColumnHeight =
+    portCount * workflowEditorNodePortHeight +
+    Math.max(portCount - 1, 0) * workflowEditorNodePortGap;
+  const expandedOutputHeight = getWorkflowEditorObjectConstructorOutputPanelHeight(node);
+
+  return size.height + Math.max(0, expandedOutputHeight - currentPortColumnHeight);
+}
+
+function getWorkflowEditorObjectConstructorExpression(
+  node: ReturnType<typeof toUiWorkflowBuilderNodes>[number],
+) {
+  return formatWorkflowEditorObjectConstructorExpression({
     id: node.id,
     label: node.label,
     kind: node.kind,
@@ -281,13 +347,6 @@ export function getWorkflowEditorObjectConstructorRenderedWidth(
     })),
     data: node.metadata,
   });
-  const longestLine = Math.max(...expression.split("\n").map((line) => line.length), 0);
-  const expressionWidth = 260 + Math.max(0, longestLine - 24) * 6;
-
-  return Math.min(
-    workflowEditorObjectConstructorMaxNodeWidth,
-    Math.max(workflowEditorObjectConstructorMinNodeWidth, expressionWidth),
-  );
 }
 
 function getWorkflowEditorPortTypeFromMetadata(

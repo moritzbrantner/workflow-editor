@@ -176,7 +176,7 @@ export const workflowEditorJsonNodeTemplates = [
     category: "JSON",
     minimized: true,
     outputs: [{ id: "value", label: "Value", type: { kind: "string" } }],
-    data: { value: "" },
+    data: { value: "", sourceName: "stringValue" },
   },
   {
     id: "json-number",
@@ -186,7 +186,7 @@ export const workflowEditorJsonNodeTemplates = [
     category: "JSON",
     minimized: true,
     outputs: [{ id: "value", label: "Value", type: { kind: "number" } }],
-    data: { value: 0 },
+    data: { value: 0, sourceName: "numberValue" },
   },
   {
     id: "json-boolean",
@@ -196,7 +196,7 @@ export const workflowEditorJsonNodeTemplates = [
     category: "JSON",
     minimized: true,
     outputs: [{ id: "value", label: "Value", type: { kind: "boolean" } }],
-    data: { value: false },
+    data: { value: false, sourceName: "booleanValue" },
   },
   {
     id: "json-null",
@@ -206,7 +206,7 @@ export const workflowEditorJsonNodeTemplates = [
     category: "JSON",
     minimized: true,
     outputs: [{ id: "value", label: "Value", type: { kind: "null" } }],
-    data: { value: null },
+    data: { value: null, sourceName: "nullValue" },
   },
   {
     id: "json-array",
@@ -2410,6 +2410,48 @@ function formatWorkflowEditorJsonPrimitiveNodeValue<TData>(
   }
 }
 
+export function getWorkflowEditorJsonPrimitiveSourceName<TData>(
+  node: WorkflowEditorNode<TData>,
+): string | undefined {
+  if (!isWorkflowEditorJsonPrimitiveNode(node)) {
+    return undefined;
+  }
+
+  const sourceName = isRecord(node.data) ? node.data.sourceName : undefined;
+  return normalizeWorkflowEditorSourceIdentifier(
+    sourceName,
+    getWorkflowEditorJsonPrimitiveSourceNameBase(node),
+  );
+}
+
+function isWorkflowEditorJsonPrimitiveNode<TData>(
+  node: WorkflowEditorNode<TData>,
+): node is WorkflowEditorNode<TData> & {
+  kind: "json.string" | "json.number" | "json.boolean" | "json.null";
+} {
+  return (
+    node.kind === "json.string" ||
+    node.kind === "json.number" ||
+    node.kind === "json.boolean" ||
+    node.kind === "json.null"
+  );
+}
+
+function getWorkflowEditorJsonPrimitiveSourceNameBase<TData>(node: WorkflowEditorNode<TData>) {
+  switch (node.kind) {
+    case "json.string":
+      return "stringValue";
+    case "json.number":
+      return "numberValue";
+    case "json.boolean":
+      return "booleanValue";
+    case "json.null":
+      return "nullValue";
+    default:
+      return "jsonValue";
+  }
+}
+
 const workflowEditorPortTypeFallbackColors = [
   "#0284c7",
   "#16a34a",
@@ -2713,6 +2755,10 @@ type WorkflowEditorNodeBehavior = {
 
 const workflowEditorNodeBehaviors = [
   {
+    kind: "json.primitive",
+    syncNodes: syncWorkflowEditorJsonPrimitiveNodes,
+  },
+  {
     kind: "json.array",
     syncNodes: syncWorkflowEditorArrayConstructorNodes,
     expandConnection: expandWorkflowEditorArrayConstructorConnection,
@@ -2737,6 +2783,35 @@ function syncWorkflowEditorNodeBehaviors<
     (nextNodes, behavior) => behavior.syncNodes?.(nextNodes, edges) ?? nextNodes,
     nodes,
   );
+}
+
+function syncWorkflowEditorJsonPrimitiveNodes<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+>(nodes: Array<WorkflowEditorNode<TNodeData>>, _edges: Array<WorkflowEditorEdge<TEdgeData>>) {
+  const usedSourceNames = new Set<string>();
+
+  return nodes.map((node) => {
+    if (!isWorkflowEditorJsonPrimitiveNode(node)) {
+      return node;
+    }
+
+    const data: Record<string, unknown> = isRecord(node.data) ? node.data : {};
+    const sourceName = createUniqueWorkflowEditorSourceIdentifier(
+      data.sourceName,
+      getWorkflowEditorJsonPrimitiveSourceNameBase(node),
+      usedSourceNames,
+    );
+    usedSourceNames.add(sourceName);
+
+    return {
+      ...node,
+      data: {
+        ...data,
+        sourceName,
+      } as TNodeData,
+    };
+  });
 }
 
 function expandWorkflowEditorConnectionWithBehaviors<
@@ -3478,8 +3553,11 @@ function createWorkflowEditorObjectConstructorSource<TNodeData = Record<string, 
 ) {
   const nodeKey = normalizeObjectPropertyKey(node.label || node.id);
   const portKey = normalizeObjectPropertyKey(port.label || port.id);
-  const expression = isGenericWorkflowEditorPortKey(portKey) ? nodeKey : `${nodeKey}.${portKey}`;
-  const propertyKey = isGenericWorkflowEditorPortKey(portKey) ? nodeKey : portKey;
+  const jsonPrimitiveSourceName = getWorkflowEditorJsonPrimitiveSourceName(node);
+  const genericPortKey = isGenericWorkflowEditorPortKey(portKey);
+  const sourceKey = genericPortKey && jsonPrimitiveSourceName ? jsonPrimitiveSourceName : nodeKey;
+  const expression = genericPortKey ? sourceKey : `${nodeKey}.${portKey}`;
+  const propertyKey = genericPortKey ? sourceKey : portKey;
 
   return {
     expression,
@@ -3685,6 +3763,123 @@ function normalizeObjectPropertyKey(value: unknown) {
     .join("")}`;
 
   return /^[A-Za-z_$]/.test(normalized) ? normalized : `property${normalized}`;
+}
+
+const workflowEditorReservedSourceIdentifiers = new Set([
+  "any",
+  "as",
+  "async",
+  "await",
+  "boolean",
+  "break",
+  "case",
+  "catch",
+  "class",
+  "const",
+  "continue",
+  "debugger",
+  "declare",
+  "default",
+  "delete",
+  "do",
+  "else",
+  "enum",
+  "export",
+  "extends",
+  "false",
+  "finally",
+  "for",
+  "from",
+  "function",
+  "get",
+  "if",
+  "implements",
+  "import",
+  "in",
+  "infer",
+  "instanceof",
+  "interface",
+  "is",
+  "keyof",
+  "let",
+  "module",
+  "namespace",
+  "never",
+  "new",
+  "null",
+  "number",
+  "object",
+  "of",
+  "package",
+  "private",
+  "protected",
+  "public",
+  "readonly",
+  "require",
+  "return",
+  "set",
+  "static",
+  "string",
+  "super",
+  "switch",
+  "symbol",
+  "this",
+  "throw",
+  "true",
+  "try",
+  "type",
+  "typeof",
+  "undefined",
+  "unknown",
+  "var",
+  "void",
+  "while",
+  "with",
+  "yield",
+]);
+
+function normalizeWorkflowEditorSourceIdentifier(value: unknown, fallback: string) {
+  const text = String(value ?? "").trim();
+  const fallbackIdentifier = normalizeObjectPropertyKey(fallback || "jsonValue");
+
+  if (isWorkflowEditorSafeSourceIdentifier(text)) {
+    return text;
+  }
+
+  const candidate = text ? normalizeObjectPropertyKey(text) : fallbackIdentifier;
+
+  if (isWorkflowEditorSafeSourceIdentifier(candidate)) {
+    return candidate;
+  }
+
+  if (isWorkflowEditorSafeSourceIdentifier(fallbackIdentifier)) {
+    return fallbackIdentifier;
+  }
+
+  return `${fallbackIdentifier}Value`;
+}
+
+function isWorkflowEditorSafeSourceIdentifier(value: string) {
+  return (
+    /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(value) && !workflowEditorReservedSourceIdentifiers.has(value)
+  );
+}
+
+function createUniqueWorkflowEditorSourceIdentifier(
+  value: unknown,
+  fallback: string,
+  usedSourceNames: ReadonlySet<string>,
+) {
+  const base = normalizeWorkflowEditorSourceIdentifier(value, fallback);
+  let candidate = base;
+  let index = 2;
+
+  while (usedSourceNames.has(candidate)) {
+    candidate = `${base}${index}`;
+    index += 1;
+  }
+
+  return candidate;
 }
 
 function createUniqueObjectPropertyKey(value: unknown, usedPropertyKeys: ReadonlySet<string>) {

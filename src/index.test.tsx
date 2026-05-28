@@ -38,6 +38,7 @@ import {
   fromUiWorkflowBuilderEdges,
   fromUiWorkflowBuilderNodes,
   getWorkflowEditorArrayConstructorInputs,
+  getWorkflowEditorJsonPrimitiveSourceName,
   getWorkflowEditorObjectConstructorInputs,
   getWorkflowEditorObjectConstructorSchema,
   getWorkflowEditorObjectDecompositionOutputs,
@@ -214,6 +215,62 @@ describe("@moritzbrantner/workflow-editor core", () => {
         count: { type: { kind: "number" } },
       }),
     });
+  });
+
+  test("generates stable safe source names for JSON primitive nodes", () => {
+    const booleanTemplate = workflowEditorJsonNodeTemplates.find(
+      (template) => template.id === "json-boolean",
+    )!;
+    const normalized = normalizeWorkflowEditorDocument<Record<string, unknown>>({
+      nodes: [
+        {
+          ...booleanTemplate,
+          id: "flag-a",
+          label: "Boolean",
+          x: 0,
+          y: 0,
+          data: { value: true },
+        },
+        {
+          ...booleanTemplate,
+          id: "flag-b",
+          label: "Boolean",
+          x: 180,
+          y: 0,
+          data: { value: false },
+        },
+        {
+          ...booleanTemplate,
+          id: "flag-c",
+          label: "Customer flag",
+          x: 360,
+          y: 0,
+          data: { value: true, sourceName: "customerFlag" },
+        },
+        {
+          ...booleanTemplate,
+          id: "flag-d",
+          label: "Unsafe flag",
+          x: 540,
+          y: 0,
+          data: { value: true, sourceName: "boolean" },
+        },
+      ],
+      edges: [],
+    });
+
+    expect(
+      normalized.nodes.map((node) => [
+        node.id,
+        getWorkflowEditorJsonPrimitiveSourceName(node),
+        (node.data as Record<string, unknown> | undefined)?.sourceName,
+      ]),
+    ).toEqual([
+      ["flag-a", "booleanValue", "booleanValue"],
+      ["flag-b", "booleanValue2", "booleanValue2"],
+      ["flag-c", "customerFlag", "customerFlag"],
+      ["flag-d", "booleanValue3", "booleanValue3"],
+    ]);
   });
 
   test("validates collection node template schemas and compatible typed connections", () => {
@@ -439,6 +496,54 @@ describe("@moritzbrantner/workflow-editor core", () => {
       kind: "object",
       properties: {},
     });
+  });
+
+  test("uses generated JSON primitive source names when connecting object constructor inputs", () => {
+    const booleanTemplate = workflowEditorJsonNodeTemplates.find(
+      (template) => template.id === "json-boolean",
+    )!;
+    const objectTemplate = workflowEditorJsonNodeTemplates.find(
+      (template) => template.id === "json-object",
+    )!;
+    const objectDocument = normalizeWorkflowEditorDocument<Record<string, unknown>>({
+      nodes: [
+        {
+          ...booleanTemplate,
+          id: "boolean-source",
+          label: "Boolean",
+          x: 0,
+          y: 0,
+          data: { value: true },
+        },
+        {
+          ...objectTemplate,
+          id: "payload",
+          x: 240,
+          y: 0,
+        },
+      ],
+      edges: [],
+    });
+    const connected = connectWorkflowEditorNodes(objectDocument, {
+      sourceNodeId: "boolean-source",
+      sourcePortId: "value",
+      targetNodeId: "payload",
+      targetPortId: "property",
+    });
+    const objectNode = findWorkflowEditorNode(connected, "payload")!;
+
+    expect(getWorkflowEditorJsonPrimitiveSourceName(connected.nodes[0]!)).toBe("booleanValue");
+    expect(getWorkflowEditorObjectConstructorInputs(objectNode)).toEqual([
+      expect.objectContaining({
+        id: "booleanvalue",
+        label: "booleanValue",
+        badge: "booleanValue",
+        type: { kind: "boolean" },
+      }),
+    ]);
+    expect(formatWorkflowEditorObjectConstructorExpression(objectNode)).toBe(
+      "{\n  booleanValue: booleanValue\n}",
+    );
   });
 
   test("syncs object constructor inputs from schema", () => {

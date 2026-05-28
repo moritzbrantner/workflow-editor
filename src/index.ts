@@ -27,6 +27,7 @@ export {
   fromUiWorkflowBuilderEdges,
   fromUiWorkflowBuilderNodes,
   getWorkflowEditorArrayConstructorInputs,
+  getWorkflowEditorJsonPrimitiveSourceName,
   getWorkflowEditorObjectDecompositionOutputs,
   getWorkflowEditorReferencedDocumentIds,
   getWorkflowEditorObjectConstructorInputs,
