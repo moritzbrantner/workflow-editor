@@ -11,16 +11,40 @@ const workerCount = parseWorkerCount(
 
 export default defineConfig({
   resolve: {
-    alias: {
-      "@moritzbrantner/workflow-editor": path.resolve(rootDir, "src/index.ts"),
-      "@moritzbrantner/workflow-editor/core": path.resolve(rootDir, "src/core.ts"),
-      "@moritzbrantner/workflow-editor/editor": path.resolve(rootDir, "src/editor.tsx"),
-      "@moritzbrantner/workflow-editor/history": path.resolve(rootDir, "src/history.ts"),
-      "@moritzbrantner/workflow-editor/layout": path.resolve(rootDir, "src/layout.ts"),
-      "@moritzbrantner/workflow-editor/persistence": path.resolve(rootDir, "src/persistence.ts"),
-      "@moritzbrantner/workflow-editor/react": path.resolve(rootDir, "src/react.tsx"),
-      "@moritzbrantner/workflow-editor/share": path.resolve(rootDir, "src/share.ts"),
-    },
+    alias: [
+      {
+        find: "@moritzbrantner/workflow-editor/core",
+        replacement: path.resolve(rootDir, "src/core.ts"),
+      },
+      {
+        find: "@moritzbrantner/workflow-editor/editor",
+        replacement: path.resolve(rootDir, "src/editor.tsx"),
+      },
+      {
+        find: "@moritzbrantner/workflow-editor/history",
+        replacement: path.resolve(rootDir, "src/history.ts"),
+      },
+      {
+        find: "@moritzbrantner/workflow-editor/layout",
+        replacement: path.resolve(rootDir, "src/layout.ts"),
+      },
+      {
+        find: "@moritzbrantner/workflow-editor/persistence",
+        replacement: path.resolve(rootDir, "src/persistence.ts"),
+      },
+      {
+        find: "@moritzbrantner/workflow-editor/react",
+        replacement: path.resolve(rootDir, "src/react.tsx"),
+      },
+      {
+        find: "@moritzbrantner/workflow-editor/share",
+        replacement: path.resolve(rootDir, "src/share.ts"),
+      },
+      {
+        find: "@moritzbrantner/workflow-editor",
+        replacement: path.resolve(rootDir, "src/index.ts"),
+      },
+    ],
   },
   test: {
     benchmark: {
@@ -36,10 +60,14 @@ export default defineConfig({
       include: ["src/**/*.{ts,tsx}"],
       exclude: [
         "src/**/*.test.{ts,tsx}",
+        "src/**/*.stories.{ts,tsx}",
+        "src/.storybook/**",
+        "src/**/*.e2e.*",
+        "src/react.e2e-app/**",
+        "storybook-static/**",
         "dist/**",
         "coverage/**",
         "examples/**",
-        "tests/playwright/**",
       ],
     },
     environment: "jsdom",

@@ -9,8 +9,24 @@
     "paths": {
       "@moritzbrantner/workflow-editor": ["./src/index.ts"],
       "@moritzbrantner/workflow-editor/core": ["./src/core.ts"],
-      "@moritzbrantner/workflow-editor/react": ["./src/react.tsx"]
+      "@moritzbrantner/workflow-editor/editor": ["./src/editor.tsx"],
+      "@moritzbrantner/workflow-editor/history": ["./src/history.ts"],
+      "@moritzbrantner/workflow-editor/layout": ["./src/layout.ts"],
+      "@moritzbrantner/workflow-editor/persistence": ["./src/persistence.ts"],
+      "@moritzbrantner/workflow-editor/react": ["./src/react.tsx"],
+      "@moritzbrantner/workflow-editor/share": ["./src/share.ts"]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx"]
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "exclude": [
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+    "src/**/*.spec.ts",
+    "src/**/*.spec.tsx",
+    "src/**/*.stories.ts",
+    "src/**/*.stories.tsx",
+    "src/**/*.e2e.*",
+    "src/.storybook/**",
+    "src/react.e2e-app/**"
+  ]
 }

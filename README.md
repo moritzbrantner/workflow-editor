@@ -143,6 +143,17 @@ WORKFLOW_EDITOR_WORKERS=2 bun run bench
 WORKFLOW_EDITOR_PLAYWRIGHT_WORKERS=2 bun run test:playwright
 ```
 
+Storybook is available for the React workbench and editor shell:
+
+```sh
+bun run storybook
+bun run storybook:build
+```
+
+Unit, integration, e2e, and Storybook files are colocated in `src` next to the source surface they
+cover. Root config files remain at the repository root because they configure the package-wide
+tooling.
+
 ## Clipboard and Layout
 
 ```ts

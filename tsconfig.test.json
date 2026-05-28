@@ -6,8 +6,13 @@
   "include": [
     "src/**/*.test.ts",
     "src/**/*.test.tsx",
-    "tests/playwright/**/*.ts",
-    "tests/playwright/app/src/**/*.tsx",
+    "src/**/*.spec.ts",
+    "src/**/*.spec.tsx",
+    "src/**/*.stories.ts",
+    "src/**/*.stories.tsx",
+    "src/.storybook/**/*.ts",
+    "src/react.e2e-app/**/*.ts",
+    "src/react.e2e-app/**/*.tsx",
     "examples/workbench/src/**/*.tsx"
   ]
 }

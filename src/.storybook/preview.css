@@ -1,0 +1,3 @@
+@import "@moritzbrantner/ui/styles.css";
+
+@source "../**/*.{ts,tsx}";

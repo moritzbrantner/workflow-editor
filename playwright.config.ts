@@ -16,7 +16,8 @@ const workerCount = parseWorkerCount(
 const isCi = Boolean(process.env.CI);
 
 export default defineConfig({
-  testDir: "tests/playwright",
+  testDir: "src",
+  testMatch: "**/*.e2e.spec.ts",
   fullyParallel: true,
   retries: isCi ? 2 : 0,
   workers: workerCount,
