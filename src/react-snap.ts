@@ -10,10 +10,12 @@ import {
   type WorkflowEditorPortType,
   type WorkflowEditorTypeDefinition,
 } from "./core";
+import {
+  getWorkflowEditorMinimizedNodeWidth,
+  workflowEditorMinimizedNodeHeight,
+} from "./core-rendered-node-size";
 
 const workflowEditorSnapDistance = 28;
-const workflowEditorMinimizedNodeWidth = 176;
-const workflowEditorMinimizedNodeHeight = 36;
 const workflowEditorObjectConstructorMinNodeWidth = 460;
 const workflowEditorNodePortHeight = 64;
 const workflowEditorNodePortGap = 8;
@@ -238,7 +240,7 @@ export function getWorkflowEditorRenderedNodeSize(
 ) {
   if (node.minimized === true && node.variant !== "compact") {
     return {
-      width: workflowEditorMinimizedNodeWidth,
+      width: getWorkflowEditorMinimizedNodeWidth(node),
       height: workflowEditorMinimizedNodeHeight,
     };
   }

@@ -279,11 +279,46 @@ test.describe("WorkflowWorkbench desktop", () => {
     await valueInput.fill("published");
     await expect(valueInput).toHaveValue("published");
 
+    const menuButton = page.getByRole("button", { name: "String node actions" });
+    await expect(menuButton).toBeVisible();
+    const minimizedInputBox = await valueInput.boundingBox();
+    const minimizedMenuBox = await menuButton.boundingBox();
+    expect(minimizedInputBox).not.toBeNull();
+    expect(minimizedMenuBox).not.toBeNull();
+    expect(minimizedInputBox!.x + minimizedInputBox!.width).toBeLessThanOrEqual(
+      minimizedMenuBox!.x,
+    );
+
     await page.getByRole("button", { name: "Expand String", exact: true }).click();
     await expect(valueInput).toBeVisible();
+    const outputCard = page.getByRole("button", { name: "Start String Value" });
+    await expect(
+      page.locator(
+        '[data-slot="workflow-builder-node"][data-node-id="json-string"] [data-slot="workflow-node"]:not([data-minimized="true"]) [data-slot="workflow-node-port"][data-port-direction="output"][data-port-id="value"] > div > div > div:first-child',
+      ),
+    ).toHaveCSS("display", "none");
+    const expandedInputBox = await valueInput.boundingBox();
+    const outputCardBox = await outputCard.boundingBox();
+    expect(expandedInputBox).not.toBeNull();
+    expect(outputCardBox).not.toBeNull();
+    expect(expandedInputBox!.x + expandedInputBox!.width / 2).toBeGreaterThan(outputCardBox!.x);
+    expect(expandedInputBox!.x + expandedInputBox!.width / 2).toBeLessThan(
+      outputCardBox!.x + outputCardBox!.width,
+    );
+    expect(expandedInputBox!.y + expandedInputBox!.height / 2).toBeGreaterThan(outputCardBox!.y);
+    expect(expandedInputBox!.y + expandedInputBox!.height / 2).toBeLessThan(
+      outputCardBox!.y + outputCardBox!.height,
+    );
 
     await page.getByRole("button", { name: "Minimize String", exact: true }).click();
     await expect(valueInput).toBeVisible();
+    const reminimizedInputBox = await valueInput.boundingBox();
+    const reminimizedMenuBox = await menuButton.boundingBox();
+    expect(reminimizedInputBox).not.toBeNull();
+    expect(reminimizedMenuBox).not.toBeNull();
+    expect(reminimizedInputBox!.x + reminimizedInputBox!.width).toBeLessThanOrEqual(
+      reminimizedMenuBox!.x,
+    );
   });
 
   test("hides object constructor expression controls while minimized", async ({

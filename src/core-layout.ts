@@ -8,6 +8,10 @@ import {
   type WorkflowEditorDocument,
   type WorkflowEditorNode,
 } from "./core";
+import {
+  getWorkflowEditorMinimizedNodeWidth,
+  workflowEditorMinimizedNodeHeight,
+} from "./core-rendered-node-size";
 
 export type WorkflowEditorLayoutDirection = "right" | "down";
 
@@ -37,8 +41,6 @@ export type WorkflowEditorLayoutResult<
 
 const defaultNodeWidth = 248;
 const defaultNodeHeight = 124;
-const minimizedNodeWidth = 176;
-const minimizedNodeHeight = 36;
 
 export function layoutWorkflowEditorDocument<
   TNodeData = Record<string, unknown>,
@@ -161,14 +163,16 @@ export function layoutWorkflowEditorDocument<
 function getWorkflowEditorLayoutNodeSize<TNodeData = Record<string, unknown>>(
   node: WorkflowEditorNode<TNodeData>,
 ) {
+  const uiNode = toUiWorkflowBuilderNodes([node])[0]!;
+
   if (node.minimized === true && node.variant !== "compact") {
     return {
-      width: minimizedNodeWidth,
-      height: minimizedNodeHeight,
+      width: getWorkflowEditorMinimizedNodeWidth(uiNode),
+      height: workflowEditorMinimizedNodeHeight,
     };
   }
 
-  return getWorkflowNodeSize(toUiWorkflowBuilderNodes([node])[0]!);
+  return getWorkflowNodeSize(uiNode);
 }
 
 function resolveLayoutDimension<TNodeData = Record<string, unknown>>(

@@ -2263,6 +2263,7 @@ export function toUiWorkflowBuilderNodes<TData = Record<string, unknown>>(
 
   return nodes.map((node) => {
     const jsonPrimitiveValue = formatWorkflowEditorJsonPrimitiveNodeValue(node);
+    const minimized = node.minimized ?? (jsonPrimitiveValue === undefined ? undefined : true);
 
     return {
       id: node.id,
@@ -2275,7 +2276,7 @@ export function toUiWorkflowBuilderNodes<TData = Record<string, unknown>>(
       packageLabel: node.packageLabel ?? jsonPrimitiveValue,
       tone: node.tone,
       variant: node.variant,
-      minimized: node.minimized ?? (jsonPrimitiveValue === undefined ? undefined : true),
+      minimized,
       tags: node.tags,
       x: node.x,
       y: node.y,
@@ -2288,7 +2289,9 @@ export function toUiWorkflowBuilderNodes<TData = Record<string, unknown>>(
       outputs: node.outputs?.map((port) =>
         toUiWorkflowEditorPort({
           ...port,
-          badge: port.badge ?? (port.id === "value" ? jsonPrimitiveValue : undefined),
+          badge:
+            port.badge ??
+            (port.id === "value" && minimized === true ? jsonPrimitiveValue : undefined),
         }),
       ),
       metadata: node.data as Record<string, unknown> | undefined,
