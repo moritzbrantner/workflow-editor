@@ -2,10 +2,12 @@ import type {
   WorkflowBuilderEdge as UiWorkflowBuilderEdge,
   WorkflowBuilderNodeData as UiWorkflowBuilderNodeData,
   WorkflowBuilderViewport as UiWorkflowBuilderViewport,
+} from "./react/workflow-builder";
+import type {
   WorkflowNodeData as UiWorkflowNodeData,
   WorkflowNodePort as UiWorkflowNodePort,
-} from "@moritzbrantner/ui/labs";
-import { getWorkflowBuilderConnectionValidity } from "@moritzbrantner/ui/labs";
+} from "./react/workflow-node";
+import { getWorkflowBuilderConnectionValidity } from "./react/workflow-builder";
 
 import {
   createWorkflowGraphIndex,
@@ -2028,7 +2030,7 @@ export function validateWorkflowEditorConnection<
 }
 
 function isWorkflowEditorUiTypeMismatch(reason: WorkflowEditorConnectionInvalidReason | undefined) {
-  return reason === "kind-mismatch";
+  return reason === "kind-mismatch" || reason === "type-mismatch";
 }
 
 export function connectWorkflowEditorNodes<

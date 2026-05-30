@@ -1,4 +1,4 @@
-import { getWorkflowNodePortCenterOffset, getWorkflowNodeSize } from "@moritzbrantner/ui/labs";
+import { getWorkflowNodePortCenterOffset, getWorkflowNodeSize } from "./react/workflow-node";
 
 import {
   connectWorkflowEditorNodes,

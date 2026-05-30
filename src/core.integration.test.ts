@@ -1,4 +1,4 @@
-import { getWorkflowNodeSize } from "@moritzbrantner/ui/labs";
+import { getWorkflowNodeSize } from "./react/workflow-node";
 import { describe, expect, test } from "vitest";
 
 import {

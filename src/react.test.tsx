@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { getWorkflowNodeSize } from "@moritzbrantner/ui/labs";
+import { getWorkflowNodeSize } from "./react/workflow-node";
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 
 import {

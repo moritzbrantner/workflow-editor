@@ -2,11 +2,14 @@
 
 import {
   type DragEvent as ReactDragEvent,
+  type Dispatch,
   type KeyboardEvent as ReactKeyboardEvent,
+  type MutableRefObject,
   type PointerEvent as ReactPointerEvent,
   type CSSProperties,
   type RefObject,
   type ReactNode,
+  type SetStateAction,
   type SyntheticEvent,
   useEffect,
   useMemo,
@@ -37,14 +40,16 @@ import {
 } from "@moritzbrantner/ui";
 import { createPortal } from "react-dom";
 import {
-  InspectorPanel,
   WorkflowBuilder,
-  WorkflowNode,
   type WorkflowBuilderConnectionValidity,
   type WorkflowBuilderSelection,
+} from "./react/workflow-builder";
+import { WorkflowNode } from "./react/workflow-node";
+import {
+  InspectorPanel,
   type InspectorFieldDefinition,
   type InspectorFieldValue,
-} from "@moritzbrantner/ui/labs";
+} from "./react/inspector-panel";
 
 import {
   addWorkflowEditorArrayConstructorInputToNode,
@@ -345,12 +350,14 @@ export function WorkflowWorkbench<
 }: WorkflowWorkbenchProps<TNodeData, TEdgeData, TTemplateData>) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const paletteRef = useRef<HTMLDivElement | null>(null);
+  const inspectorRef = useRef<HTMLDivElement | null>(null);
   const connectionInProgressRef = useRef(false);
   const uiCreatedConnectionCommitKeyRef = useRef<string | null>(null);
   const ignoreSelectionClearUntilRef = useRef(0);
   const marqueeRef = useRef<WorkflowSelectionMarquee | null>(null);
   const canvasPanRef = useRef<WorkflowCanvasPanState | null>(null);
-  const paletteDragRef = useRef<WorkflowPaletteDragState | null>(null);
+  const paletteDragRef = useRef<WorkflowOverlayDragState | null>(null);
+  const inspectorDragRef = useRef<WorkflowOverlayDragState | null>(null);
   const pendingNodeSnapRef = useRef<{
     document: WorkflowEditorDocument<TNodeData, TEdgeData>;
     nodeIds: Set<string>;
@@ -359,13 +366,15 @@ export function WorkflowWorkbench<
   const [internalSelection, setInternalSelection] = useState<WorkflowEditorSelectionState>(
     emptyWorkflowEditorSelection,
   );
+  const [inspectorDragging, setInspectorDragging] = useState(false);
   const [inspectorMinimized, setInspectorMinimized] = useState(false);
+  const [inspectorPosition, setInspectorPosition] = useState<WorkflowOverlayPosition>(null);
   const [narrowOverlayLayout, setNarrowOverlayLayout] = useState(false);
   const [marquee, setMarquee] = useState<WorkflowSelectionMarquee | null>(null);
   const [paletteMinimized, setPaletteMinimized] = useState(false);
   const [paletteCorner, setPaletteCorner] = useState<WorkflowPaletteCorner>("top-left");
   const [paletteDragging, setPaletteDragging] = useState(false);
-  const [palettePosition, setPalettePosition] = useState<WorkflowPalettePosition>(null);
+  const [palettePosition, setPalettePosition] = useState<WorkflowOverlayPosition>(null);
   const [paletteSearchValue, setPaletteSearchValue] = useState("");
   const [renamingNodeId, setRenamingNodeId] = useState<string | null>(null);
   const [objectConstructorExpressionDrafts, setObjectConstructorExpressionDrafts] = useState<
@@ -562,7 +571,7 @@ export function WorkflowWorkbench<
           return current;
         }
 
-        const next = clampWorkflowPalettePosition(
+        const next = clampWorkflowOverlayPosition(
           current,
           containerRef.current,
           paletteRef.current,
@@ -588,6 +597,44 @@ export function WorkflowWorkbench<
       resizeObserver?.disconnect();
     };
   }, [narrowOverlayLayout, paletteMinimized, palettePosition !== null]);
+
+  useEffect(() => {
+    if (!inspectorPosition) {
+      return;
+    }
+
+    const syncInspectorPosition = () => {
+      setInspectorPosition((current) => {
+        if (!current) {
+          return current;
+        }
+
+        const next = clampWorkflowOverlayPosition(
+          current,
+          containerRef.current,
+          inspectorRef.current,
+        );
+        return next.x === current.x && next.y === current.y ? current : next;
+      });
+    };
+
+    syncInspectorPosition();
+    window.addEventListener("resize", syncInspectorPosition);
+
+    const resizeObserver =
+      typeof ResizeObserver === "function" ? new ResizeObserver(syncInspectorPosition) : null;
+    if (containerRef.current) {
+      resizeObserver?.observe(containerRef.current);
+    }
+    if (inspectorRef.current) {
+      resizeObserver?.observe(inspectorRef.current);
+    }
+
+    return () => {
+      window.removeEventListener("resize", syncInspectorPosition);
+      resizeObserver?.disconnect();
+    };
+  }, [inspectorCollapsed, inspectorPosition !== null, narrowOverlayLayout]);
 
   const emitSelectionState = (
     nextSelection: WorkflowEditorSelectionState,
@@ -1411,7 +1458,12 @@ export function WorkflowWorkbench<
     setPalettePosition(null);
   };
 
-  const startPaletteDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+  const startOverlayDrag = (
+    event: ReactPointerEvent<HTMLDivElement>,
+    overlay: HTMLDivElement | null,
+    dragRef: MutableRefObject<WorkflowOverlayDragState | null>,
+    setDragging: (dragging: boolean) => void,
+  ) => {
     preserveOverlaySelection();
 
     if (
@@ -1425,53 +1477,58 @@ export function WorkflowWorkbench<
     }
 
     const containerRect = containerRef.current?.getBoundingClientRect();
-    const paletteRect = paletteRef.current?.getBoundingClientRect();
-    if (!containerRect || !paletteRect) {
+    const overlayRect = overlay?.getBoundingClientRect();
+    if (!containerRect || !overlayRect) {
       return;
     }
 
-    const startPosition = clampWorkflowPalettePosition(
+    const startPosition = clampWorkflowOverlayPosition(
       {
-        x: paletteRect.left - containerRect.left,
-        y: paletteRect.top - containerRect.top,
+        x: overlayRect.left - containerRect.left,
+        y: overlayRect.top - containerRect.top,
       },
       containerRef.current,
-      paletteRef.current,
-      { width: paletteRect.width, height: paletteRect.height },
+      overlay,
+      { width: overlayRect.width, height: overlayRect.height },
     );
 
-    paletteDragRef.current = {
+    dragRef.current = {
       pointerId: event.pointerId,
       startClientX: event.clientX,
       startClientY: event.clientY,
       startX: startPosition.x,
       startY: startPosition.y,
-      width: paletteRect.width,
-      height: paletteRect.height,
+      width: overlayRect.width,
+      height: overlayRect.height,
     };
-    setPaletteDragging(true);
+    setDragging(true);
     event.currentTarget.setPointerCapture(event.pointerId);
     event.preventDefault();
     event.stopPropagation();
   };
 
-  const updatePaletteDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const drag = paletteDragRef.current;
+  const updateOverlayDrag = (
+    event: ReactPointerEvent<HTMLDivElement>,
+    overlay: HTMLDivElement | null,
+    dragRef: MutableRefObject<WorkflowOverlayDragState | null>,
+    setPosition: Dispatch<SetStateAction<WorkflowOverlayPosition>>,
+  ) => {
+    const drag = dragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) {
       return;
     }
 
-    const nextPosition = clampWorkflowPalettePosition(
+    const nextPosition = clampWorkflowOverlayPosition(
       {
         x: drag.startX + event.clientX - drag.startClientX,
         y: drag.startY + event.clientY - drag.startClientY,
       },
       containerRef.current,
-      paletteRef.current,
+      overlay,
       { width: drag.width, height: drag.height },
     );
 
-    setPalettePosition((current) =>
+    setPosition((current) =>
       current && current.x === nextPosition.x && current.y === nextPosition.y
         ? current
         : nextPosition,
@@ -1480,19 +1537,47 @@ export function WorkflowWorkbench<
     event.stopPropagation();
   };
 
-  const completePaletteDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const drag = paletteDragRef.current;
+  const completeOverlayDrag = (
+    event: ReactPointerEvent<HTMLDivElement>,
+    dragRef: MutableRefObject<WorkflowOverlayDragState | null>,
+    setDragging: (dragging: boolean) => void,
+  ) => {
+    const drag = dragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) {
       return;
     }
 
-    paletteDragRef.current = null;
-    setPaletteDragging(false);
+    dragRef.current = null;
+    setDragging(false);
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
     event.preventDefault();
     event.stopPropagation();
+  };
+
+  const startPaletteDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    startOverlayDrag(event, paletteRef.current, paletteDragRef, setPaletteDragging);
+  };
+
+  const updatePaletteDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    updateOverlayDrag(event, paletteRef.current, paletteDragRef, setPalettePosition);
+  };
+
+  const completePaletteDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    completeOverlayDrag(event, paletteDragRef, setPaletteDragging);
+  };
+
+  const startInspectorDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    startOverlayDrag(event, inspectorRef.current, inspectorDragRef, setInspectorDragging);
+  };
+
+  const updateInspectorDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    updateOverlayDrag(event, inspectorRef.current, inspectorDragRef, setInspectorPosition);
+  };
+
+  const completeInspectorDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    completeOverlayDrag(event, inspectorDragRef, setInspectorDragging);
   };
 
   const renderPaletteTemplate = (template: WorkflowWorkbenchPaletteItem<TTemplateData>) =>
@@ -1556,8 +1641,22 @@ export function WorkflowWorkbench<
   );
 
   const paletteOverlayPosition: CSSProperties = palettePosition
-    ? { left: palettePosition.x, top: palettePosition.y }
-    : getWorkflowPalettePinnedStyle(paletteCorner);
+    ? {
+        left: palettePosition.x,
+        maxHeight: getWorkflowOverlayMaxHeight(palettePosition.y),
+        top: palettePosition.y,
+      }
+    : {
+        ...getWorkflowPalettePinnedStyle(paletteCorner),
+        maxHeight: `calc(100% - ${workflowEditorPaletteMargin * 2}px)`,
+      };
+  const inspectorOverlayPosition: CSSProperties = inspectorPosition
+    ? {
+        left: inspectorPosition.x,
+        maxHeight: getWorkflowOverlayMaxHeight(inspectorPosition.y),
+        top: inspectorPosition.y,
+      }
+    : { maxHeight: "calc(100% - 4.75rem)", right: "0.75rem", top: "4rem" };
 
   return (
     <div
@@ -1733,6 +1832,7 @@ export function WorkflowWorkbench<
               selectedEdgeId={primarySelectedEdgeId}
               readOnly={readOnly}
               showMiniMap
+              showPortColumnHeaders={false}
               surfaceHeight="auto"
               minZoom={workflowEditorMinZoom}
               maxZoom={workflowEditorMaxZoom}
@@ -1877,7 +1977,7 @@ export function WorkflowWorkbench<
               onMouseDownCapture={preserveOverlaySelection}
               onPointerDownCapture={preserveOverlaySelection}
               className={cn(
-                "absolute z-[20000] flex max-h-[calc(100%-5rem)] max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-md border border-border/70 bg-card/95 text-sm shadow-md supports-backdrop-filter:backdrop-blur-xl",
+                "absolute z-[20000] flex max-h-[calc(100%-1.5rem)] max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-md border border-border/70 bg-card/95 text-sm shadow-md supports-backdrop-filter:backdrop-blur-xl",
                 paletteMinimized ? "w-44 p-2" : "w-96 p-3",
               )}
               style={paletteOverlayPosition}
@@ -1971,19 +2071,30 @@ export function WorkflowWorkbench<
             </div>
             <div
               data-slot="workflow-inspector-overlay"
+              ref={inspectorRef}
               onClickCapture={preserveOverlaySelection}
               onFocusCapture={preserveOverlaySelection}
               onMouseDownCapture={preserveOverlaySelection}
               onPointerDownCapture={preserveOverlaySelection}
               className={cn(
-                "absolute right-3 z-[20000] max-h-[calc(100%-5rem)] overflow-auto rounded-md border border-border/70 bg-card/95 text-sm shadow-md supports-backdrop-filter:backdrop-blur-xl",
-                inspectorCollapsed ? "w-16 p-2" : "w-[min(20rem,calc(100%-1.5rem))] p-3",
+                "absolute z-[20000] flex max-h-[calc(100%-1.5rem)] max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-md border border-border/70 bg-card/95 text-sm shadow-md supports-backdrop-filter:backdrop-blur-xl",
+                inspectorCollapsed ? "w-44 p-2" : "w-[min(20rem,calc(100%-1.5rem))] p-3",
               )}
-              style={{ top: "4rem" }}
+              style={inspectorOverlayPosition}
             >
-              <div className="grid gap-3">
-                <div className="flex items-center justify-between gap-3">
-                  {inspectorCollapsed ? null : <div className="text-sm font-medium">Info</div>}
+              <div className="flex min-h-0 flex-col gap-3">
+                <div
+                  data-slot="workflow-inspector-header"
+                  className={cn(
+                    "flex flex-none touch-none select-none items-center justify-between gap-3 rounded-sm",
+                    inspectorDragging ? "cursor-grabbing" : "cursor-grab",
+                  )}
+                  onPointerCancel={completeInspectorDrag}
+                  onPointerDown={startInspectorDrag}
+                  onPointerMove={updateInspectorDrag}
+                  onPointerUp={completeInspectorDrag}
+                >
+                  <div className="min-w-0 truncate text-sm font-medium">Info</div>
                   <Button
                     type="button"
                     size="icon-sm"
@@ -1993,13 +2104,21 @@ export function WorkflowWorkbench<
                     disabled={!selectedNode && !selectedEdge}
                     onClick={() => setInspectorMinimized((current) => !current)}
                   >
-                    {inspectorCollapsed ? "+" : "-"}
+                    {inspectorCollapsed ? (
+                      <Maximize2Icon className="size-3.5" aria-hidden="true" />
+                    ) : (
+                      <Minimize2Icon className="size-3.5" aria-hidden="true" />
+                    )}
                   </Button>
                 </div>
-                {inspectorCollapsed ? null : renderInspector ? (
-                  renderInspector(inspectorContext)
-                ) : (
-                  <DefaultWorkflowInspector context={inspectorContext} />
+                {inspectorCollapsed ? null : (
+                  <div className="min-h-0 overflow-y-auto">
+                    {renderInspector ? (
+                      renderInspector(inspectorContext)
+                    ) : (
+                      <DefaultWorkflowInspector context={inspectorContext} />
+                    )}
+                  </div>
                 )}
               </div>
             </div>
@@ -2027,9 +2146,9 @@ type WorkflowCanvasPanState = {
 
 type WorkflowPaletteCorner = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 
-type WorkflowPalettePosition = { x: number; y: number } | null;
+type WorkflowOverlayPosition = { x: number; y: number } | null;
 
-type WorkflowPaletteDragState = {
+type WorkflowOverlayDragState = {
   pointerId: number;
   startClientX: number;
   startClientY: number;
@@ -2063,16 +2182,16 @@ function getWorkflowEditorPointFromClient(
   };
 }
 
-function clampWorkflowPalettePosition(
-  position: NonNullable<WorkflowPalettePosition>,
+function clampWorkflowOverlayPosition(
+  position: NonNullable<WorkflowOverlayPosition>,
   container: HTMLElement | null,
-  palette: HTMLElement | null,
+  overlay: HTMLElement | null,
   size?: { width: number; height: number },
 ) {
   const containerRect = container?.getBoundingClientRect();
-  const paletteRect = palette?.getBoundingClientRect();
-  const width = size?.width ?? paletteRect?.width ?? 0;
-  const height = size?.height ?? paletteRect?.height ?? 0;
+  const overlayRect = overlay?.getBoundingClientRect();
+  const width = size?.width ?? overlayRect?.width ?? 0;
+  const height = size?.height ?? overlayRect?.height ?? 0;
 
   if (!containerRect || width <= 0 || height <= 0) {
     return position;
@@ -2087,6 +2206,10 @@ function clampWorkflowPalettePosition(
     x: Math.min(Math.max(position.x, minX), maxX),
     y: Math.min(Math.max(position.y, minY), maxY),
   };
+}
+
+function getWorkflowOverlayMaxHeight(top: number) {
+  return `calc(100% - ${Math.max(top, 0) + workflowEditorPaletteMargin}px)`;
 }
 
 function getWorkflowPalettePinnedStyle(corner: WorkflowPaletteCorner): CSSProperties {

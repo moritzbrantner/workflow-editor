@@ -1,5 +1,5 @@
 import { graphlib, layout } from "@dagrejs/dagre";
-import { getWorkflowNodeSize } from "@moritzbrantner/ui/labs";
+import { getWorkflowNodeSize } from "./react/workflow-node";
 
 import {
   detectWorkflowEditorCycles,

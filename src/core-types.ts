@@ -1,9 +1,11 @@
 import type {
   WorkflowBuilderConnection as UiWorkflowBuilderConnection,
   WorkflowBuilderConnectionValidity as UiWorkflowBuilderConnectionValidity,
+} from "./react/workflow-builder";
+import type {
   WorkflowNodeData as UiWorkflowNodeData,
   WorkflowNodePort as UiWorkflowNodePort,
-} from "@moritzbrantner/ui/labs";
+} from "./react/workflow-node";
 
 export type WorkflowEditorPortType =
   | { kind: "any" }

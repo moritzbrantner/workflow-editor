@@ -218,6 +218,15 @@ test.describe("WorkflowWorkbench desktop", () => {
     expect(draggedPaletteBox!.x - expandedPaletteBox!.x).toBeGreaterThan(80);
     expect(draggedPaletteBox!.y - expandedPaletteBox!.y).toBeGreaterThan(40);
 
+    await page.mouse.move(draggedPaletteBox!.x + 48, draggedPaletteBox!.y + 12);
+    await page.mouse.down();
+    await page.mouse.move(canvasBox!.x - 400, canvasBox!.y - 400, { steps: 8 });
+    await page.mouse.up();
+    const clampedPaletteBox = await palette.boundingBox();
+    expect(clampedPaletteBox).not.toBeNull();
+    expect(clampedPaletteBox!.x).toBeGreaterThanOrEqual(canvasBox!.x);
+    expect(clampedPaletteBox!.y).toBeGreaterThanOrEqual(canvasBox!.y);
+
     await page.getByRole("button", { name: "Pin node palette", exact: true }).click();
     await page.getByRole("menuitem", { name: "Bottom right", exact: true }).click();
     const bottomRightPaletteBox = await palette.boundingBox();
@@ -257,6 +266,60 @@ test.describe("WorkflowWorkbench desktop", () => {
       }),
     );
     expect(decision?.x).toBeGreaterThan(300);
+  });
+
+  test("minimizes and drags the info panel within the canvas", async ({ page }, testInfo) => {
+    await gotoWorkflowEditor(page, testInfo);
+    await selectNode(page, "Input");
+
+    const canvasBox = await page.locator('[data-slot="workbench-canvas"]').first().boundingBox();
+    const inspector = page.locator('[data-slot="workflow-inspector-overlay"]').first();
+    const inspectorHeader = page.locator('[data-slot="workflow-inspector-header"]').first();
+    await expect(inspector).toContainText("Info");
+    await expect(inspector).toContainText("Workflow node");
+
+    const expandedInspectorBox = await inspector.boundingBox();
+    expect(canvasBox).not.toBeNull();
+    expect(expandedInspectorBox).not.toBeNull();
+    expect(expandedInspectorBox!.x).toBeGreaterThanOrEqual(canvasBox!.x);
+    expect(expandedInspectorBox!.y).toBeGreaterThanOrEqual(canvasBox!.y);
+    expect(expandedInspectorBox!.x + expandedInspectorBox!.width).toBeLessThanOrEqual(
+      canvasBox!.x + canvasBox!.width,
+    );
+    expect(expandedInspectorBox!.y + expandedInspectorBox!.height).toBeLessThanOrEqual(
+      canvasBox!.y + canvasBox!.height,
+    );
+
+    await page.getByRole("button", { name: "Minimize info panel", exact: true }).click();
+    await expect(
+      page.getByRole("button", { name: "Expand info panel", exact: true }),
+    ).toBeVisible();
+    await expect(inspector).toContainText("Info");
+    await expect(inspector).not.toContainText("Workflow node");
+    const minimizedInspectorBox = await inspector.boundingBox();
+    expect(minimizedInspectorBox).not.toBeNull();
+    expect(minimizedInspectorBox!.width).toBeLessThan(expandedInspectorBox!.width);
+
+    await page.getByRole("button", { name: "Expand info panel", exact: true }).click();
+    await expect(inspector).toContainText("Workflow node");
+
+    const headerBox = await inspectorHeader.boundingBox();
+    expect(headerBox).not.toBeNull();
+    await page.mouse.move(headerBox!.x + 48, headerBox!.y + headerBox!.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(canvasBox!.x + canvasBox!.width + 400, canvasBox!.y + 90, {
+      steps: 8,
+    });
+    await page.mouse.up();
+    const clampedInspectorBox = await inspector.boundingBox();
+    expect(clampedInspectorBox).not.toBeNull();
+    expect(clampedInspectorBox!.x + clampedInspectorBox!.width).toBeLessThanOrEqual(
+      canvasBox!.x + canvasBox!.width,
+    );
+    expect(clampedInspectorBox!.y).toBeGreaterThanOrEqual(canvasBox!.y);
+    expect(clampedInspectorBox!.y + clampedInspectorBox!.height).toBeLessThanOrEqual(
+      canvasBox!.y + canvasBox!.height,
+    );
   });
 
   test("keeps JSON primitive value controls visible while minimized", async ({
