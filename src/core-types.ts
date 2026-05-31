@@ -161,6 +161,14 @@ export type WorkflowEditorEdge<TData = Record<string, unknown>> = {
   data?: TData;
 };
 
+export type WorkflowEditorGroup<TData = Record<string, unknown>> = {
+  id: string;
+  label: string;
+  nodeIds: string[];
+  minimized?: boolean;
+  data?: TData;
+};
+
 export type WorkflowEditorViewport = {
   x: number;
   y: number;
@@ -173,6 +181,7 @@ export type WorkflowEditorDocument<
 > = {
   nodes: Array<WorkflowEditorNode<TNodeData>>;
   edges: Array<WorkflowEditorEdge<TEdgeData>>;
+  groups?: Array<WorkflowEditorGroup>;
   viewport?: WorkflowEditorViewport;
 };
 
@@ -184,16 +193,21 @@ export type WorkflowEditorDocumentDiagnosticCode =
   | "invalid-edge"
   | "duplicate-node-id"
   | "duplicate-edge-id"
+  | "duplicate-group-id"
+  | "duplicate-group-node"
   | "missing-edge-node"
   | "missing-edge-port"
+  | "missing-group-node"
   | "self-edge"
-  | "cycle";
+  | "cycle"
+  | "invalid-group";
 
 export type WorkflowEditorDocumentDiagnostic = {
   code: WorkflowEditorDocumentDiagnosticCode;
   message: string;
   path: string;
   nodeId?: string;
+  groupId?: string;
   edgeId?: string;
   sourceNodeId?: string;
   targetNodeId?: string;
@@ -243,11 +257,16 @@ export type WorkflowEditorSelectionItem =
   | {
       type: "edge";
       id: string;
+    }
+  | {
+      type: "group";
+      id: string;
     };
 
 export type WorkflowEditorSelectionState = {
   nodeIds: string[];
   edgeIds: string[];
+  groupIds?: string[];
   primary?: WorkflowEditorSelectionItem;
 };
 

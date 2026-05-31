@@ -10,6 +10,7 @@ type WorkflowDocumentSnapshot = {
     targetNodeId: string;
     targetPortId: string;
   }>;
+  groups?: Array<{ id: string; label: string; nodeIds: string[]; minimized?: boolean }>;
   viewport?: { x: number; y: number; zoom: number };
 };
 
@@ -500,6 +501,81 @@ test.describe("WorkflowWorkbench desktop", () => {
     await page.getByRole("button", { name: "Delete", exact: true }).click();
     await expect(page.getByTestId("node-count")).toHaveText("5");
     await expect(page.getByTestId("edge-count")).toHaveText("2");
+  });
+
+  test("groups, moves, minimizes, expands, and ungroups nodes", async ({ page }, testInfo) => {
+    await gotoWorkflowEditor(page, testInfo);
+    await page.getByRole("button", { name: "Minimize node palette", exact: true }).click();
+
+    await selectNode(page, "Input");
+    await addNodeToSelection(page, "Transform");
+    await pressShortcut(page, "Mod+G");
+    await expect(
+      page.locator('[data-slot="workflow-group"][data-group-id="group-1"]'),
+    ).toBeVisible();
+    await expect(page.getByTestId("selection-count").first()).toHaveText("1 selected");
+
+    const beforeMove = await readDocument(page);
+    const beforeInput = beforeMove.nodes.find((node) => node.id === "input")!;
+    const beforeTransform = beforeMove.nodes.find((node) => node.id === "transform")!;
+    const groupDragHandle = page
+      .locator(
+        '[data-slot="workflow-group"][data-group-id="group-1"] [data-slot="workflow-group-drag-handle"]',
+      )
+      .first();
+    const groupDragHandleBox = await groupDragHandle.boundingBox();
+    expect(groupDragHandleBox).not.toBeNull();
+    await groupDragHandle.dispatchEvent("pointerdown", {
+      bubbles: true,
+      button: 0,
+      buttons: 1,
+      clientX: groupDragHandleBox!.x + 4,
+      clientY: groupDragHandleBox!.y + 4,
+      pointerId: 1,
+      pointerType: "mouse",
+    });
+    await page.dispatchEvent("body", "pointermove", {
+      bubbles: true,
+      button: 0,
+      buttons: 1,
+      clientX: groupDragHandleBox!.x + 54,
+      clientY: groupDragHandleBox!.y + 34,
+      pointerId: 1,
+      pointerType: "mouse",
+    });
+    await page.dispatchEvent("body", "pointerup", {
+      bubbles: true,
+      button: 0,
+      buttons: 0,
+      clientX: groupDragHandleBox!.x + 54,
+      clientY: groupDragHandleBox!.y + 34,
+      pointerId: 1,
+      pointerType: "mouse",
+    });
+
+    const afterMove = await readDocument(page);
+    const afterInput = afterMove.nodes.find((node) => node.id === "input")!;
+    const afterTransform = afterMove.nodes.find((node) => node.id === "transform")!;
+    expect(afterInput.x - beforeInput.x).toBe(afterTransform.x - beforeTransform.x);
+    expect(afterInput.y - beforeInput.y).toBe(afterTransform.y - beforeTransform.y);
+    expect(afterInput.x).not.toBe(beforeInput.x);
+
+    await page.getByRole("button", { name: "Minimize Group 1 group", exact: true }).click();
+    await expect(page.locator('[data-slot="workflow-group"][data-minimized="true"]')).toBeVisible();
+    await expect(
+      page.locator('[data-slot="workflow-builder-node"][data-node-id="input"][data-hidden="true"]'),
+    ).toHaveCount(1);
+
+    await page.getByRole("button", { name: "Expand Group 1 group", exact: true }).click();
+    await expect(page.locator('[data-slot="workflow-group"][data-minimized="true"]')).toHaveCount(
+      0,
+    );
+
+    await pressShortcut(page, "Shift+Mod+G");
+    await expect(page.locator('[data-slot="workflow-group"][data-group-id="group-1"]')).toHaveCount(
+      0,
+    );
+    expect((await readDocument(page)).groups).toBeUndefined();
   });
 
   test("uses keyboard shortcuts for duplicate, clipboard, escape, and delete", async ({

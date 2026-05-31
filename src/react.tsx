@@ -73,6 +73,7 @@ import {
   addWorkflowEditorObjectConstructorInputToNode,
   connectWorkflowEditorNodes,
   copyWorkflowEditorSelection,
+  createWorkflowEditorGroup,
   createWorkflowEditorDocumentContext,
   createWorkflowEditorGraphIndex,
   defaultWorkflowEditorNodeTemplates,
@@ -84,6 +85,7 @@ import {
   fromUiWorkflowBuilderEdges,
   fromUiWorkflowBuilderNodes,
   getWorkflowEditorArrayConstructorInputs,
+  getWorkflowEditorNodeGroupId,
   getWorkflowEditorObjectDecompositionOutputs,
   getWorkflowEditorObjectConstructorInputs,
   isWorkflowEditorArrayConstructorNode,
@@ -92,6 +94,7 @@ import {
   normalizeWorkflowEditorDocument,
   normalizeWorkflowEditorSelection,
   pasteWorkflowEditorClipboardPayload,
+  moveWorkflowEditorGroup,
   removeWorkflowEditorArrayConstructorInput,
   removeWorkflowEditorNode,
   removeWorkflowEditorObjectDecompositionOutput,
@@ -99,6 +102,8 @@ import {
   removeWorkflowEditorSelection,
   toUiWorkflowBuilderEdges,
   toUiWorkflowBuilderNodes,
+  ungroupWorkflowEditorGroup,
+  updateWorkflowEditorGroup,
   updateWorkflowEditorNode,
   updateWorkflowEditorObjectDecompositionPropertiesInNode,
   updateWorkflowEditorObjectConstructorExpression,
@@ -109,6 +114,7 @@ import {
   type WorkflowEditorConnectionInput,
   type WorkflowEditorDocument,
   type WorkflowEditorEdge,
+  type WorkflowEditorGroup,
   type WorkflowEditorNode,
   type WorkflowEditorSelection,
   type WorkflowEditorSelectionState,
@@ -216,6 +222,8 @@ export type WorkflowWorkbenchController<
   selection: WorkflowEditorSelectionState;
   selectedEdge?: WorkflowEditorEdge<TEdgeData>;
   selectedEdges: Array<WorkflowEditorEdge<TEdgeData>>;
+  selectedGroup?: WorkflowEditorGroup;
+  selectedGroups: Array<WorkflowEditorGroup>;
   selectedNode?: WorkflowEditorNode<TNodeData>;
   selectedNodes: Array<WorkflowEditorNode<TNodeData>>;
   palette: {
@@ -275,9 +283,14 @@ export type WorkflowWorkbenchController<
     createSelectedNodeWorkflow: () => void;
     deleteSelection: () => void;
     duplicateSelection: () => void;
+    groupSelection: () => void;
     openSelectedNodeWorkflow: () => void;
     pasteSelection: () => Promise<void>;
+    renameSelectedGroup: (label: string) => void;
     setSelection: (selection: WorkflowEditorSelectionState) => void;
+    toggleSelectedGroupMinimized: () => void;
+    ungroupSelection: () => void;
+    updateSelectedGroup: (patch: Partial<WorkflowEditorGroup>) => void;
     updateDocument: (document: WorkflowEditorDocument<TNodeData, TEdgeData>) => void;
     updateSelectedEdge: (patch: Partial<WorkflowEditorEdge<TEdgeData>>) => void;
     updateSelectedNode: (patch: Partial<WorkflowEditorNode<TNodeData>>) => void;
@@ -321,6 +334,7 @@ export type WorkflowWorkbenchProps<
   selectedEdgeId?: string | null;
   selectedNodeIds?: readonly string[] | null;
   selectedEdgeIds?: readonly string[] | null;
+  selectedGroupIds?: readonly string[] | null;
   readOnly?: boolean;
   nodeTemplates?: ReadonlyArray<WorkflowWorkbenchPaletteItem<TTemplateData>>;
   typeDefinitions?: readonly WorkflowEditorTypeDefinition[];
@@ -352,8 +366,10 @@ export const defaultWorkflowWorkbenchHotkeys = {
   deleteSelection: "Delete",
   duplicateNode: "Mod+D",
   fitView: "Mod+0",
+  groupSelection: "Mod+G",
   pasteSelection: "Mod+V",
   selectAll: "Mod+A",
+  ungroupSelection: "Shift+Mod+G",
   nudgeDown: "ArrowDown",
   nudgeLeft: "ArrowLeft",
   nudgeRight: "ArrowRight",
@@ -390,6 +406,7 @@ export function WorkflowWorkbench<
   selectedEdgeId,
   selectedNodeIds,
   selectedEdgeIds,
+  selectedGroupIds,
   readOnly = false,
   nodeTemplates = defaultWorkflowEditorNodeTemplates as ReadonlyArray<
     WorkflowWorkbenchPaletteItem<TTemplateData>
@@ -469,22 +486,31 @@ export function WorkflowWorkbench<
   const externalSelectionProvided =
     selectedNodeIds !== undefined ||
     selectedEdgeIds !== undefined ||
+    selectedGroupIds !== undefined ||
     selectedNodeId !== undefined ||
     selectedEdgeId !== undefined;
   const rawSelection = useMemo<WorkflowEditorSelectionState>(() => {
-    if (selectedNodeIds !== undefined || selectedEdgeIds !== undefined) {
+    if (
+      selectedNodeIds !== undefined ||
+      selectedEdgeIds !== undefined ||
+      selectedGroupIds !== undefined
+    ) {
       const nodeIds = [...(selectedNodeIds ?? [])];
       const edgeIds = [...(selectedEdgeIds ?? [])];
+      const groupIds = [...(selectedGroupIds ?? [])];
       const primary =
-        nodeIds.length > 0
-          ? ({ type: "node", id: nodeIds.at(-1)! } as const)
-          : edgeIds.length > 0
-            ? ({ type: "edge", id: edgeIds.at(-1)! } as const)
-            : undefined;
+        groupIds.length > 0
+          ? ({ type: "group", id: groupIds.at(-1)! } as const)
+          : nodeIds.length > 0
+            ? ({ type: "node", id: nodeIds.at(-1)! } as const)
+            : edgeIds.length > 0
+              ? ({ type: "edge", id: edgeIds.at(-1)! } as const)
+              : undefined;
 
       return {
         nodeIds,
         edgeIds,
+        ...(groupIds.length > 0 ? { groupIds } : {}),
         ...(primary ? { primary } : {}),
       };
     }
@@ -511,6 +537,7 @@ export function WorkflowWorkbench<
     internalSelection,
     selectedEdgeId,
     selectedEdgeIds,
+    selectedGroupIds,
     selectedNodeId,
     selectedNodeIds,
   ]);
@@ -528,6 +555,15 @@ export function WorkflowWorkbench<
   const selectedEdge = primarySelectedEdgeId
     ? documentContext.edgeById.get(primarySelectedEdgeId)
     : undefined;
+  const primarySelectedGroupId =
+    selection.primary?.type === "group" ? selection.primary.id : selection.groupIds?.[0];
+  const selectedGroup = primarySelectedGroupId
+    ? document.groups?.find((group) => group.id === primarySelectedGroupId)
+    : undefined;
+  const selectedGroups = (selection.groupIds ?? []).flatMap((id) => {
+    const group = document.groups?.find((candidate) => candidate.id === id);
+    return group ? [group] : [];
+  });
   const inspectorCollapsed = effectiveInspectorMinimized || (!selectedNode && !selectedEdge);
   const selectedNodes = selection.nodeIds.flatMap((id) => {
     const node = documentContext.nodeById.get(id);
@@ -546,6 +582,28 @@ export function WorkflowWorkbench<
     () => toUiWorkflowBuilderEdges(document.edges, document.nodes),
     [document.edges, document.nodes],
   );
+  const minimizedGroups = useMemo(
+    () => (document.groups ?? []).filter((group) => group.minimized === true),
+    [document.groups],
+  );
+  const hiddenNodeIds = useMemo(
+    () => minimizedGroups.flatMap((group) => group.nodeIds),
+    [minimizedGroups],
+  );
+  const hiddenEdgeIds = useMemo(() => {
+    const minimizedGroupByNodeId = new Map<string, string>();
+    for (const group of minimizedGroups) {
+      for (const nodeId of group.nodeIds) {
+        minimizedGroupByNodeId.set(nodeId, group.id);
+      }
+    }
+
+    return document.edges.flatMap((edge) => {
+      const sourceGroupId = minimizedGroupByNodeId.get(edge.sourceNodeId);
+      const targetGroupId = minimizedGroupByNodeId.get(edge.targetNodeId);
+      return sourceGroupId && sourceGroupId === targetGroupId ? [edge.id] : [];
+    });
+  }, [document.edges, minimizedGroups]);
   const filteredNodeTemplates = useMemo(
     () => filterWorkflowWorkbenchPaletteTemplates(nodeTemplates, paletteSearchValue),
     [nodeTemplates, paletteSearchValue],
@@ -1017,7 +1075,11 @@ export function WorkflowWorkbench<
       return;
     }
 
-    if (selection.nodeIds.length > 0 || selection.edgeIds.length > 0) {
+    if (
+      selection.nodeIds.length > 0 ||
+      selection.edgeIds.length > 0 ||
+      (selection.groupIds?.length ?? 0) > 0
+    ) {
       commitDocument(removeWorkflowEditorSelection(document, selection));
       emitSelectionState(emptyWorkflowEditorSelection);
     }
@@ -1044,7 +1106,12 @@ export function WorkflowWorkbench<
   };
 
   const duplicateSelection = () => {
-    if (readOnly || (selection.nodeIds.length === 0 && selection.edgeIds.length === 0)) {
+    if (
+      readOnly ||
+      (selection.nodeIds.length === 0 &&
+        selection.edgeIds.length === 0 &&
+        (selection.groupIds?.length ?? 0) === 0)
+    ) {
       return;
     }
 
@@ -1068,14 +1135,23 @@ export function WorkflowWorkbench<
       {
         nodeIds: result.nodeIds,
         edgeIds: result.edgeIds,
-        ...(result.nodeIds[0] ? { primary: { type: "node", id: result.nodeIds[0] } } : {}),
+        ...(result.groupIds?.length ? { groupIds: result.groupIds } : {}),
+        ...(result.groupIds?.[0]
+          ? { primary: { type: "group", id: result.groupIds[0] } }
+          : result.nodeIds[0]
+            ? { primary: { type: "node", id: result.nodeIds[0] } }
+            : {}),
       },
       result.document,
     );
   };
 
   const copySelection = () => {
-    if (selection.nodeIds.length === 0 && selection.edgeIds.length === 0) {
+    if (
+      selection.nodeIds.length === 0 &&
+      selection.edgeIds.length === 0 &&
+      (selection.groupIds?.length ?? 0) === 0
+    ) {
       return;
     }
 
@@ -1109,7 +1185,12 @@ export function WorkflowWorkbench<
         {
           nodeIds: result.nodeIds,
           edgeIds: result.edgeIds,
-          ...(result.nodeIds[0] ? { primary: { type: "node", id: result.nodeIds[0] } } : {}),
+          ...(result.groupIds?.length ? { groupIds: result.groupIds } : {}),
+          ...(result.groupIds?.[0]
+            ? { primary: { type: "group", id: result.groupIds[0] } }
+            : result.nodeIds[0]
+              ? { primary: { type: "node", id: result.nodeIds[0] } }
+              : {}),
         },
         result.document,
       );
@@ -1119,11 +1200,80 @@ export function WorkflowWorkbench<
   };
 
   const arrangeSelection = () => {
-    if (readOnly || selection.nodeIds.length === 0) {
+    const nodeIds = selectedGroup?.nodeIds ?? selection.nodeIds;
+    if (readOnly || nodeIds.length === 0) {
       return;
     }
 
-    commitDocument(layoutWorkflowEditorDocument(document, { nodeIds: selection.nodeIds }).document);
+    commitDocument(layoutWorkflowEditorDocument(document, { nodeIds }).document);
+  };
+
+  const groupSelection = () => {
+    if (readOnly || selection.nodeIds.length < 2) {
+      return;
+    }
+
+    const nextDocument = createWorkflowEditorGroup(document, selection.nodeIds);
+    if (nextDocument === document) {
+      return;
+    }
+
+    const previousGroupIds = new Set((document.groups ?? []).map((group) => group.id));
+    const group = (nextDocument.groups ?? []).find(
+      (candidate) => !previousGroupIds.has(candidate.id),
+    );
+
+    commitDocument(nextDocument);
+    if (group) {
+      emitSelectionState(
+        {
+          nodeIds: [],
+          edgeIds: [],
+          groupIds: [group.id],
+          primary: { type: "group", id: group.id },
+        },
+        nextDocument,
+      );
+    }
+  };
+
+  const ungroupSelection = () => {
+    if (readOnly || !selectedGroup) {
+      return;
+    }
+
+    const nodeIds = selectedGroup.nodeIds;
+    const nextDocument = ungroupWorkflowEditorGroup(document, selectedGroup.id);
+    commitDocument(nextDocument);
+    emitSelectionState(
+      {
+        nodeIds,
+        edgeIds: [],
+        ...(nodeIds[0] ? { primary: { type: "node", id: nodeIds[0] } } : {}),
+      },
+      nextDocument,
+    );
+  };
+
+  const updateSelectedGroup = (patch: Partial<WorkflowEditorGroup>) => {
+    if (readOnly || !selectedGroup) {
+      return;
+    }
+
+    commitDocument(updateWorkflowEditorGroup(document, selectedGroup.id, patch));
+  };
+
+  const renameSelectedGroup = (label: string) => {
+    const normalizedLabel = label.trim();
+    if (normalizedLabel) {
+      updateSelectedGroup({ label: normalizedLabel });
+    }
+  };
+
+  const toggleSelectedGroupMinimized = () => {
+    if (selectedGroup) {
+      updateSelectedGroup({ minimized: selectedGroup.minimized !== true });
+    }
   };
 
   const arrangeAll = () => {
@@ -1177,6 +1327,16 @@ export function WorkflowWorkbench<
       if (mod && event.key.toLowerCase() === "d") {
         event.preventDefault();
         duplicateSelection();
+        return;
+      }
+
+      if (mod && event.key.toLowerCase() === "g") {
+        event.preventDefault();
+        if (event.shiftKey) {
+          ungroupSelection();
+        } else {
+          groupSelection();
+        }
       }
     };
 
@@ -1204,12 +1364,15 @@ export function WorkflowWorkbench<
     const item =
       builderSelection.type === "node"
         ? ({ type: "node", id: builderSelection.id } as const)
-        : ({ type: "edge", id: builderSelection.id } as const);
+        : builderSelection.type === "edge"
+          ? ({ type: "edge", id: builderSelection.id } as const)
+          : ({ type: "group", id: builderSelection.id } as const);
 
     if (!pointerModifierRef.current.additive) {
       emitSelectionState({
         nodeIds: item.type === "node" ? [item.id] : [],
         edgeIds: item.type === "edge" ? [item.id] : [],
+        ...(item.type === "group" ? { groupIds: [item.id] } : {}),
         primary: item,
       });
       return;
@@ -1773,6 +1936,8 @@ export function WorkflowWorkbench<
     selection,
     selectedEdge,
     selectedEdges,
+    selectedGroup,
+    selectedGroups,
     selectedNode,
     selectedNodes,
     palette: {
@@ -1835,10 +2000,15 @@ export function WorkflowWorkbench<
       createSelectedNodeWorkflow,
       deleteSelection,
       duplicateSelection,
+      groupSelection,
       openSelectedNodeWorkflow,
       pasteSelection,
+      renameSelectedGroup,
       setSelection: emitSelectionState,
+      toggleSelectedGroupMinimized,
+      ungroupSelection,
       updateDocument,
+      updateSelectedGroup,
       updateSelectedEdge,
       updateSelectedNode,
       updateSelectedNodeWorkflowReference,
@@ -1889,7 +2059,10 @@ export function WorkflowWorkbench<
                 </>
               ) : null}
               <Badge variant="outline" data-testid="selection-count">
-                {selection.nodeIds.length + selection.edgeIds.length} selected
+                {selection.nodeIds.length +
+                  selection.edgeIds.length +
+                  (selection.groupIds?.length ?? 0)}{" "}
+                selected
               </Badge>
               {showGraphStats ? (
                 <Badge variant="secondary">
@@ -1913,7 +2086,10 @@ export function WorkflowWorkbench<
                 variant="outline"
                 className="!h-6 !min-h-6 !px-2 !text-xs"
                 disabled={
-                  readOnly || (selection.nodeIds.length === 0 && selection.edgeIds.length === 0)
+                  readOnly ||
+                  (selection.nodeIds.length === 0 &&
+                    selection.edgeIds.length === 0 &&
+                    (selection.groupIds?.length ?? 0) === 0)
                 }
                 onClick={duplicateSelection}
               >
@@ -1924,7 +2100,11 @@ export function WorkflowWorkbench<
                 size="sm"
                 variant="outline"
                 className="!h-6 !min-h-6 !px-2 !text-xs"
-                disabled={selection.nodeIds.length === 0 && selection.edgeIds.length === 0}
+                disabled={
+                  selection.nodeIds.length === 0 &&
+                  selection.edgeIds.length === 0 &&
+                  (selection.groupIds?.length ?? 0) === 0
+                }
                 onClick={copySelection}
               >
                 Copy
@@ -1944,10 +2124,30 @@ export function WorkflowWorkbench<
                 size="sm"
                 variant="outline"
                 className="!h-6 !min-h-6 !px-2 !text-xs"
-                disabled={readOnly || selection.nodeIds.length === 0}
+                disabled={readOnly || (selection.nodeIds.length === 0 && !selectedGroup)}
                 onClick={arrangeSelection}
               >
                 Arrange selection
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="!h-6 !min-h-6 !px-2 !text-xs"
+                disabled={readOnly || selection.nodeIds.length < 2}
+                onClick={groupSelection}
+              >
+                Group
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="!h-6 !min-h-6 !px-2 !text-xs"
+                disabled={readOnly || !selectedGroup}
+                onClick={ungroupSelection}
+              >
+                Ungroup
               </Button>
               <Button
                 type="button"
@@ -1990,7 +2190,10 @@ export function WorkflowWorkbench<
                 variant="outline"
                 className="!h-6 !min-h-6 !px-2 !text-xs"
                 disabled={
-                  readOnly || (selection.nodeIds.length === 0 && selection.edgeIds.length === 0)
+                  readOnly ||
+                  (selection.nodeIds.length === 0 &&
+                    selection.edgeIds.length === 0 &&
+                    (selection.groupIds?.length ?? 0) === 0)
                 }
                 onClick={deleteSelection}
               >
@@ -2041,6 +2244,9 @@ export function WorkflowWorkbench<
               edges={uiEdges}
               selectedNodeId={primarySelectedNodeId}
               selectedEdgeId={primarySelectedEdgeId}
+              selectedGroupId={primarySelectedGroupId}
+              hiddenNodeIds={hiddenNodeIds}
+              hiddenEdgeIds={hiddenEdgeIds}
               readOnly={readOnly}
               showMiniMap
               showPortColumnHeaders={false}
@@ -2089,6 +2295,17 @@ export function WorkflowWorkbench<
 
                   commitDocument(snappedDocument);
                 }
+              }}
+              getNodeDragGroupIds={(nodeId) => {
+                const groupId = getWorkflowEditorNodeGroupId(document, nodeId);
+                const group = groupId
+                  ? document.groups?.find((candidate) => candidate.id === groupId)
+                  : undefined;
+                return group?.nodeIds ?? [nodeId];
+              }}
+              onNodePointerSelect={(nodeId) => {
+                const groupId = getWorkflowEditorNodeGroupId(document, nodeId);
+                return groupId ? { type: "group", id: groupId } : undefined;
               }}
               onEdgesChange={(edges) => {
                 if (!readOnly) {
@@ -2148,6 +2365,72 @@ export function WorkflowWorkbench<
                   document={document}
                   readOnly={readOnly}
                   onDeleteNode={deleteNode}
+                />
+                <WorkflowGroupOverlays
+                  document={document}
+                  readOnly={readOnly}
+                  selectedGroupId={primarySelectedGroupId}
+                  zoom={document.viewport?.zoom ?? 1}
+                  onDeleteGroup={(groupId) => {
+                    emitSelectionState({
+                      nodeIds: [],
+                      edgeIds: [],
+                      groupIds: [groupId],
+                      primary: { type: "group", id: groupId },
+                    });
+                    commitDocument(
+                      removeWorkflowEditorSelection(document, {
+                        nodeIds: [],
+                        edgeIds: [],
+                        groupIds: [groupId],
+                        primary: { type: "group", id: groupId },
+                      }),
+                    );
+                  }}
+                  onMoveGroup={(groupId, delta) => {
+                    commitDocument(moveWorkflowEditorGroup(document, groupId, delta));
+                  }}
+                  onRenameGroup={(groupId, label) => {
+                    const nextLabel = label.trim();
+                    if (nextLabel) {
+                      commitDocument(
+                        updateWorkflowEditorGroup(document, groupId, { label: nextLabel }),
+                      );
+                    }
+                  }}
+                  onSelectGroup={(groupId) => {
+                    emitSelectionState({
+                      nodeIds: [],
+                      edgeIds: [],
+                      groupIds: [groupId],
+                      primary: { type: "group", id: groupId },
+                    });
+                  }}
+                  onToggleGroupMinimized={(groupId) => {
+                    const group = document.groups?.find((candidate) => candidate.id === groupId);
+                    if (group) {
+                      commitDocument(
+                        updateWorkflowEditorGroup(document, groupId, {
+                          minimized: group.minimized !== true,
+                        }),
+                      );
+                    }
+                  }}
+                  onUngroupGroup={(groupId) => {
+                    const group = document.groups?.find((candidate) => candidate.id === groupId);
+                    const nextDocument = ungroupWorkflowEditorGroup(document, groupId);
+                    commitDocument(nextDocument);
+                    emitSelectionState(
+                      {
+                        nodeIds: group?.nodeIds ?? [],
+                        edgeIds: [],
+                        ...(group?.nodeIds[0]
+                          ? { primary: { type: "node", id: group.nodeIds[0] } }
+                          : {}),
+                      },
+                      nextDocument,
+                    );
+                  }}
                 />
                 <WorkflowSelectionOverlay
                   document={document}
@@ -2370,6 +2653,7 @@ export function useWorkflowWorkbenchController<
   selectedEdgeId,
   selectedNodeIds,
   selectedEdgeIds,
+  selectedGroupIds,
   readOnly = false,
   nodeTemplates = defaultWorkflowEditorNodeTemplates as ReadonlyArray<
     WorkflowWorkbenchPaletteItem<TTemplateData>
@@ -2403,20 +2687,33 @@ export function useWorkflowWorkbenchController<
   const externalSelectionProvided =
     selectedNodeIds !== undefined ||
     selectedEdgeIds !== undefined ||
+    selectedGroupIds !== undefined ||
     selectedNodeId !== undefined ||
     selectedEdgeId !== undefined;
   const rawSelection = useMemo<WorkflowEditorSelectionState>(() => {
-    if (selectedNodeIds !== undefined || selectedEdgeIds !== undefined) {
+    if (
+      selectedNodeIds !== undefined ||
+      selectedEdgeIds !== undefined ||
+      selectedGroupIds !== undefined
+    ) {
       const nodeIds = [...(selectedNodeIds ?? [])];
       const edgeIds = [...(selectedEdgeIds ?? [])];
+      const groupIds = [...(selectedGroupIds ?? [])];
       const primary =
-        nodeIds.length > 0
-          ? ({ type: "node", id: nodeIds.at(-1)! } as const)
-          : edgeIds.length > 0
-            ? ({ type: "edge", id: edgeIds.at(-1)! } as const)
-            : undefined;
+        groupIds.length > 0
+          ? ({ type: "group", id: groupIds.at(-1)! } as const)
+          : nodeIds.length > 0
+            ? ({ type: "node", id: nodeIds.at(-1)! } as const)
+            : edgeIds.length > 0
+              ? ({ type: "edge", id: edgeIds.at(-1)! } as const)
+              : undefined;
 
-      return { nodeIds, edgeIds, ...(primary ? { primary } : {}) };
+      return {
+        nodeIds,
+        edgeIds,
+        ...(groupIds.length > 0 ? { groupIds } : {}),
+        ...(primary ? { primary } : {}),
+      };
     }
 
     if (selectedNodeId) {
@@ -2441,6 +2738,7 @@ export function useWorkflowWorkbenchController<
     internalSelection,
     selectedEdgeId,
     selectedEdgeIds,
+    selectedGroupIds,
     selectedNodeId,
     selectedNodeIds,
   ]);
@@ -2461,6 +2759,16 @@ export function useWorkflowWorkbenchController<
       : selection.edgeIds[0]
         ? documentContext.edgeById.get(selection.edgeIds[0])
         : undefined;
+  const selectedGroup =
+    selection.primary?.type === "group"
+      ? document.groups?.find((group) => group.id === selection.primary?.id)
+      : selection.groupIds?.[0]
+        ? document.groups?.find((group) => group.id === selection.groupIds?.[0])
+        : undefined;
+  const selectedGroups = (selection.groupIds ?? []).flatMap((id) => {
+    const group = document.groups?.find((candidate) => candidate.id === id);
+    return group ? [group] : [];
+  });
   const selectedNodes = selection.nodeIds.flatMap((id) => {
     const node = documentContext.nodeById.get(id);
     return node ? [node] : [];
@@ -2541,14 +2849,24 @@ export function useWorkflowWorkbenchController<
     setSelection({ nodeIds: [id], edgeIds: [], primary: { type: "node", id } });
   };
   const deleteSelection = () => {
-    if (!readOnly && (selection.nodeIds.length > 0 || selection.edgeIds.length > 0)) {
+    if (
+      !readOnly &&
+      (selection.nodeIds.length > 0 ||
+        selection.edgeIds.length > 0 ||
+        (selection.groupIds?.length ?? 0) > 0)
+    ) {
       const nextDocument = removeWorkflowEditorSelection(document, selection);
       onDocumentChange?.(nextDocument);
       setSelection(emptyWorkflowEditorSelection);
     }
   };
   const duplicateSelection = () => {
-    if (readOnly || (selection.nodeIds.length === 0 && selection.edgeIds.length === 0)) {
+    if (
+      readOnly ||
+      (selection.nodeIds.length === 0 &&
+        selection.edgeIds.length === 0 &&
+        (selection.groupIds?.length ?? 0) === 0)
+    ) {
       return;
     }
     const result = duplicateWorkflowEditorSelection(document, selection);
@@ -2556,11 +2874,20 @@ export function useWorkflowWorkbenchController<
     setSelection({
       nodeIds: result.nodeIds,
       edgeIds: result.edgeIds,
-      ...(result.nodeIds[0] ? { primary: { type: "node", id: result.nodeIds[0] } } : {}),
+      ...(result.groupIds?.length ? { groupIds: result.groupIds } : {}),
+      ...(result.groupIds?.[0]
+        ? { primary: { type: "group", id: result.groupIds[0] } }
+        : result.nodeIds[0]
+          ? { primary: { type: "node", id: result.nodeIds[0] } }
+          : {}),
     });
   };
   const copySelection = () => {
-    if (selection.nodeIds.length === 0 && selection.edgeIds.length === 0) {
+    if (
+      selection.nodeIds.length === 0 &&
+      selection.edgeIds.length === 0 &&
+      (selection.groupIds?.length ?? 0) === 0
+    ) {
       return;
     }
     const text = JSON.stringify(copyWorkflowEditorSelection(document, selection));
@@ -2588,17 +2915,21 @@ export function useWorkflowWorkbenchController<
       setSelection({
         nodeIds: result.nodeIds,
         edgeIds: result.edgeIds,
-        ...(result.nodeIds[0] ? { primary: { type: "node", id: result.nodeIds[0] } } : {}),
+        ...(result.groupIds?.length ? { groupIds: result.groupIds } : {}),
+        ...(result.groupIds?.[0]
+          ? { primary: { type: "group", id: result.groupIds[0] } }
+          : result.nodeIds[0]
+            ? { primary: { type: "node", id: result.nodeIds[0] } }
+            : {}),
       });
     } catch {
       return;
     }
   };
   const arrangeSelection = () => {
-    if (!readOnly && selection.nodeIds.length > 0) {
-      onDocumentChange?.(
-        layoutWorkflowEditorDocument(document, { nodeIds: selection.nodeIds }).document,
-      );
+    const nodeIds = selectedGroup?.nodeIds ?? selection.nodeIds;
+    if (!readOnly && nodeIds.length > 0) {
+      onDocumentChange?.(layoutWorkflowEditorDocument(document, { nodeIds }).document);
     }
   };
   const arrangeAll = () => {
@@ -2615,6 +2946,56 @@ export function useWorkflowWorkbenchController<
           documentId ? { documentId } : null,
         ),
       );
+    }
+  };
+  const groupSelection = () => {
+    if (readOnly || selection.nodeIds.length < 2) {
+      return;
+    }
+
+    const nextDocument = createWorkflowEditorGroup(document, selection.nodeIds);
+    const previousGroupIds = new Set((document.groups ?? []).map((group) => group.id));
+    const group = (nextDocument.groups ?? []).find(
+      (candidate) => !previousGroupIds.has(candidate.id),
+    );
+    onDocumentChange?.(nextDocument);
+    if (group) {
+      setSelection({
+        nodeIds: [],
+        edgeIds: [],
+        groupIds: [group.id],
+        primary: { type: "group", id: group.id },
+      });
+    }
+  };
+  const ungroupSelection = () => {
+    if (readOnly || !selectedGroup) {
+      return;
+    }
+    const nextDocument = ungroupWorkflowEditorGroup(document, selectedGroup.id);
+    onDocumentChange?.(nextDocument);
+    setSelection({
+      nodeIds: selectedGroup.nodeIds,
+      edgeIds: [],
+      ...(selectedGroup.nodeIds[0]
+        ? { primary: { type: "node", id: selectedGroup.nodeIds[0] } }
+        : {}),
+    });
+  };
+  const updateSelectedGroup = (patch: Partial<WorkflowEditorGroup>) => {
+    if (!readOnly && selectedGroup) {
+      onDocumentChange?.(updateWorkflowEditorGroup(document, selectedGroup.id, patch));
+    }
+  };
+  const renameSelectedGroup = (label: string) => {
+    const nextLabel = label.trim();
+    if (nextLabel) {
+      updateSelectedGroup({ label: nextLabel });
+    }
+  };
+  const toggleSelectedGroupMinimized = () => {
+    if (selectedGroup) {
+      updateSelectedGroup({ minimized: selectedGroup.minimized !== true });
     }
   };
   const inspectorContext = {
@@ -2644,6 +3025,8 @@ export function useWorkflowWorkbenchController<
     selection,
     selectedEdge,
     selectedEdges,
+    selectedGroup,
+    selectedGroups,
     selectedNode,
     selectedNodes,
     palette: {
@@ -2701,10 +3084,15 @@ export function useWorkflowWorkbenchController<
       createSelectedNodeWorkflow: () => selectedNode && onCreateWorkflowReference?.(selectedNode),
       deleteSelection,
       duplicateSelection,
+      groupSelection,
       openSelectedNodeWorkflow: () => selectedNode && onOpenWorkflowReference?.(selectedNode),
       pasteSelection,
+      renameSelectedGroup,
       setSelection,
+      toggleSelectedGroupMinimized,
+      ungroupSelection,
       updateDocument,
+      updateSelectedGroup,
       updateSelectedEdge,
       updateSelectedNode,
       updateSelectedNodeWorkflowReference,
@@ -2730,6 +3118,7 @@ export function WorkflowWorkbenchCanvas<
       readOnly={controller.readOnly}
       selectedNodeIds={controller.selection.nodeIds}
       selectedEdgeIds={controller.selection.edgeIds}
+      selectedGroupIds={controller.selection.groupIds}
       nodeTemplates={controller.configuration.nodeTemplates}
       typeDefinitions={controller.configuration.typeDefinitions}
       documentReferences={controller.configuration.documentReferences}
@@ -2765,7 +3154,10 @@ export function WorkflowWorkbenchToolbar<
         </>
       ) : null}
       <Badge variant="outline">
-        {controller.selection.nodeIds.length + controller.selection.edgeIds.length} selected
+        {controller.selection.nodeIds.length +
+          controller.selection.edgeIds.length +
+          (controller.selection.groupIds?.length ?? 0)}{" "}
+        selected
       </Badge>
       <Button
         type="button"
@@ -2796,6 +3188,24 @@ export function WorkflowWorkbenchToolbar<
         onClick={controller.actions.arrangeAll}
       >
         Arrange all
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={controller.readOnly || controller.selection.nodeIds.length < 2}
+        onClick={controller.actions.groupSelection}
+      >
+        Group
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={controller.readOnly || !controller.selectedGroup}
+        onClick={controller.actions.ungroupSelection}
+      >
+        Ungroup
       </Button>
       <Button
         type="button"
@@ -3601,6 +4011,306 @@ function getWorkflowJsonPrimitiveNodeControlOffset<TNodeData>(node: WorkflowEdit
     x: Math.round((size.width - width) / 2),
     y: Math.round(portCenterY - workflowJsonPrimitiveNodeControlHeight / 2),
     width,
+  };
+}
+
+type WorkflowGroupOverlayDragState = {
+  groupId: string;
+  pointerId: number;
+  startClientX: number;
+  startClientY: number;
+  committedX: number;
+  committedY: number;
+};
+
+function WorkflowGroupOverlays<
+  TNodeData extends Record<string, unknown>,
+  TEdgeData extends Record<string, unknown>,
+>({
+  document,
+  readOnly,
+  selectedGroupId,
+  zoom,
+  onDeleteGroup,
+  onMoveGroup,
+  onRenameGroup,
+  onSelectGroup,
+  onToggleGroupMinimized,
+  onUngroupGroup,
+}: {
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>;
+  readOnly: boolean;
+  selectedGroupId?: string;
+  zoom: number;
+  onDeleteGroup: (groupId: string) => void;
+  onMoveGroup: (groupId: string, delta: WorkflowEditorPoint) => void;
+  onRenameGroup: (groupId: string, label: string) => void;
+  onSelectGroup: (groupId: string) => void;
+  onToggleGroupMinimized: (groupId: string) => void;
+  onUngroupGroup: (groupId: string) => void;
+}) {
+  const [openGroupId, setOpenGroupId] = useState<string | null>(null);
+  const dragRef = useRef<WorkflowGroupOverlayDragState | null>(null);
+
+  useEffect(() => {
+    const ownerDocument = globalThis.document;
+    if (!ownerDocument) {
+      return;
+    }
+
+    const move = (event: PointerEvent) => {
+      const drag = dragRef.current;
+      if (!drag || drag.pointerId !== event.pointerId) {
+        return;
+      }
+
+      const nextX = Math.round((event.clientX - drag.startClientX) / zoom);
+      const nextY = Math.round((event.clientY - drag.startClientY) / zoom);
+      const delta = { x: nextX - drag.committedX, y: nextY - drag.committedY };
+      if (delta.x === 0 && delta.y === 0) {
+        return;
+      }
+
+      drag.committedX = nextX;
+      drag.committedY = nextY;
+      onMoveGroup(drag.groupId, delta);
+    };
+    const end = (event: PointerEvent) => {
+      const drag = dragRef.current;
+      if (drag?.pointerId === event.pointerId) {
+        dragRef.current = null;
+      }
+    };
+
+    ownerDocument.addEventListener("pointermove", move);
+    ownerDocument.addEventListener("pointerup", end);
+    ownerDocument.addEventListener("pointercancel", end);
+    return () => {
+      ownerDocument.removeEventListener("pointermove", move);
+      ownerDocument.removeEventListener("pointerup", end);
+      ownerDocument.removeEventListener("pointercancel", end);
+    };
+  }, [onMoveGroup, zoom]);
+
+  const groups = document.groups ?? [];
+  if (groups.length === 0) {
+    return null;
+  }
+
+  const stopInteractionPropagation = (event: SyntheticEvent) => {
+    event.stopPropagation();
+  };
+
+  return (
+    <div className="pointer-events-none absolute inset-0 z-[15]" aria-hidden={false}>
+      {groups.map((group) => {
+        const bounds = getWorkflowEditorRenderedGroupBounds(document, group);
+        if (!bounds) {
+          return null;
+        }
+
+        const selected = group.id === selectedGroupId;
+        const minimized = group.minimized === true;
+        const open = openGroupId === group.id;
+        const frameStyle = minimized
+          ? {
+              height: 48,
+              left: bounds.left,
+              top: bounds.top,
+              width: Math.max(220, Math.min(360, bounds.width)),
+            }
+          : {
+              height: bounds.height,
+              left: bounds.left,
+              top: bounds.top,
+              width: bounds.width,
+            };
+
+        return (
+          <div
+            key={group.id}
+            data-slot="workflow-group"
+            data-group-id={group.id}
+            data-selected={selected ? "true" : undefined}
+            data-minimized={minimized ? "true" : undefined}
+            className={cn(
+              "absolute rounded-lg border bg-background/35 shadow-sm",
+              selected ? "border-primary ring-2 ring-primary/20" : "border-border/80",
+              minimized ? "bg-card/95" : "bg-primary/5",
+            )}
+            style={frameStyle}
+            onClick={(event) => {
+              event.stopPropagation();
+              onSelectGroup(group.id);
+            }}
+          >
+            <div
+              data-slot="workflow-group-header"
+              className={cn(
+                "pointer-events-auto absolute left-2 top-2 flex h-8 min-w-0 items-center gap-1 rounded-md border bg-background/95 px-1.5 shadow-sm",
+                minimized &&
+                  "left-0 top-0 h-12 w-full rounded-lg border-0 bg-transparent shadow-none",
+              )}
+              onClick={stopInteractionPropagation}
+              onMouseDown={stopInteractionPropagation}
+              onPointerDown={(event) => {
+                stopInteractionPropagation(event);
+                onSelectGroup(group.id);
+                if (readOnly || event.button !== 0) {
+                  return;
+                }
+
+                dragRef.current = {
+                  groupId: group.id,
+                  pointerId: event.pointerId,
+                  startClientX: event.clientX,
+                  startClientY: event.clientY,
+                  committedX: 0,
+                  committedY: 0,
+                };
+              }}
+            >
+              <span
+                data-slot="workflow-group-drag-handle"
+                className="h-4 w-2 cursor-grab rounded-sm bg-muted-foreground/35"
+                aria-hidden="true"
+              />
+              <Input
+                aria-label={`${group.label} group label`}
+                className="h-6 min-w-0 w-32 border-0 bg-transparent px-1 text-xs font-medium shadow-none focus-visible:ring-1"
+                defaultValue={group.label}
+                disabled={readOnly}
+                onClick={stopInteractionPropagation}
+                onPointerDown={stopInteractionPropagation}
+                onBlur={(event) => onRenameGroup(group.id, event.currentTarget.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.currentTarget.blur();
+                  }
+                }}
+              />
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="ghost"
+                className="size-6"
+                disabled={readOnly}
+                aria-label={
+                  minimized ? `Expand ${group.label} group` : `Minimize ${group.label} group`
+                }
+                onPointerDown={stopInteractionPropagation}
+                onClick={(event) => {
+                  stopInteractionPropagation(event);
+                  onToggleGroupMinimized(group.id);
+                }}
+              >
+                {minimized ? (
+                  <Maximize2Icon className="size-3.5" aria-hidden="true" />
+                ) : (
+                  <Minimize2Icon className="size-3.5" aria-hidden="true" />
+                )}
+              </Button>
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="ghost"
+                className="size-6"
+                aria-expanded={open}
+                aria-haspopup="menu"
+                aria-label={`${group.label} group actions`}
+                onPointerDown={stopInteractionPropagation}
+                onClick={(event) => {
+                  stopInteractionPropagation(event);
+                  setOpenGroupId((current) => (current === group.id ? null : group.id));
+                }}
+              >
+                <MoreHorizontalIcon className="size-3.5" aria-hidden="true" />
+              </Button>
+              {open ? (
+                <div
+                  role="menu"
+                  data-slot="workflow-group-action-menu-content"
+                  className="absolute right-0 top-9 z-[20020] grid w-40 gap-1 rounded-md bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10"
+                  onPointerDown={stopInteractionPropagation}
+                >
+                  <div className="truncate px-1.5 py-1 text-xs font-medium text-muted-foreground">
+                    {group.label}
+                  </div>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="rounded-sm px-1.5 py-1.5 text-left text-sm outline-none transition-colors hover:bg-accent focus:bg-accent disabled:pointer-events-none disabled:opacity-50"
+                    disabled={readOnly}
+                    onClick={() => {
+                      setOpenGroupId(null);
+                      onToggleGroupMinimized(group.id);
+                    }}
+                  >
+                    {minimized ? "Expand" : "Minimize"}
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="rounded-sm px-1.5 py-1.5 text-left text-sm outline-none transition-colors hover:bg-accent focus:bg-accent disabled:pointer-events-none disabled:opacity-50"
+                    disabled={readOnly}
+                    onClick={() => {
+                      setOpenGroupId(null);
+                      onUngroupGroup(group.id);
+                    }}
+                  >
+                    Ungroup
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="rounded-sm px-1.5 py-1.5 text-left text-sm text-destructive outline-none transition-colors hover:bg-destructive/10 focus:bg-destructive/10 disabled:pointer-events-none disabled:opacity-50"
+                    disabled={readOnly}
+                    onClick={() => {
+                      setOpenGroupId(null);
+                      onDeleteGroup(group.id);
+                    }}
+                  >
+                    Delete contents
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function getWorkflowEditorRenderedGroupBounds<
+  TNodeData extends Record<string, unknown>,
+  TEdgeData extends Record<string, unknown>,
+>(document: WorkflowEditorDocument<TNodeData, TEdgeData>, group: WorkflowEditorGroup) {
+  const nodeIds = new Set(group.nodeIds);
+  const nodes = document.nodes.filter((node) => nodeIds.has(node.id));
+  if (nodes.length === 0) {
+    return null;
+  }
+
+  const boxes = nodes.map((node) => {
+    const size = getWorkflowEditorRenderedNodeSize(toUiWorkflowBuilderNodes([node])[0]!);
+    return {
+      left: node.x,
+      top: node.y,
+      right: node.x + size.width,
+      bottom: node.y + size.height,
+    };
+  });
+  const left = Math.min(...boxes.map((box) => box.left)) - 16;
+  const top = Math.min(...boxes.map((box) => box.top)) - 42;
+  const right = Math.max(...boxes.map((box) => box.right)) + 16;
+  const bottom = Math.max(...boxes.map((box) => box.bottom)) + 16;
+
+  return {
+    left,
+    top,
+    width: Math.max(220, right - left),
+    height: Math.max(80, bottom - top),
   };
 }
 

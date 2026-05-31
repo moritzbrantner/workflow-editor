@@ -75,6 +75,7 @@ function StatefulWorkbench({
         document={currentDocument}
         selectedNodeIds={selection.nodeIds}
         selectedEdgeIds={selection.edgeIds}
+        selectedGroupIds={selection.groupIds}
         readOnly={readOnly}
         documentReferences={documentReferences}
         onDocumentChange={setCurrentDocument}

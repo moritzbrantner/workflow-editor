@@ -11,6 +11,7 @@ import {
   composeWorkflowEditorNodes,
   connectWorkflowEditorNodes,
   copyWorkflowEditorSelection,
+  createWorkflowEditorGroup,
   createWorkflowEditorComposedNode,
   createWorkflowEditorDocumentContext,
   createWorkflowEditorGraphIndex,
@@ -18,6 +19,7 @@ import {
   detectWorkflowEditorCycles,
   duplicateWorkflowEditorNode,
   duplicateWorkflowEditorSelection,
+  findWorkflowEditorGroup,
   findWorkflowEditorNode,
   formatWorkflowEditorArrayConstructorExpression,
   formatWorkflowEditorObjectDecompositionExpression,
@@ -38,6 +40,7 @@ import {
   isWorkflowEditorObjectDecompositionNode,
   isWorkflowEditorPortTypeAssignable,
   moveWorkflowEditorNode,
+  moveWorkflowEditorGroup,
   normalizeWorkflowEditorDocument,
   normalizeWorkflowEditorSelection,
   parseWorkflowEditorObjectConstructorExpression,
@@ -52,6 +55,8 @@ import {
   toUiWorkflowBuilderNodes,
   topologicallySortWorkflowEditorNodes,
   updateWorkflowEditorNode,
+  ungroupWorkflowEditorGroup,
+  updateWorkflowEditorGroup,
   updateWorkflowEditorNodeWorkflowReference,
   updateWorkflowEditorObjectConstructorExpression,
   updateWorkflowEditorObjectConstructorExpressionInNode,
@@ -1736,6 +1741,96 @@ describe("@moritzbrantner/workflow-editor core", () => {
         }),
       ]),
     );
+  });
+
+  test("creates, moves, updates, and ungroups visual workflow groups", () => {
+    const grouped = createWorkflowEditorGroup(document, ["input", "transform"]);
+    const group = grouped.groups?.[0];
+
+    expect(group).toMatchObject({
+      id: "group-1",
+      label: "Group 1",
+      nodeIds: ["input", "transform"],
+    });
+
+    const moved = moveWorkflowEditorGroup(grouped, group!.id, { x: 32, y: 16 });
+    expect(moved.nodes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "input", x: 32, y: 16 }),
+        expect.objectContaining({ id: "transform", x: 272, y: 16 }),
+        expect.objectContaining({ id: "output", x: 480, y: 0 }),
+      ]),
+    );
+
+    const renamed = updateWorkflowEditorGroup(moved, group!.id, {
+      label: "Primary path",
+      minimized: true,
+    });
+    expect(findWorkflowEditorGroup(renamed, group!.id)).toMatchObject({
+      label: "Primary path",
+      minimized: true,
+    });
+
+    const ungrouped = ungroupWorkflowEditorGroup(renamed, group!.id);
+    expect(ungrouped.groups).toBeUndefined();
+    expect(ungrouped.nodes.map((node) => node.id).sort()).toEqual(["input", "output", "transform"]);
+  });
+
+  test("repairs invalid workflow groups and validates strict group diagnostics", () => {
+    const invalid: WorkflowEditorDocument = {
+      ...document,
+      groups: [
+        { id: "group", label: "Group", nodeIds: ["input", "input", "missing"] },
+        { id: "group", label: "Duplicate", nodeIds: ["transform", "output"] },
+      ],
+    };
+
+    expect(validateWorkflowEditorDocument(invalid).map((diagnostic) => diagnostic.code)).toEqual(
+      expect.arrayContaining(["duplicate-group-id", "duplicate-group-node", "missing-group-node"]),
+    );
+
+    const repaired = normalizeWorkflowEditorDocument(invalid, { mode: "repair" });
+    expect(repaired.groups).toEqual([
+      expect.objectContaining({ id: "group", nodeIds: ["transform", "output"] }),
+    ]);
+  });
+
+  test("copies, pastes, duplicates, and deletes workflow groups", () => {
+    const grouped = createWorkflowEditorGroup(document, ["input", "transform"]);
+    const groupId = grouped.groups![0]!.id;
+    const selection = {
+      nodeIds: [],
+      edgeIds: [],
+      groupIds: [groupId],
+      primary: { type: "group", id: groupId } as const,
+    };
+
+    const clipboard = copyWorkflowEditorSelection(grouped, selection);
+    expect(clipboard.groups).toEqual([
+      expect.objectContaining({ id: groupId, nodeIds: ["input", "transform"] }),
+    ]);
+    expect(clipboard.edges).toEqual([
+      expect.objectContaining({ sourceNodeId: "input", targetNodeId: "transform" }),
+    ]);
+
+    const pasted = pasteWorkflowEditorClipboardPayload(grouped, clipboard);
+    expect(pasted.groupIds).toEqual(["group-1-copy"]);
+    expect(pasted.document.groups).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "group-1" }),
+        expect.objectContaining({
+          id: "group-1-copy",
+          nodeIds: ["input-copy", "transform-copy"],
+        }),
+      ]),
+    );
+
+    const duplicated = duplicateWorkflowEditorSelection(grouped, selection);
+    expect(duplicated.groupIds).toEqual(["group-1-copy"]);
+
+    const removed = removeWorkflowEditorSelection(grouped, selection);
+    expect(removed.groups).toBeUndefined();
+    expect(removed.nodes.map((node) => node.id)).toEqual(["output"]);
   });
 
   test("prevents new edges from closing directed cycles", () => {

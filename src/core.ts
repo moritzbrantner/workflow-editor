@@ -32,6 +32,7 @@ import type {
   WorkflowEditorDocumentNormalizationOptions,
   WorkflowEditorDocumentValidationOptions,
   WorkflowEditorEdge,
+  WorkflowEditorGroup,
   WorkflowEditorNode,
   WorkflowEditorNodeComposition,
   WorkflowEditorNodeTemplate,
@@ -78,6 +79,7 @@ export type {
   WorkflowEditorDocumentNormalizationOptions,
   WorkflowEditorDocumentValidationOptions,
   WorkflowEditorEdge,
+  WorkflowEditorGroup,
   WorkflowEditorNode,
   WorkflowEditorNodeComposition,
   WorkflowEditorNodeTemplate,
@@ -361,6 +363,14 @@ export type WorkflowEditorDuplicateNodeOptions = {
   createId?: (nodeId: string, existingIds: ReadonlySet<string>) => string;
 };
 
+export type WorkflowEditorCreateGroupOptions<TData = Record<string, unknown>> = {
+  id?: string;
+  label?: string;
+  minimized?: boolean;
+  data?: TData;
+  createId?: (baseId: string, existingIds: ReadonlySet<string>) => string;
+};
+
 export type WorkflowEditorComposeNodesOptions<TNodeData = Record<string, unknown>> = {
   id?: string;
   label?: string;
@@ -410,11 +420,17 @@ export function normalizeWorkflowEditorDocument<
   nodes = syncWorkflowEditorNodeBehaviors(nodes, edges);
   edges = normalizeWorkflowEditorDagEdges(edges, nodeIds, nodes);
   nodes = syncWorkflowEditorNodeBehaviors(nodes, edges);
+  const groups = normalizeWorkflowEditorGroups(
+    Array.isArray(document.groups) ? document.groups : [],
+    new Set(nodes.map((node) => node.id)),
+  );
+  const { groups: _groups, ...documentWithoutGroups } = document;
 
   return {
-    ...document,
+    ...documentWithoutGroups,
     nodes,
     edges,
+    ...(groups.length > 0 ? { groups } : {}),
     viewport: document.viewport
       ? {
           x: Number.isFinite(document.viewport.x) ? document.viewport.x : 0,
@@ -527,6 +543,115 @@ export function validateWorkflowEditorDocument<
     validateWorkflowEditorPorts(node.inputs, `${path}.inputs`, nodeId, diagnostics);
     validateWorkflowEditorPorts(node.outputs, `${path}.outputs`, nodeId, diagnostics);
   });
+
+  if (value.groups !== undefined && !Array.isArray(value.groups)) {
+    diagnostics.push({
+      code: "invalid-group",
+      message: "Workflow document groups must be an array",
+      path: "$.groups",
+    });
+  }
+
+  const groupIds = new Set<string>();
+  const groupedNodeIds = new Set<string>();
+  if (Array.isArray(value.groups)) {
+    value.groups.forEach((group, index) => {
+      const path = `$.groups[${index}]`;
+
+      if (!isRecord(group)) {
+        diagnostics.push({
+          code: "invalid-group",
+          message: "Workflow group must be an object",
+          path,
+        });
+        return;
+      }
+
+      const groupId = typeof group.id === "string" ? group.id : undefined;
+      if (!groupId?.trim()) {
+        diagnostics.push({
+          code: "invalid-group",
+          message: "Workflow group id must be a non-empty string",
+          path: `${path}.id`,
+        });
+      } else if (groupIds.has(groupId)) {
+        diagnostics.push({
+          code: "duplicate-group-id",
+          message: `Duplicate workflow group id: ${groupId}`,
+          path: `${path}.id`,
+          groupId,
+        });
+      } else {
+        groupIds.add(groupId);
+      }
+
+      if (typeof group.label !== "string") {
+        diagnostics.push({
+          code: "invalid-group",
+          message: "Workflow group label must be a string",
+          path: `${path}.label`,
+          groupId,
+        });
+      }
+
+      if (!Array.isArray(group.nodeIds)) {
+        diagnostics.push({
+          code: "invalid-group",
+          message: "Workflow group nodeIds must be an array",
+          path: `${path}.nodeIds`,
+          groupId,
+        });
+        return;
+      }
+
+      const groupNodeIds = new Set<string>();
+      group.nodeIds.forEach((nodeId, nodeIndex) => {
+        const nodePath = `${path}.nodeIds[${nodeIndex}]`;
+
+        if (typeof nodeId !== "string" || !nodeId.trim()) {
+          diagnostics.push({
+            code: "invalid-group",
+            message: "Workflow group node id must be a non-empty string",
+            path: nodePath,
+            groupId,
+          });
+          return;
+        }
+
+        if (!nodeIds.has(nodeId)) {
+          diagnostics.push({
+            code: "missing-group-node",
+            message: `Workflow group node does not exist: ${nodeId}`,
+            path: nodePath,
+            groupId,
+            nodeId,
+          });
+        }
+
+        if (groupNodeIds.has(nodeId) || groupedNodeIds.has(nodeId)) {
+          diagnostics.push({
+            code: "duplicate-group-node",
+            message: `Workflow node is assigned to multiple group entries: ${nodeId}`,
+            path: nodePath,
+            groupId,
+            nodeId,
+          });
+        }
+
+        groupNodeIds.add(nodeId);
+        groupedNodeIds.add(nodeId);
+      });
+
+      if (group.nodeIds.length < 2) {
+        diagnostics.push({
+          code: "invalid-group",
+          message: "Workflow group must contain at least two nodes",
+          path: `${path}.nodeIds`,
+          groupId,
+        });
+      }
+    });
+  }
 
   const portLookup = createWorkflowEditorPortLookup(
     value.nodes.flatMap((node) => (isRecord(node) ? [node as WorkflowEditorNode] : [])),
@@ -699,6 +824,149 @@ export function findWorkflowEditorEdge<
   TEdgeData = Record<string, unknown>,
 >(document: WorkflowEditorDocument<TNodeData, TEdgeData>, edgeId: string) {
   return createWorkflowEditorDocumentContext(document).edgeById.get(edgeId);
+}
+
+export function findWorkflowEditorGroup<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+>(document: WorkflowEditorDocument<TNodeData, TEdgeData>, groupId: string) {
+  return document.groups?.find((group) => group.id === groupId);
+}
+
+export function getWorkflowEditorNodeGroupId<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+>(document: WorkflowEditorDocument<TNodeData, TEdgeData>, nodeId: string) {
+  return document.groups?.find((group) => group.nodeIds.includes(nodeId))?.id;
+}
+
+export function getWorkflowEditorGroupBounds<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+>(document: WorkflowEditorDocument<TNodeData, TEdgeData>, groupId: string) {
+  const group = findWorkflowEditorGroup(document, groupId);
+
+  if (!group) {
+    return null;
+  }
+
+  const nodeIds = new Set(group.nodeIds);
+  const nodes = document.nodes.filter((node) => nodeIds.has(node.id));
+
+  if (nodes.length === 0) {
+    return null;
+  }
+
+  const minX = Math.min(...nodes.map((node) => node.x));
+  const minY = Math.min(...nodes.map((node) => node.y));
+  const maxX = Math.max(...nodes.map((node) => node.x));
+  const maxY = Math.max(...nodes.map((node) => node.y));
+
+  return {
+    x: minX,
+    y: minY,
+    width: Math.max(1, maxX - minX),
+    height: Math.max(1, maxY - minY),
+  };
+}
+
+export function createWorkflowEditorGroup<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+  TGroupData extends Record<string, unknown> = Record<string, unknown>,
+>(
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>,
+  nodeIds: readonly string[],
+  options: WorkflowEditorCreateGroupOptions<TGroupData> = {},
+): WorkflowEditorDocument<TNodeData, TEdgeData> {
+  const requestedNodeIds = new Set(nodeIds);
+  const groupedNodeIds = document.nodes
+    .filter((node) => requestedNodeIds.has(node.id))
+    .map((node) => node.id);
+
+  if (groupedNodeIds.length < 2) {
+    return document;
+  }
+
+  const groupedNodeIdSet = new Set(groupedNodeIds);
+  const groups = (document.groups ?? [])
+    .map((group) =>
+      Object.assign({}, group, {
+        nodeIds: group.nodeIds.filter((nodeId) => !groupedNodeIdSet.has(nodeId)),
+      }),
+    )
+    .filter((group) => group.nodeIds.length >= 2);
+  const existingIds = new Set(groups.map((group) => group.id));
+  const defaultLabel = createWorkflowEditorDefaultGroupLabel(document);
+  const baseId = safeWorkflowEditorId(options.id ?? options.label ?? defaultLabel);
+  const id =
+    options.id ?? options.createId?.(baseId, existingIds) ?? createUniqueId(existingIds, baseId);
+
+  return normalizeWorkflowEditorDocument({
+    ...document,
+    groups: [
+      ...groups,
+      {
+        id,
+        label: options.label?.trim() || defaultLabel,
+        nodeIds: groupedNodeIds,
+        minimized: options.minimized === true ? true : undefined,
+        data: options.data,
+      },
+    ],
+  });
+}
+
+export function updateWorkflowEditorGroup<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+>(
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>,
+  groupId: string,
+  patch: Partial<WorkflowEditorGroup>,
+): WorkflowEditorDocument<TNodeData, TEdgeData> {
+  return normalizeWorkflowEditorDocument({
+    ...document,
+    groups: (document.groups ?? []).map((group) =>
+      group.id === groupId ? Object.assign({}, group, patch, { id: group.id }) : group,
+    ),
+  });
+}
+
+export function ungroupWorkflowEditorGroup<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+>(
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>,
+  groupId: string,
+): WorkflowEditorDocument<TNodeData, TEdgeData> {
+  return normalizeWorkflowEditorDocument({
+    ...document,
+    groups: (document.groups ?? []).filter((group) => group.id !== groupId),
+  });
+}
+
+export function moveWorkflowEditorGroup<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+>(
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>,
+  groupId: string,
+  delta: { x: number; y: number },
+): WorkflowEditorDocument<TNodeData, TEdgeData> {
+  const group = findWorkflowEditorGroup(document, groupId);
+
+  if (!group) {
+    return document;
+  }
+
+  const nodeIds = new Set(group.nodeIds);
+  return normalizeWorkflowEditorDocument({
+    ...document,
+    nodes: document.nodes.map((node) =>
+      nodeIds.has(node.id) ? { ...node, x: node.x + delta.x, y: node.y + delta.y } : node,
+    ),
+  });
 }
 
 export function addWorkflowEditorNode<
@@ -1659,13 +1927,20 @@ export function removeWorkflowEditorNode<
   document: WorkflowEditorDocument<TNodeData, TEdgeData>,
   nodeId: string,
 ): WorkflowEditorDocument<TNodeData, TEdgeData> {
-  return {
+  return normalizeWorkflowEditorDocument({
     ...document,
     nodes: document.nodes.filter((node) => node.id !== nodeId),
     edges: document.edges.filter(
       (edge) => edge.sourceNodeId !== nodeId && edge.targetNodeId !== nodeId,
     ),
-  };
+    groups: (document.groups ?? [])
+      .map((group) =>
+        Object.assign({}, group, {
+          nodeIds: group.nodeIds.filter((currentNodeId) => currentNodeId !== nodeId),
+        }),
+      )
+      .filter((group) => group.nodeIds.length >= 2),
+  });
 }
 
 export function createWorkflowEditorComposedNode<
@@ -4365,6 +4640,60 @@ function normalizeWorkflowEditorCategoryPath(categoryPath: unknown) {
   return normalized.length > 0 ? normalized : undefined;
 }
 
+function normalizeWorkflowEditorGroups<TData = Record<string, unknown>>(
+  groups: Array<WorkflowEditorGroup<TData>>,
+  nodeIds: ReadonlySet<string>,
+): Array<WorkflowEditorGroup<TData>> {
+  const seenGroupIds = new Set<string>();
+  const seenNodeIds = new Set<string>();
+  const normalized: Array<WorkflowEditorGroup<TData>> = [];
+
+  for (const group of groups) {
+    if (!isRecord(group)) {
+      continue;
+    }
+
+    const id = typeof group.id === "string" && group.id.trim() ? group.id : "";
+    const label = typeof group.label === "string" && group.label.trim() ? group.label : id;
+
+    if (!id || seenGroupIds.has(id) || !Array.isArray(group.nodeIds)) {
+      continue;
+    }
+
+    const groupNodeIds: string[] = [];
+    const seenInGroup = new Set<string>();
+    for (const nodeId of group.nodeIds) {
+      if (
+        typeof nodeId !== "string" ||
+        !nodeIds.has(nodeId) ||
+        seenInGroup.has(nodeId) ||
+        seenNodeIds.has(nodeId)
+      ) {
+        continue;
+      }
+
+      seenInGroup.add(nodeId);
+      seenNodeIds.add(nodeId);
+      groupNodeIds.push(nodeId);
+    }
+
+    if (groupNodeIds.length < 2) {
+      continue;
+    }
+
+    seenGroupIds.add(id);
+    normalized.push({
+      ...group,
+      id,
+      label,
+      nodeIds: groupNodeIds,
+      minimized: group.minimized === true ? true : undefined,
+    });
+  }
+
+  return normalized;
+}
+
 function normalizeWorkflowEditorNode<TNodeData = Record<string, unknown>>(
   node: WorkflowEditorNode<TNodeData>,
 ): WorkflowEditorNode<TNodeData> {
@@ -4634,6 +4963,22 @@ function safeWorkflowEditorId(value: string) {
       .replace(/[^a-z0-9:_-]+/g, "-")
       .replace(/^-+|-+$/g, "") || "node"
   );
+}
+
+function createWorkflowEditorDefaultGroupLabel<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+>(document: WorkflowEditorDocument<TNodeData, TEdgeData>) {
+  const existingLabels = new Set((document.groups ?? []).map((group) => group.label));
+  let index = 1;
+  let label = `Group ${index}`;
+
+  while (existingLabels.has(label)) {
+    index += 1;
+    label = `Group ${index}`;
+  }
+
+  return label;
 }
 
 function areStringArraysEqual(left: readonly string[], right: readonly string[]) {

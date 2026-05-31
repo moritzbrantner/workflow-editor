@@ -705,6 +705,7 @@ export function WorkflowEditor<
     selectedEdgeId,
     selectedNodeIds: normalizedSelection.nodeIds,
     selectedEdgeIds: normalizedSelection.edgeIds,
+    selectedGroupIds: normalizedSelection.groupIds,
     readOnly,
     nodeTemplates,
     typeDefinitions,
@@ -1181,6 +1182,7 @@ export function WorkflowEditor<
         selectedEdgeId={selectedEdgeId}
         selectedNodeIds={normalizedSelection.nodeIds}
         selectedEdgeIds={normalizedSelection.edgeIds}
+        selectedGroupIds={normalizedSelection.groupIds}
         readOnly={readOnly}
         nodeTemplates={nodeTemplates}
         typeDefinitions={typeDefinitions}
@@ -1616,6 +1618,7 @@ export function useWorkflowEditorController<
     selectedEdgeId,
     selectedNodeIds: normalizedSelection.nodeIds,
     selectedEdgeIds: normalizedSelection.edgeIds,
+    selectedGroupIds: normalizedSelection.groupIds,
     readOnly,
     nodeTemplates,
     typeDefinitions,

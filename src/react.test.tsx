@@ -8,6 +8,7 @@ import {
   WorkflowWorkbenchInspector,
   WorkflowWorkbenchPalette,
   connectWorkflowEditorNodes,
+  createWorkflowEditorGroup,
   findWorkflowEditorNode,
   getWorkflowEditorObjectConstructorInputs,
   normalizeWorkflowEditorDocument,
@@ -75,6 +76,7 @@ function StatefulWorkbench({
         document={currentDocument}
         selectedNodeIds={selection.nodeIds}
         selectedEdgeIds={selection.edgeIds}
+        selectedGroupIds={selection.groupIds}
         readOnly={readOnly}
         documentReferences={documentReferences}
         onDocumentChange={setCurrentDocument}
@@ -251,6 +253,112 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     handleDocumentChange.mockClear();
     fireEvent.click(screen.getByRole("button", { name: "Arrange all" }));
     expect(handleDocumentChange).toHaveBeenCalled();
+  });
+
+  test("groups and ungroups selected nodes from the workbench toolbar", async () => {
+    render(
+      <StatefulWorkbench
+        initialSelection={{
+          nodeIds: ["input", "transform"],
+          edgeIds: [],
+          primary: { type: "node", id: "transform" },
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Group", exact: true }));
+
+    await waitFor(() => {
+      expect(readStatefulDocument().groups).toEqual([
+        expect.objectContaining({
+          id: "group-1",
+          label: "Group 1",
+          nodeIds: ["input", "transform"],
+        }),
+      ]);
+      expect(readStatefulSelection()).toEqual({
+        nodeIds: [],
+        edgeIds: [],
+        groupIds: ["group-1"],
+        primary: { type: "group", id: "group-1" },
+      });
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Ungroup", exact: true }));
+
+    await waitFor(() => {
+      expect(readStatefulDocument().groups).toBeUndefined();
+      expect(readStatefulSelection().nodeIds).toEqual(["input", "transform"]);
+    });
+  });
+
+  test("selects and drags grouped nodes as a group", async () => {
+    const groupedDocument = createWorkflowEditorGroup(document, ["input", "transform"]);
+    render(<StatefulWorkbench initialDocument={groupedDocument} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Input" }));
+
+    await waitFor(() => {
+      expect(readStatefulSelection()).toMatchObject({
+        groupIds: ["group-1"],
+        primary: { type: "group", id: "group-1" },
+      });
+    });
+
+    const inputNode = globalThis.document.querySelector<HTMLElement>(
+      "[data-slot='workflow-builder-node'][data-node-id='input']",
+    )!;
+    const surface = globalThis.document.querySelector<HTMLElement>(
+      "[data-slot='workflow-builder-surface']",
+    )!;
+
+    fireEvent.mouseDown(inputNode, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(surface, { clientX: 40, clientY: 24 });
+
+    await waitFor(() => {
+      expect(readStatefulDocument().nodes).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: "input", x: 40, y: 24 }),
+          expect.objectContaining({ id: "transform", x: 280, y: 24 }),
+        ]),
+      );
+    });
+  });
+
+  test("minimizes grouped nodes into a compact group wrapper", async () => {
+    const groupedDocument = createWorkflowEditorGroup(document, ["input", "transform"]);
+    render(
+      <StatefulWorkbench
+        initialDocument={groupedDocument}
+        initialSelection={{
+          nodeIds: [],
+          edgeIds: [],
+          groupIds: ["group-1"],
+          primary: { type: "group", id: "group-1" },
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Minimize Group 1 group" }));
+
+    await waitFor(() => {
+      expect(readStatefulDocument().groups?.[0]).toMatchObject({
+        id: "group-1",
+        minimized: true,
+      });
+    });
+
+    expect(
+      globalThis.document.querySelector(
+        "[data-slot='workflow-builder-node'][data-node-id='input'][data-hidden='true']",
+      ),
+    ).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand Group 1 group" }));
+
+    await waitFor(() => {
+      expect(readStatefulDocument().groups?.[0]?.minimized).toBeUndefined();
+    });
   });
 
   test("renames workflow nodes inline from the canvas", async () => {

@@ -43,6 +43,21 @@ export function toggleWorkflowEditorSelectionItem(
         ? selection.nodeIds.filter((nodeId) => nodeId !== item.id)
         : [...selection.nodeIds, item.id],
       edgeIds: selection.edgeIds,
+      ...(selection.groupIds?.length ? { groupIds: selection.groupIds } : {}),
+      primary: item,
+    };
+  }
+
+  if (item.type === "group") {
+    const groupIds = selection.groupIds ?? [];
+    const hasGroup = groupIds.includes(item.id);
+    const nextGroupIds = hasGroup
+      ? groupIds.filter((groupId) => groupId !== item.id)
+      : [...groupIds, item.id];
+    return {
+      nodeIds: selection.nodeIds,
+      edgeIds: selection.edgeIds,
+      ...(nextGroupIds.length > 0 ? { groupIds: nextGroupIds } : {}),
       primary: item,
     };
   }
@@ -53,6 +68,7 @@ export function toggleWorkflowEditorSelectionItem(
     edgeIds: hasEdge
       ? selection.edgeIds.filter((edgeId) => edgeId !== item.id)
       : [...selection.edgeIds, item.id],
+    ...(selection.groupIds?.length ? { groupIds: selection.groupIds } : {}),
     primary: item,
   };
 }
