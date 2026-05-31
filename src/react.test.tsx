@@ -5,11 +5,14 @@ import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 
 import {
   WorkflowWorkbench,
+  WorkflowWorkbenchInspector,
+  WorkflowWorkbenchPalette,
   connectWorkflowEditorNodes,
   findWorkflowEditorNode,
   getWorkflowEditorObjectConstructorInputs,
   normalizeWorkflowEditorDocument,
   toUiWorkflowBuilderNodes,
+  useWorkflowWorkbenchController,
   workflowEditorJsonNodeTemplates,
   type WorkflowEditorDocument,
   type WorkflowEditorSelectionState,
@@ -1062,6 +1065,51 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     expect(screen.queryByLabelText("Search node palette")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Expand node palette" }));
     expect(screen.getByLabelText("Search node palette")).not.toBeNull();
+  });
+
+  test("supports hidden and custom workbench chrome", () => {
+    render(
+      <WorkflowWorkbench
+        document={document}
+        nodeTemplates={[{ id: "decision", label: "Decision" }]}
+        chrome={{
+          toolbar: (controller) => (
+            <div data-testid="custom-toolbar">{controller.document.nodes.length}</div>
+          ),
+          palette: "hidden",
+          inspector: "hidden",
+        }}
+      />,
+    );
+
+    expect(screen.getByTestId("custom-toolbar").textContent).toBe(String(document.nodes.length));
+    expect(screen.queryByLabelText("Search node palette")).toBeNull();
+    expect(screen.queryByText("Info")).toBeNull();
+  });
+
+  test("supports inline palette and inspector components from a controller", () => {
+    const Harness = () => {
+      const [currentDocument, setCurrentDocument] = useState(document);
+      const controller = useWorkflowWorkbenchController({
+        document: currentDocument,
+        nodeTemplates: [{ id: "decision", label: "Decision" }],
+        selectedNodeId: "input",
+        onDocumentChange: setCurrentDocument,
+      });
+
+      return (
+        <div>
+          <WorkflowWorkbenchPalette controller={controller} />
+          <WorkflowWorkbenchInspector controller={controller} />
+        </div>
+      );
+    };
+
+    render(<Harness />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Decision" }));
+    expect(screen.getByLabelText("Search node palette")).not.toBeNull();
+    expect(screen.getByText("Workflow node")).not.toBeNull();
   });
 
   test("adds palette templates from canvas drops and updates viewport from wheel events", () => {

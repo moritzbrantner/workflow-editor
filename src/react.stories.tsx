@@ -3,7 +3,11 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 
 import {
   WorkflowWorkbench,
+  WorkflowWorkbenchCanvas,
+  WorkflowWorkbenchInspector,
+  WorkflowWorkbenchPalette,
   normalizeWorkflowEditorDocument,
+  useWorkflowWorkbenchController,
   type WorkflowEditorSelectionState,
   type WorkflowWorkbenchProps,
 } from "@moritzbrantner/workflow-editor";
@@ -84,4 +88,64 @@ export const WithSelectedNode: Story = {
 
 export const EmptyDocument: Story = {
   render: () => <WorkbenchStory initialDocument={emptyStoryWorkflowDocument} />,
+};
+
+export const WithInlinePanels: Story = {
+  render: () => {
+    function InlinePanelsStory() {
+      const [document, setDocument] = useState(() =>
+        normalizeWorkflowEditorDocument(storyWorkflowDocument),
+      );
+      const [selection, setSelection] = useState<WorkflowEditorSelectionState>({
+        ...initialSelection,
+      });
+      const controller = useWorkflowWorkbenchController({
+        document,
+        nodeTemplates: storyWorkflowNodeTemplates,
+        selectedNodeIds: selection.nodeIds,
+        selectedEdgeIds: selection.edgeIds,
+        typeDefinitions: storyWorkflowTypeDefinitions,
+        onDocumentChange: setDocument,
+        onSelectionStateChange: setSelection,
+      });
+
+      return (
+        <div className="grid h-screen min-h-[680px] grid-cols-[18rem_minmax(0,1fr)_22rem] gap-3 bg-zinc-50 p-3">
+          <WorkflowWorkbenchPalette controller={controller} />
+          <WorkflowWorkbenchCanvas controller={controller} />
+          <WorkflowWorkbenchInspector controller={controller} />
+        </div>
+      );
+    }
+
+    return <InlinePanelsStory />;
+  },
+};
+
+export const HiddenChrome: Story = {
+  render: () => {
+    function HiddenChromeStory() {
+      const [document, setDocument] = useState(() =>
+        normalizeWorkflowEditorDocument(storyWorkflowDocument),
+      );
+
+      return (
+        <div className="h-screen min-h-[680px] bg-zinc-50">
+          <WorkflowWorkbench
+            document={document}
+            nodeTemplates={storyWorkflowNodeTemplates}
+            typeDefinitions={storyWorkflowTypeDefinitions}
+            chrome={{
+              toolbar: "hidden",
+              palette: "hidden",
+              inspector: "hidden",
+            }}
+            onDocumentChange={setDocument}
+          />
+        </div>
+      );
+    }
+
+    return <HiddenChromeStory />;
+  },
 };

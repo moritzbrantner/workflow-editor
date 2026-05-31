@@ -3,6 +3,7 @@ import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 
 import {
   WorkflowEditor,
+  WorkflowEditorDocumentMenu,
   createWorkflowEditorEntry,
   createWorkflowEditorLibrary,
   normalizeWorkflowEditorDocument,
@@ -179,5 +180,43 @@ describe("@moritzbrantner/workflow-editor editor shell", () => {
 
     await waitFor(() => expect(handleSaveError).toHaveBeenCalledWith(saveError));
     expect(screen.getByTestId("save-state").textContent).toBe("Save error");
+  });
+
+  test("places document controls through custom editor chrome", async () => {
+    const initialLibrary = createWorkflowEditorLibrary({
+      activeDocumentId: "parent",
+      documents: [
+        createWorkflowEditorEntry({
+          id: "parent",
+          name: "Parent",
+          document,
+        }),
+      ],
+    });
+
+    render(
+      <WorkflowEditor
+        initialLibrary={initialLibrary}
+        storage={{
+          loadLibrary: vi.fn(async () => null),
+          saveLibrary: vi.fn(async () => {}),
+        }}
+        chrome={{
+          documentControls: (controller) => (
+            <header data-testid="external-document-menu">
+              <WorkflowEditorDocumentMenu controller={controller} />
+            </header>
+          ),
+          documentPath: "hidden",
+          palette: "hidden",
+          inspector: "hidden",
+          workbenchToolbar: "hidden",
+        }}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByTestId("external-document-menu")).not.toBeNull());
+    expect(screen.getByRole("button", { name: "New" })).not.toBeNull();
+    expect(screen.queryByText("Path")).toBeNull();
   });
 });

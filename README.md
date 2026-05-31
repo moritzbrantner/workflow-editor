@@ -84,6 +84,52 @@ export function App() {
 }
 ```
 
+## Modular Chrome
+
+The default editor shell is still available, but the React API also exposes controller hooks and
+movable chrome components for custom layouts.
+
+```tsx
+import {
+  WorkflowEditorDocumentMenu,
+  WorkflowWorkbenchCanvas,
+  WorkflowWorkbenchInspector,
+  WorkflowWorkbenchPalette,
+  useWorkflowEditorController,
+} from "@moritzbrantner/workflow-editor";
+
+export function CustomWorkflowEditor(props) {
+  const controller = useWorkflowEditorController(props);
+
+  return (
+    <div className="grid h-screen grid-cols-[18rem_minmax(0,1fr)_22rem] grid-rows-[auto_1fr]">
+      <header className="col-span-3">
+        <WorkflowEditorDocumentMenu controller={controller} />
+      </header>
+      <WorkflowWorkbenchPalette controller={controller.workbench} />
+      <WorkflowWorkbenchCanvas controller={controller.workbench} />
+      <WorkflowWorkbenchInspector controller={controller.workbench} />
+    </div>
+  );
+}
+```
+
+For smaller changes, use slots on the existing components:
+
+```tsx
+<WorkflowEditor
+  {...props}
+  chrome={{
+    documentControls: (controller) => (
+      <header>
+        <WorkflowEditorDocumentMenu controller={controller} />
+      </header>
+    ),
+    palette: "hidden",
+  }}
+/>
+```
+
 ## Notes
 
 - The package also exposes `@moritzbrantner/workflow-editor/core` and `@moritzbrantner/workflow-editor/react` subpaths.

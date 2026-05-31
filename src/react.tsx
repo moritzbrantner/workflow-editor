@@ -50,6 +50,22 @@ import {
   type InspectorFieldDefinition,
   type InspectorFieldValue,
 } from "./react/inspector-panel";
+import {
+  createWorkflowWorkbenchPaletteCategoryGroups,
+  filterWorkflowWorkbenchPaletteTemplates,
+  type WorkflowWorkbenchPaletteCategoryGroup,
+  type WorkflowWorkbenchPaletteItem,
+} from "./react/palette-model";
+import {
+  clampWorkflowOverlayPosition,
+  getWorkflowOverlayMaxHeight,
+  getWorkflowPalettePinnedStyle,
+  workflowWorkbenchOverlayMargin,
+  type WorkflowWorkbenchOverlayPosition,
+  type WorkflowWorkbenchPanelBehavior,
+  type WorkflowWorkbenchPanelPlacement,
+  type WorkflowWorkbenchPanelState,
+} from "./react/overlay-position";
 
 import {
   addWorkflowEditorArrayConstructorInputToNode,
@@ -94,7 +110,6 @@ import {
   type WorkflowEditorDocument,
   type WorkflowEditorEdge,
   type WorkflowEditorNode,
-  type WorkflowEditorNodeTemplate,
   type WorkflowEditorSelection,
   type WorkflowEditorSelectionState,
   type WorkflowEditorTypeDefinition,
@@ -118,6 +133,29 @@ import {
 import { getWorkflowEditorMinimizedNodeWidth } from "./core-rendered-node-size";
 import { formatShortcutLabel } from "./shortcut-label";
 
+export {
+  createWorkflowWorkbenchPaletteCategoryGroups,
+  filterWorkflowWorkbenchPaletteTemplates,
+  getWorkflowWorkbenchPaletteCategoryPath,
+  getWorkflowWorkbenchPaletteTemplateSearchText,
+} from "./react/palette-model";
+export type {
+  WorkflowWorkbenchPaletteCategoryGroup,
+  WorkflowWorkbenchPaletteItem,
+} from "./react/palette-model";
+export {
+  clampWorkflowOverlayPosition,
+  getWorkflowOverlayMaxHeight,
+  getWorkflowPalettePinnedStyle,
+  workflowWorkbenchOverlayMargin,
+} from "./react/overlay-position";
+export type {
+  WorkflowWorkbenchOverlayPosition,
+  WorkflowWorkbenchPanelBehavior,
+  WorkflowWorkbenchPanelPlacement,
+  WorkflowWorkbenchPanelState,
+} from "./react/overlay-position";
+
 const emptyWorkflowEditorSelection: WorkflowEditorSelectionState = {
   nodeIds: [],
   edgeIds: [],
@@ -127,7 +165,7 @@ const workflowWorkbenchOverlayInteractionSelector =
 const workflowWorkbenchOverlaySelectionPreservationMs = 1500;
 
 const workflowEditorPaletteDragType = "application/x-workflow-editor-node-template";
-const workflowEditorPaletteMargin = 12;
+const workflowEditorPaletteMargin = workflowWorkbenchOverlayMargin;
 const workflowEditorPanActivationDistance = 3;
 const workflowEditorMinZoom = 0.5;
 const workflowEditorMaxZoom = 1.75;
@@ -142,16 +180,6 @@ const workflowNodeToggleGroupControlClassName =
 const workflowNodeToggleItemClassName =
   "h-full min-w-0 flex-1 rounded-none border-0 px-2 text-[11px] font-semibold uppercase text-zinc-700 shadow-none data-[state=on]:bg-zinc-950 data-[state=on]:text-white";
 const workflowJsonPrimitiveNodeControlHeight = 24;
-
-export type WorkflowWorkbenchPaletteItem<TData = Record<string, unknown>> =
-  WorkflowEditorNodeTemplate<TData>;
-
-type WorkflowWorkbenchPaletteCategoryGroup<TData = Record<string, unknown>> = {
-  id: string;
-  label: string;
-  templates: Array<WorkflowWorkbenchPaletteItem<TData>>;
-  children: Array<WorkflowWorkbenchPaletteCategoryGroup<TData>>;
-};
 
 export type WorkflowWorkbenchSelection<
   TNodeData extends Record<string, unknown> = Record<string, unknown>,
@@ -178,6 +206,111 @@ export type WorkflowWorkbenchInspectorContext<
   updateSelectedNodeWorkflowReference: (documentId: string | null) => void;
 };
 
+export type WorkflowWorkbenchController<
+  TNodeData extends Record<string, unknown> = Record<string, unknown>,
+  TEdgeData extends Record<string, unknown> = Record<string, unknown>,
+  TTemplateData = TNodeData,
+> = {
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>;
+  readOnly: boolean;
+  selection: WorkflowEditorSelectionState;
+  selectedEdge?: WorkflowEditorEdge<TEdgeData>;
+  selectedEdges: Array<WorkflowEditorEdge<TEdgeData>>;
+  selectedNode?: WorkflowEditorNode<TNodeData>;
+  selectedNodes: Array<WorkflowEditorNode<TNodeData>>;
+  palette: {
+    groups: Array<WorkflowWorkbenchPaletteCategoryGroup<TTemplateData>>;
+    items: ReadonlyArray<WorkflowWorkbenchPaletteItem<TTemplateData>>;
+    filteredItems: ReadonlyArray<WorkflowWorkbenchPaletteItem<TTemplateData>>;
+    minimized: boolean;
+    placement: WorkflowWorkbenchPanelPlacement;
+    position: WorkflowWorkbenchOverlayPosition;
+    searchValue: string;
+    setMinimized: (minimized: boolean) => void;
+    setPlacement: (placement: WorkflowWorkbenchPanelPlacement) => void;
+    setPosition: (position: WorkflowWorkbenchOverlayPosition) => void;
+    setSearchValue: (value: string) => void;
+  };
+  inspector: {
+    context: WorkflowWorkbenchInspectorContext<TNodeData, TEdgeData>;
+    collapsed: boolean;
+    minimized: boolean;
+    position: WorkflowWorkbenchOverlayPosition;
+    setMinimized: (minimized: boolean) => void;
+    setPosition: (position: WorkflowWorkbenchOverlayPosition) => void;
+  };
+  toolbar: {
+    showGraphStats: boolean;
+    showShortcutHint: boolean;
+  };
+  canvas: {
+    containerRef: RefObject<HTMLDivElement | null>;
+  };
+  overlays: {
+    palette: WorkflowWorkbenchPanelState;
+    inspector: WorkflowWorkbenchPanelState;
+  };
+  configuration: Pick<
+    WorkflowWorkbenchProps<TNodeData, TEdgeData, TTemplateData>,
+    | "documentReferences"
+    | "nodeTemplates"
+    | "onCreateWorkflowReference"
+    | "onOpenWorkflowReference"
+    | "onSelectionChange"
+    | "onSelectionStateChange"
+    | "onViewportChange"
+    | "renderInspector"
+    | "renderNodeTemplate"
+    | "renderToolbarActions"
+    | "typeDefinitions"
+  >;
+  actions: {
+    addTemplateNode: (
+      template: WorkflowWorkbenchPaletteItem<TTemplateData>,
+      position?: WorkflowEditorPoint,
+    ) => void;
+    arrangeAll: () => void;
+    arrangeSelection: () => void;
+    copySelection: () => void;
+    createSelectedNodeWorkflow: () => void;
+    deleteSelection: () => void;
+    duplicateSelection: () => void;
+    openSelectedNodeWorkflow: () => void;
+    pasteSelection: () => Promise<void>;
+    setSelection: (selection: WorkflowEditorSelectionState) => void;
+    updateDocument: (document: WorkflowEditorDocument<TNodeData, TEdgeData>) => void;
+    updateSelectedEdge: (patch: Partial<WorkflowEditorEdge<TEdgeData>>) => void;
+    updateSelectedNode: (patch: Partial<WorkflowEditorNode<TNodeData>>) => void;
+    updateSelectedNodeWorkflowReference: (documentId: string | null) => void;
+  };
+};
+
+export type WorkflowWorkbenchChromeRenderer<
+  TNodeData extends Record<string, unknown> = Record<string, unknown>,
+  TEdgeData extends Record<string, unknown> = Record<string, unknown>,
+  TTemplateData = TNodeData,
+> = (controller: WorkflowWorkbenchController<TNodeData, TEdgeData, TTemplateData>) => ReactNode;
+
+export type WorkflowWorkbenchChrome<
+  TNodeData extends Record<string, unknown> = Record<string, unknown>,
+  TEdgeData extends Record<string, unknown> = Record<string, unknown>,
+  TTemplateData = TNodeData,
+> = {
+  toolbar?:
+    | "default"
+    | "hidden"
+    | WorkflowWorkbenchChromeRenderer<TNodeData, TEdgeData, TTemplateData>;
+  palette?:
+    | "overlay"
+    | "hidden"
+    | WorkflowWorkbenchChromeRenderer<TNodeData, TEdgeData, TTemplateData>;
+  inspector?:
+    | "overlay"
+    | "hidden"
+    | WorkflowWorkbenchChromeRenderer<TNodeData, TEdgeData, TTemplateData>;
+  nodeControls?: "default" | "hidden";
+};
+
 export type WorkflowWorkbenchProps<
   TNodeData extends Record<string, unknown> = Record<string, unknown>,
   TEdgeData extends Record<string, unknown> = Record<string, unknown>,
@@ -193,6 +326,12 @@ export type WorkflowWorkbenchProps<
   typeDefinitions?: readonly WorkflowEditorTypeDefinition[];
   documentReferences?: WorkflowEditorDocumentReferenceOption[];
   className?: string;
+  layout?: "default" | "unstyled";
+  chrome?: WorkflowWorkbenchChrome<TNodeData, TEdgeData, TTemplateData>;
+  overlayBehavior?: {
+    palette?: WorkflowWorkbenchPanelBehavior;
+    inspector?: WorkflowWorkbenchPanelBehavior;
+  };
   showGraphStats?: boolean;
   showShortcutHint?: boolean;
   onDocumentChange?: (document: WorkflowEditorDocument<TNodeData, TEdgeData>) => void;
@@ -220,84 +359,6 @@ export const defaultWorkflowWorkbenchHotkeys = {
   nudgeRight: "ArrowRight",
   nudgeUp: "ArrowUp",
 };
-
-function createWorkflowWorkbenchPaletteCategoryGroups<TData>(
-  templates: ReadonlyArray<WorkflowWorkbenchPaletteItem<TData>>,
-) {
-  const groups: Array<WorkflowWorkbenchPaletteCategoryGroup<TData>> = [];
-
-  for (const template of templates) {
-    const categoryPath = getWorkflowWorkbenchPaletteCategoryPath(template);
-    let level = groups;
-
-    categoryPath.forEach((label, index) => {
-      const id = categoryPath.slice(0, index + 1).join("\u001f");
-      let group = level.find((candidate) => candidate.id === id);
-
-      if (!group) {
-        group = { id, label, templates: [], children: [] };
-        level.push(group);
-      }
-
-      if (index === categoryPath.length - 1) {
-        group.templates.push(template);
-      } else {
-        level = group.children;
-      }
-    });
-  }
-
-  return groups;
-}
-
-function getWorkflowWorkbenchPaletteCategoryPath<TData>(
-  template: WorkflowWorkbenchPaletteItem<TData>,
-) {
-  const categoryPath = Array.isArray(template.categoryPath)
-    ? template.categoryPath.flatMap((part) => {
-        if (typeof part !== "string") {
-          return [];
-        }
-
-        const segment = part.trim();
-        return segment ? [segment] : [];
-      })
-    : undefined;
-
-  if (categoryPath && categoryPath.length > 0) {
-    return categoryPath;
-  }
-
-  const category = template.category?.trim();
-  if (!category) {
-    return ["Uncategorized"];
-  }
-
-  const categorySegments = category
-    .split(/[/>]/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-
-  return categorySegments.length > 0 ? categorySegments : [category];
-}
-
-function getWorkflowWorkbenchPaletteTemplateSearchText<TData>(
-  template: WorkflowWorkbenchPaletteItem<TData>,
-) {
-  const searchableValues = [
-    template.id,
-    template.label,
-    template.description,
-    template.kind,
-    template.category,
-    ...getWorkflowWorkbenchPaletteCategoryPath(template),
-  ];
-
-  return searchableValues
-    .flatMap((value) => (typeof value === "string" ? [value] : []))
-    .join("\n")
-    .toLowerCase();
-}
 
 type WorkflowWorkbenchConnectionCoordinates = Pick<
   WorkflowEditorConnectionInput,
@@ -336,6 +397,9 @@ export function WorkflowWorkbench<
   typeDefinitions,
   documentReferences,
   className,
+  layout = "default",
+  chrome,
+  overlayBehavior,
   showGraphStats = true,
   showShortcutHint = true,
   onDocumentChange,
@@ -372,7 +436,9 @@ export function WorkflowWorkbench<
   const [narrowOverlayLayout, setNarrowOverlayLayout] = useState(false);
   const [marquee, setMarquee] = useState<WorkflowSelectionMarquee | null>(null);
   const [paletteMinimized, setPaletteMinimized] = useState(false);
-  const [paletteCorner, setPaletteCorner] = useState<WorkflowPaletteCorner>("top-left");
+  const [paletteCorner, setPaletteCorner] = useState<WorkflowPaletteCorner>(
+    overlayBehavior?.palette?.defaultPlacement ?? "top-left",
+  );
   const [paletteDragging, setPaletteDragging] = useState(false);
   const [palettePosition, setPalettePosition] = useState<WorkflowOverlayPosition>(null);
   const [paletteSearchValue, setPaletteSearchValue] = useState("");
@@ -380,6 +446,25 @@ export function WorkflowWorkbench<
   const [objectConstructorExpressionDrafts, setObjectConstructorExpressionDrafts] = useState<
     Record<string, string>
   >({});
+  const palettePanelBehavior = overlayBehavior?.palette;
+  const inspectorPanelBehavior = overlayBehavior?.inspector;
+  const effectivePaletteMinimized =
+    palettePanelBehavior?.controlledState?.minimized ?? paletteMinimized;
+  const effectivePaletteCorner =
+    palettePanelBehavior?.controlledState?.placement ??
+    paletteCorner ??
+    palettePanelBehavior?.defaultPlacement ??
+    "top-left";
+  const effectivePalettePosition =
+    palettePanelBehavior?.controlledState?.position === undefined
+      ? palettePosition
+      : palettePanelBehavior.controlledState.position;
+  const effectiveInspectorMinimized =
+    inspectorPanelBehavior?.controlledState?.minimized ?? inspectorMinimized;
+  const effectiveInspectorPosition =
+    inspectorPanelBehavior?.controlledState?.position === undefined
+      ? inspectorPosition
+      : inspectorPanelBehavior.controlledState.position;
   const documentContext = useMemo(() => createWorkflowEditorDocumentContext(document), [document]);
   const externalSelectionProvided =
     selectedNodeIds !== undefined ||
@@ -443,7 +528,7 @@ export function WorkflowWorkbench<
   const selectedEdge = primarySelectedEdgeId
     ? documentContext.edgeById.get(primarySelectedEdgeId)
     : undefined;
-  const inspectorCollapsed = inspectorMinimized || (!selectedNode && !selectedEdge);
+  const inspectorCollapsed = effectiveInspectorMinimized || (!selectedNode && !selectedEdge);
   const selectedNodes = selection.nodeIds.flatMap((id) => {
     const node = documentContext.nodeById.get(id);
     return node ? [node] : [];
@@ -461,17 +546,10 @@ export function WorkflowWorkbench<
     () => toUiWorkflowBuilderEdges(document.edges, document.nodes),
     [document.edges, document.nodes],
   );
-  const filteredNodeTemplates = useMemo(() => {
-    const query = paletteSearchValue.trim().toLowerCase();
-
-    if (!query) {
-      return nodeTemplates;
-    }
-
-    return nodeTemplates.filter((template) =>
-      getWorkflowWorkbenchPaletteTemplateSearchText(template).includes(query),
-    );
-  }, [nodeTemplates, paletteSearchValue]);
+  const filteredNodeTemplates = useMemo(
+    () => filterWorkflowWorkbenchPaletteTemplates(nodeTemplates, paletteSearchValue),
+    [nodeTemplates, paletteSearchValue],
+  );
   const paletteGroups = useMemo(
     () => createWorkflowWorkbenchPaletteCategoryGroups(filteredNodeTemplates),
     [filteredNodeTemplates],
@@ -1456,6 +1534,11 @@ export function WorkflowWorkbench<
   const pinPaletteToCorner = (corner: WorkflowPaletteCorner) => {
     setPaletteCorner(corner);
     setPalettePosition(null);
+    palettePanelBehavior?.onStateChange?.({
+      minimized: effectivePaletteMinimized,
+      placement: corner,
+      position: null,
+    });
   };
 
   const startOverlayDrag = (
@@ -1640,21 +1723,143 @@ export function WorkflowWorkbench<
     </section>
   );
 
-  const paletteOverlayPosition: CSSProperties = palettePosition
+  const setPaletteMinimizedState = (minimized: boolean) => {
+    setPaletteMinimized(minimized);
+    palettePanelBehavior?.onStateChange?.({
+      minimized,
+      placement: effectivePaletteCorner,
+      position: effectivePalettePosition,
+    });
+  };
+
+  const setPalettePositionState = (position: WorkflowOverlayPosition) => {
+    setPalettePosition(position);
+    palettePanelBehavior?.onStateChange?.({
+      minimized: effectivePaletteMinimized,
+      placement: effectivePaletteCorner,
+      position,
+    });
+  };
+
+  const setPalettePlacementState = (placement: WorkflowWorkbenchPanelPlacement) => {
+    setPaletteCorner(placement);
+    setPalettePosition(null);
+    palettePanelBehavior?.onStateChange?.({
+      minimized: effectivePaletteMinimized,
+      placement,
+      position: null,
+    });
+  };
+
+  const setInspectorMinimizedState = (minimized: boolean) => {
+    setInspectorMinimized(minimized);
+    inspectorPanelBehavior?.onStateChange?.({
+      minimized,
+      position: effectiveInspectorPosition,
+    });
+  };
+
+  const setInspectorPositionState = (position: WorkflowOverlayPosition) => {
+    setInspectorPosition(position);
+    inspectorPanelBehavior?.onStateChange?.({
+      minimized: effectiveInspectorMinimized,
+      position,
+    });
+  };
+
+  const workbenchController = {
+    document,
+    readOnly,
+    selection,
+    selectedEdge,
+    selectedEdges,
+    selectedNode,
+    selectedNodes,
+    palette: {
+      groups: paletteGroups,
+      items: nodeTemplates,
+      filteredItems: filteredNodeTemplates,
+      minimized: effectivePaletteMinimized,
+      placement: effectivePaletteCorner,
+      position: effectivePalettePosition,
+      searchValue: paletteSearchValue,
+      setMinimized: setPaletteMinimizedState,
+      setPlacement: setPalettePlacementState,
+      setPosition: setPalettePositionState,
+      setSearchValue: setPaletteSearchValue,
+    },
+    inspector: {
+      context: inspectorContext,
+      collapsed: inspectorCollapsed,
+      minimized: effectiveInspectorMinimized,
+      position: effectiveInspectorPosition,
+      setMinimized: setInspectorMinimizedState,
+      setPosition: setInspectorPositionState,
+    },
+    toolbar: {
+      showGraphStats,
+      showShortcutHint,
+    },
+    canvas: {
+      containerRef,
+    },
+    overlays: {
+      palette: {
+        minimized: effectivePaletteMinimized,
+        placement: effectivePaletteCorner,
+        position: effectivePalettePosition,
+      },
+      inspector: {
+        minimized: effectiveInspectorMinimized,
+        position: effectiveInspectorPosition,
+      },
+    },
+    configuration: {
+      documentReferences,
+      nodeTemplates,
+      onCreateWorkflowReference,
+      onOpenWorkflowReference,
+      onSelectionChange,
+      onSelectionStateChange,
+      onViewportChange,
+      renderInspector,
+      renderNodeTemplate,
+      renderToolbarActions,
+      typeDefinitions,
+    },
+    actions: {
+      addTemplateNode,
+      arrangeAll,
+      arrangeSelection,
+      copySelection,
+      createSelectedNodeWorkflow,
+      deleteSelection,
+      duplicateSelection,
+      openSelectedNodeWorkflow,
+      pasteSelection,
+      setSelection: emitSelectionState,
+      updateDocument,
+      updateSelectedEdge,
+      updateSelectedNode,
+      updateSelectedNodeWorkflowReference,
+    },
+  } satisfies WorkflowWorkbenchController<TNodeData, TEdgeData, TTemplateData>;
+
+  const paletteOverlayPosition: CSSProperties = effectivePalettePosition
     ? {
-        left: palettePosition.x,
-        maxHeight: getWorkflowOverlayMaxHeight(palettePosition.y),
-        top: palettePosition.y,
+        left: effectivePalettePosition.x,
+        maxHeight: getWorkflowOverlayMaxHeight(effectivePalettePosition.y),
+        top: effectivePalettePosition.y,
       }
     : {
-        ...getWorkflowPalettePinnedStyle(paletteCorner),
+        ...getWorkflowPalettePinnedStyle(effectivePaletteCorner),
         maxHeight: `calc(100% - ${workflowEditorPaletteMargin * 2}px)`,
       };
-  const inspectorOverlayPosition: CSSProperties = inspectorPosition
+  const inspectorOverlayPosition: CSSProperties = effectiveInspectorPosition
     ? {
-        left: inspectorPosition.x,
-        maxHeight: getWorkflowOverlayMaxHeight(inspectorPosition.y),
-        top: inspectorPosition.y,
+        left: effectiveInspectorPosition.x,
+        maxHeight: getWorkflowOverlayMaxHeight(effectiveInspectorPosition.y),
+        top: effectiveInspectorPosition.y,
       }
     : { maxHeight: "calc(100% - 4.75rem)", right: "0.75rem", top: "4rem" };
 
@@ -1662,134 +1867,140 @@ export function WorkflowWorkbench<
     <div
       data-slot="workbench-layout"
       className={cn(
-        "grid min-h-[38rem] min-w-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-md border border-border bg-background text-foreground",
+        layout === "unstyled"
+          ? "min-h-0 min-w-0 text-foreground"
+          : "grid min-h-[38rem] min-w-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-md border border-border bg-background text-foreground",
         className,
       )}
     >
-      <div
-        data-slot="workbench-toolbar"
-        className="flex min-h-0 min-w-0 flex-nowrap items-center gap-1 overflow-x-auto border-b border-border bg-card/75 px-2 py-0"
-      >
-        <div className="flex min-w-0 flex-1 items-center justify-between gap-1">
-          <div className="flex min-w-max items-center gap-1.5 whitespace-nowrap">
-            {showGraphStats ? (
-              <>
-                <Badge variant="outline">{document.nodes.length} nodes</Badge>
-                <Badge variant="outline">{document.edges.length} edges</Badge>
-              </>
-            ) : null}
-            <Badge variant="outline" data-testid="selection-count">
-              {selection.nodeIds.length + selection.edgeIds.length} selected
-            </Badge>
-            {showGraphStats ? (
-              <Badge variant="secondary">
-                {
-                  graphIndex.getSubgraph({ offset: 0, limit: document.nodes.length }).summary
-                    .edgeCount
-                }{" "}
-                indexed
+      {typeof chrome?.toolbar === "function" ? (
+        chrome.toolbar(workbenchController)
+      ) : chrome?.toolbar === "hidden" || layout === "unstyled" ? null : (
+        <div
+          data-slot="workbench-toolbar"
+          className="flex min-h-0 min-w-0 flex-nowrap items-center gap-1 overflow-x-auto border-b border-border bg-card/75 px-2 py-0"
+        >
+          <div className="flex min-w-0 flex-1 items-center justify-between gap-1">
+            <div className="flex min-w-max items-center gap-1.5 whitespace-nowrap">
+              {showGraphStats ? (
+                <>
+                  <Badge variant="outline">{document.nodes.length} nodes</Badge>
+                  <Badge variant="outline">{document.edges.length} edges</Badge>
+                </>
+              ) : null}
+              <Badge variant="outline" data-testid="selection-count">
+                {selection.nodeIds.length + selection.edgeIds.length} selected
               </Badge>
-            ) : null}
-            {showShortcutHint ? (
-              <span className="hidden text-xs text-muted-foreground sm:inline">
-                Duplicate {formatShortcutLabel(defaultWorkflowWorkbenchHotkeys.duplicateNode)}
-              </span>
-            ) : null}
-          </div>
-          <div className="flex min-w-max items-center gap-1.5 whitespace-nowrap">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="!h-6 !min-h-6 !px-2 !text-xs"
-              disabled={
-                readOnly || (selection.nodeIds.length === 0 && selection.edgeIds.length === 0)
-              }
-              onClick={duplicateSelection}
-            >
-              Duplicate
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="!h-6 !min-h-6 !px-2 !text-xs"
-              disabled={selection.nodeIds.length === 0 && selection.edgeIds.length === 0}
-              onClick={copySelection}
-            >
-              Copy
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="!h-6 !min-h-6 !px-2 !text-xs"
-              disabled={readOnly}
-              onClick={() => void pasteSelection()}
-            >
-              Paste
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="!h-6 !min-h-6 !px-2 !text-xs"
-              disabled={readOnly || selection.nodeIds.length === 0}
-              onClick={arrangeSelection}
-            >
-              Arrange selection
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="!h-6 !min-h-6 !px-2 !text-xs"
-              disabled={readOnly || document.nodes.length === 0}
-              onClick={arrangeAll}
-            >
-              Arrange all
-            </Button>
-            {documentReferences ? (
-              selectedNodeHasWorkflowReference ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="!h-6 !min-h-6 !px-2 !text-xs"
-                  disabled={!selectedNodeWorkflowReferenceValid || !onOpenWorkflowReference}
-                  onClick={openSelectedNodeWorkflow}
-                >
-                  Open workflow
-                </Button>
-              ) : (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="!h-6 !min-h-6 !px-2 !text-xs"
-                  disabled={readOnly || !selectedNode || !onCreateWorkflowReference}
-                  onClick={createSelectedNodeWorkflow}
-                >
-                  Create nested workflow
-                </Button>
-              )
-            ) : null}
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="!h-6 !min-h-6 !px-2 !text-xs"
-              disabled={
-                readOnly || (selection.nodeIds.length === 0 && selection.edgeIds.length === 0)
-              }
-              onClick={deleteSelection}
-            >
-              Delete
-            </Button>
-            {renderToolbarActions?.(inspectorContext)}
+              {showGraphStats ? (
+                <Badge variant="secondary">
+                  {
+                    graphIndex.getSubgraph({ offset: 0, limit: document.nodes.length }).summary
+                      .edgeCount
+                  }{" "}
+                  indexed
+                </Badge>
+              ) : null}
+              {showShortcutHint ? (
+                <span className="hidden text-xs text-muted-foreground sm:inline">
+                  Duplicate {formatShortcutLabel(defaultWorkflowWorkbenchHotkeys.duplicateNode)}
+                </span>
+              ) : null}
+            </div>
+            <div className="flex min-w-max items-center gap-1.5 whitespace-nowrap">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="!h-6 !min-h-6 !px-2 !text-xs"
+                disabled={
+                  readOnly || (selection.nodeIds.length === 0 && selection.edgeIds.length === 0)
+                }
+                onClick={duplicateSelection}
+              >
+                Duplicate
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="!h-6 !min-h-6 !px-2 !text-xs"
+                disabled={selection.nodeIds.length === 0 && selection.edgeIds.length === 0}
+                onClick={copySelection}
+              >
+                Copy
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="!h-6 !min-h-6 !px-2 !text-xs"
+                disabled={readOnly}
+                onClick={() => void pasteSelection()}
+              >
+                Paste
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="!h-6 !min-h-6 !px-2 !text-xs"
+                disabled={readOnly || selection.nodeIds.length === 0}
+                onClick={arrangeSelection}
+              >
+                Arrange selection
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="!h-6 !min-h-6 !px-2 !text-xs"
+                disabled={readOnly || document.nodes.length === 0}
+                onClick={arrangeAll}
+              >
+                Arrange all
+              </Button>
+              {documentReferences ? (
+                selectedNodeHasWorkflowReference ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="!h-6 !min-h-6 !px-2 !text-xs"
+                    disabled={!selectedNodeWorkflowReferenceValid || !onOpenWorkflowReference}
+                    onClick={openSelectedNodeWorkflow}
+                  >
+                    Open workflow
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="!h-6 !min-h-6 !px-2 !text-xs"
+                    disabled={readOnly || !selectedNode || !onCreateWorkflowReference}
+                    onClick={createSelectedNodeWorkflow}
+                  >
+                    Create nested workflow
+                  </Button>
+                )
+              ) : null}
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="!h-6 !min-h-6 !px-2 !text-xs"
+                disabled={
+                  readOnly || (selection.nodeIds.length === 0 && selection.edgeIds.length === 0)
+                }
+                onClick={deleteSelection}
+              >
+                Delete
+              </Button>
+              {renderToolbarActions?.(inspectorContext)}
+            </div>
           </div>
         </div>
-      </div>
+      )}
       <main
         data-slot="workbench-canvas"
         className="relative grid min-h-0 overflow-hidden bg-background"
@@ -1930,204 +2141,805 @@ export function WorkflowWorkbench<
                 openSelectedNodeWorkflow();
               }}
             />
-            <WorkflowNodeActionMenus
-              containerRef={containerRef}
-              document={document}
-              readOnly={readOnly}
-              onDeleteNode={deleteNode}
-            />
-            <WorkflowSelectionOverlay
-              document={document}
-              marquee={marquee}
-              primaryNodeId={primarySelectedNodeId}
-              selection={selection}
-            />
-            <WorkflowJsonPrimitiveNodeControls
-              containerRef={containerRef}
-              document={document}
-              readOnly={readOnly}
-              onFocusNode={selectWorkflowJsonPrimitiveNode}
-              onValueChange={updateWorkflowJsonPrimitiveNodeValue}
-            />
-            <WorkflowNodeRenameControls
-              containerRef={containerRef}
-              document={document}
-              nodeId={renamingNodeId}
-              readOnly={readOnly}
-              onCancel={() => setRenamingNodeId(null)}
-              onCommit={(nodeId, label) => {
-                setRenamingNodeId(null);
-                updateWorkflowNodeLabel(nodeId, label);
-              }}
-            />
-            <WorkflowObjectConstructorNodeControls
-              containerRef={containerRef}
-              document={document}
-              expressionDrafts={objectConstructorExpressionDrafts}
-              readOnly={readOnly}
-              onDraftChange={updateWorkflowObjectConstructorExpressionDraft}
-              onFocusNode={selectWorkflowJsonPrimitiveNode}
-              onValueChange={updateWorkflowObjectConstructorExpressionValue}
-            />
-            <div
-              data-slot="workflow-palette-overlay"
-              ref={paletteRef}
-              onClickCapture={preserveOverlaySelection}
-              onFocusCapture={preserveOverlaySelection}
-              onMouseDownCapture={preserveOverlaySelection}
-              onPointerDownCapture={preserveOverlaySelection}
-              className={cn(
-                "absolute z-[20000] flex max-h-[calc(100%-1.5rem)] max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-md border border-border/70 bg-card/95 text-sm shadow-md supports-backdrop-filter:backdrop-blur-xl",
-                paletteMinimized ? "w-44 p-2" : "w-96 p-3",
-              )}
-              style={paletteOverlayPosition}
-            >
-              <div className="flex min-h-0 flex-col gap-3">
-                <div
-                  data-slot="workflow-palette-header"
-                  className={cn(
-                    "flex flex-none touch-none select-none items-center justify-between gap-3 rounded-sm",
-                    paletteDragging ? "cursor-grabbing" : "cursor-grab",
+            {chrome?.nodeControls === "hidden" ? null : (
+              <>
+                <WorkflowNodeActionMenus
+                  containerRef={containerRef}
+                  document={document}
+                  readOnly={readOnly}
+                  onDeleteNode={deleteNode}
+                />
+                <WorkflowSelectionOverlay
+                  document={document}
+                  marquee={marquee}
+                  primaryNodeId={primarySelectedNodeId}
+                  selection={selection}
+                />
+                <WorkflowJsonPrimitiveNodeControls
+                  containerRef={containerRef}
+                  document={document}
+                  readOnly={readOnly}
+                  onFocusNode={selectWorkflowJsonPrimitiveNode}
+                  onValueChange={updateWorkflowJsonPrimitiveNodeValue}
+                />
+                <WorkflowNodeRenameControls
+                  containerRef={containerRef}
+                  document={document}
+                  nodeId={renamingNodeId}
+                  readOnly={readOnly}
+                  onCancel={() => setRenamingNodeId(null)}
+                  onCommit={(nodeId, label) => {
+                    setRenamingNodeId(null);
+                    updateWorkflowNodeLabel(nodeId, label);
+                  }}
+                />
+                <WorkflowObjectConstructorNodeControls
+                  containerRef={containerRef}
+                  document={document}
+                  expressionDrafts={objectConstructorExpressionDrafts}
+                  readOnly={readOnly}
+                  onDraftChange={updateWorkflowObjectConstructorExpressionDraft}
+                  onFocusNode={selectWorkflowJsonPrimitiveNode}
+                  onValueChange={updateWorkflowObjectConstructorExpressionValue}
+                />
+              </>
+            )}
+            {typeof chrome?.palette === "function" ? (
+              chrome.palette(workbenchController)
+            ) : chrome?.palette === "hidden" ? null : (
+              <div
+                data-slot="workflow-palette-overlay"
+                ref={paletteRef}
+                onClickCapture={preserveOverlaySelection}
+                onFocusCapture={preserveOverlaySelection}
+                onMouseDownCapture={preserveOverlaySelection}
+                onPointerDownCapture={preserveOverlaySelection}
+                className={cn(
+                  "absolute z-[20000] flex max-h-[calc(100%-1.5rem)] max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-md border border-border/70 bg-card/95 text-sm shadow-md supports-backdrop-filter:backdrop-blur-xl",
+                  effectivePaletteMinimized ? "w-44 p-2" : "w-96 p-3",
+                )}
+                style={paletteOverlayPosition}
+              >
+                <div className="flex min-h-0 flex-col gap-3">
+                  <div
+                    data-slot="workflow-palette-header"
+                    className={cn(
+                      "flex flex-none touch-none select-none items-center justify-between gap-3 rounded-sm",
+                      paletteDragging ? "cursor-grabbing" : "cursor-grab",
+                    )}
+                    onPointerCancel={completePaletteDrag}
+                    onPointerDown={startPaletteDrag}
+                    onPointerMove={updatePaletteDrag}
+                    onPointerUp={completePaletteDrag}
+                  >
+                    <div className="min-w-0 truncate text-sm font-medium">Node palette</div>
+                    <div className="flex items-center gap-2">
+                      <DropdownMenu modal={false}>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            type="button"
+                            size="icon-sm"
+                            variant="ghost"
+                            aria-label="Pin node palette"
+                          >
+                            <PinIcon className="size-3.5" aria-hidden="true" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="z-[20010] w-40">
+                          <DropdownMenuLabel>Pin to corner</DropdownMenuLabel>
+                          <DropdownMenuItem onSelect={() => pinPaletteToCorner("top-left")}>
+                            Top left
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => pinPaletteToCorner("top-right")}>
+                            Top right
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => pinPaletteToCorner("bottom-left")}>
+                            Bottom left
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => pinPaletteToCorner("bottom-right")}>
+                            Bottom right
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="ghost"
+                        aria-label={
+                          effectivePaletteMinimized
+                            ? "Expand node palette"
+                            : "Minimize node palette"
+                        }
+                        aria-pressed={effectivePaletteMinimized}
+                        onClick={() => setPaletteMinimizedState(!effectivePaletteMinimized)}
+                      >
+                        {effectivePaletteMinimized ? (
+                          <Maximize2Icon className="size-3.5" aria-hidden="true" />
+                        ) : (
+                          <Minimize2Icon className="size-3.5" aria-hidden="true" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                  {effectivePaletteMinimized ? null : (
+                    <>
+                      <SearchField
+                        value={paletteSearchValue}
+                        onValueChange={setPaletteSearchValue}
+                        placeholder="Search nodes"
+                        clearLabel="Clear node search"
+                        inputProps={{ "aria-label": "Search node palette" }}
+                      />
+                      <div className="min-h-0 overflow-y-auto pr-1">
+                        {filteredNodeTemplates.length > 0 ? (
+                          <div className="grid gap-3">
+                            {paletteGroups.map((group) => renderPaletteCategoryGroup(group))}
+                          </div>
+                        ) : nodeTemplates.length > 0 ? (
+                          <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+                            No matching node templates
+                          </div>
+                        ) : (
+                          <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+                            No node templates
+                          </div>
+                        )}
+                      </div>
+                    </>
                   )}
-                  onPointerCancel={completePaletteDrag}
-                  onPointerDown={startPaletteDrag}
-                  onPointerMove={updatePaletteDrag}
-                  onPointerUp={completePaletteDrag}
-                >
-                  <div className="min-w-0 truncate text-sm font-medium">Node palette</div>
-                  <div className="flex items-center gap-2">
-                    <DropdownMenu modal={false}>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          type="button"
-                          size="icon-sm"
-                          variant="ghost"
-                          aria-label="Pin node palette"
-                        >
-                          <PinIcon className="size-3.5" aria-hidden="true" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="z-[20010] w-40">
-                        <DropdownMenuLabel>Pin to corner</DropdownMenuLabel>
-                        <DropdownMenuItem onSelect={() => pinPaletteToCorner("top-left")}>
-                          Top left
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onSelect={() => pinPaletteToCorner("top-right")}>
-                          Top right
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onSelect={() => pinPaletteToCorner("bottom-left")}>
-                          Bottom left
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onSelect={() => pinPaletteToCorner("bottom-right")}>
-                          Bottom right
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                </div>
+              </div>
+            )}
+            {typeof chrome?.inspector === "function" ? (
+              chrome.inspector(workbenchController)
+            ) : chrome?.inspector === "hidden" ? null : (
+              <div
+                data-slot="workflow-inspector-overlay"
+                ref={inspectorRef}
+                onClickCapture={preserveOverlaySelection}
+                onFocusCapture={preserveOverlaySelection}
+                onMouseDownCapture={preserveOverlaySelection}
+                onPointerDownCapture={preserveOverlaySelection}
+                className={cn(
+                  "absolute z-[20000] flex max-h-[calc(100%-1.5rem)] max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-md border border-border/70 bg-card/95 text-sm shadow-md supports-backdrop-filter:backdrop-blur-xl",
+                  inspectorCollapsed ? "w-44 p-2" : "w-[min(20rem,calc(100%-1.5rem))] p-3",
+                )}
+                style={inspectorOverlayPosition}
+              >
+                <div className="flex min-h-0 flex-col gap-3">
+                  <div
+                    data-slot="workflow-inspector-header"
+                    className={cn(
+                      "flex flex-none touch-none select-none items-center justify-between gap-3 rounded-sm",
+                      inspectorDragging ? "cursor-grabbing" : "cursor-grab",
+                    )}
+                    onPointerCancel={completeInspectorDrag}
+                    onPointerDown={startInspectorDrag}
+                    onPointerMove={updateInspectorDrag}
+                    onPointerUp={completeInspectorDrag}
+                  >
+                    <div className="min-w-0 truncate text-sm font-medium">Info</div>
                     <Button
                       type="button"
                       size="icon-sm"
                       variant="ghost"
-                      aria-label={
-                        paletteMinimized ? "Expand node palette" : "Minimize node palette"
-                      }
-                      aria-pressed={paletteMinimized}
-                      onClick={() => setPaletteMinimized((current) => !current)}
+                      aria-label={inspectorCollapsed ? "Expand info panel" : "Minimize info panel"}
+                      aria-pressed={effectiveInspectorMinimized}
+                      disabled={!selectedNode && !selectedEdge}
+                      onClick={() => setInspectorMinimizedState(!effectiveInspectorMinimized)}
                     >
-                      {paletteMinimized ? (
+                      {inspectorCollapsed ? (
                         <Maximize2Icon className="size-3.5" aria-hidden="true" />
                       ) : (
                         <Minimize2Icon className="size-3.5" aria-hidden="true" />
                       )}
                     </Button>
                   </div>
-                </div>
-                {paletteMinimized ? null : (
-                  <>
-                    <SearchField
-                      value={paletteSearchValue}
-                      onValueChange={setPaletteSearchValue}
-                      placeholder="Search nodes"
-                      clearLabel="Clear node search"
-                      inputProps={{ "aria-label": "Search node palette" }}
-                    />
-                    <div className="min-h-0 overflow-y-auto pr-1">
-                      {filteredNodeTemplates.length > 0 ? (
-                        <div className="grid gap-3">
-                          {paletteGroups.map((group) => renderPaletteCategoryGroup(group))}
-                        </div>
-                      ) : nodeTemplates.length > 0 ? (
-                        <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
-                          No matching node templates
-                        </div>
+                  {inspectorCollapsed ? null : (
+                    <div className="min-h-0 overflow-y-auto">
+                      {renderInspector ? (
+                        renderInspector(inspectorContext)
                       ) : (
-                        <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
-                          No node templates
-                        </div>
+                        <DefaultWorkflowInspector context={inspectorContext} />
                       )}
                     </div>
-                  </>
-                )}
-              </div>
-            </div>
-            <div
-              data-slot="workflow-inspector-overlay"
-              ref={inspectorRef}
-              onClickCapture={preserveOverlaySelection}
-              onFocusCapture={preserveOverlaySelection}
-              onMouseDownCapture={preserveOverlaySelection}
-              onPointerDownCapture={preserveOverlaySelection}
-              className={cn(
-                "absolute z-[20000] flex max-h-[calc(100%-1.5rem)] max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-md border border-border/70 bg-card/95 text-sm shadow-md supports-backdrop-filter:backdrop-blur-xl",
-                inspectorCollapsed ? "w-44 p-2" : "w-[min(20rem,calc(100%-1.5rem))] p-3",
-              )}
-              style={inspectorOverlayPosition}
-            >
-              <div className="flex min-h-0 flex-col gap-3">
-                <div
-                  data-slot="workflow-inspector-header"
-                  className={cn(
-                    "flex flex-none touch-none select-none items-center justify-between gap-3 rounded-sm",
-                    inspectorDragging ? "cursor-grabbing" : "cursor-grab",
                   )}
-                  onPointerCancel={completeInspectorDrag}
-                  onPointerDown={startInspectorDrag}
-                  onPointerMove={updateInspectorDrag}
-                  onPointerUp={completeInspectorDrag}
-                >
-                  <div className="min-w-0 truncate text-sm font-medium">Info</div>
-                  <Button
-                    type="button"
-                    size="icon-sm"
-                    variant="ghost"
-                    aria-label={inspectorCollapsed ? "Expand info panel" : "Minimize info panel"}
-                    aria-pressed={inspectorMinimized}
-                    disabled={!selectedNode && !selectedEdge}
-                    onClick={() => setInspectorMinimized((current) => !current)}
-                  >
-                    {inspectorCollapsed ? (
-                      <Maximize2Icon className="size-3.5" aria-hidden="true" />
-                    ) : (
-                      <Minimize2Icon className="size-3.5" aria-hidden="true" />
-                    )}
-                  </Button>
                 </div>
-                {inspectorCollapsed ? null : (
-                  <div className="min-h-0 overflow-y-auto">
-                    {renderInspector ? (
-                      renderInspector(inspectorContext)
-                    ) : (
-                      <DefaultWorkflowInspector context={inspectorContext} />
-                    )}
-                  </div>
-                )}
               </div>
-            </div>
+            )}
           </div>
         </div>
       </main>
     </div>
   );
 }
+
+export type WorkflowWorkbenchControllerProps<
+  TNodeData extends Record<string, unknown> = Record<string, unknown>,
+  TEdgeData extends Record<string, unknown> = Record<string, unknown>,
+  TTemplateData = TNodeData,
+> = WorkflowWorkbenchProps<TNodeData, TEdgeData, TTemplateData>;
+
+export function useWorkflowWorkbenchController<
+  TNodeData extends Record<string, unknown> = Record<string, unknown>,
+  TEdgeData extends Record<string, unknown> = Record<string, unknown>,
+  TTemplateData = TNodeData,
+>({
+  document,
+  selectedNodeId,
+  selectedEdgeId,
+  selectedNodeIds,
+  selectedEdgeIds,
+  readOnly = false,
+  nodeTemplates = defaultWorkflowEditorNodeTemplates as ReadonlyArray<
+    WorkflowWorkbenchPaletteItem<TTemplateData>
+  >,
+  typeDefinitions,
+  documentReferences,
+  showGraphStats = true,
+  showShortcutHint = true,
+  onDocumentChange,
+  onSelectionChange,
+  onSelectionStateChange,
+  onViewportChange,
+  onOpenWorkflowReference,
+  onCreateWorkflowReference,
+  renderNodeTemplate,
+  renderInspector,
+  renderToolbarActions,
+}: WorkflowWorkbenchControllerProps<TNodeData, TEdgeData, TTemplateData>) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [internalSelection, setInternalSelection] = useState<WorkflowEditorSelectionState>(
+    emptyWorkflowEditorSelection,
+  );
+  const [paletteSearchValue, setPaletteSearchValue] = useState("");
+  const [paletteMinimized, setPaletteMinimized] = useState(false);
+  const [palettePlacement, setPalettePlacement] =
+    useState<WorkflowWorkbenchPanelPlacement>("top-left");
+  const [palettePosition, setPalettePosition] = useState<WorkflowWorkbenchOverlayPosition>(null);
+  const [inspectorMinimized, setInspectorMinimized] = useState(false);
+  const [inspectorPosition, setInspectorPosition] =
+    useState<WorkflowWorkbenchOverlayPosition>(null);
+  const externalSelectionProvided =
+    selectedNodeIds !== undefined ||
+    selectedEdgeIds !== undefined ||
+    selectedNodeId !== undefined ||
+    selectedEdgeId !== undefined;
+  const rawSelection = useMemo<WorkflowEditorSelectionState>(() => {
+    if (selectedNodeIds !== undefined || selectedEdgeIds !== undefined) {
+      const nodeIds = [...(selectedNodeIds ?? [])];
+      const edgeIds = [...(selectedEdgeIds ?? [])];
+      const primary =
+        nodeIds.length > 0
+          ? ({ type: "node", id: nodeIds.at(-1)! } as const)
+          : edgeIds.length > 0
+            ? ({ type: "edge", id: edgeIds.at(-1)! } as const)
+            : undefined;
+
+      return { nodeIds, edgeIds, ...(primary ? { primary } : {}) };
+    }
+
+    if (selectedNodeId) {
+      return {
+        nodeIds: [selectedNodeId],
+        edgeIds: [],
+        primary: { type: "node", id: selectedNodeId },
+      };
+    }
+
+    if (selectedEdgeId) {
+      return {
+        nodeIds: [],
+        edgeIds: [selectedEdgeId],
+        primary: { type: "edge", id: selectedEdgeId },
+      };
+    }
+
+    return externalSelectionProvided ? emptyWorkflowEditorSelection : internalSelection;
+  }, [
+    externalSelectionProvided,
+    internalSelection,
+    selectedEdgeId,
+    selectedEdgeIds,
+    selectedNodeId,
+    selectedNodeIds,
+  ]);
+  const selection = useMemo(
+    () => normalizeWorkflowEditorSelection(document, rawSelection),
+    [document, rawSelection],
+  );
+  const documentContext = useMemo(() => createWorkflowEditorDocumentContext(document), [document]);
+  const selectedNode =
+    selection.primary?.type === "node"
+      ? documentContext.nodeById.get(selection.primary.id)
+      : selection.nodeIds[0]
+        ? documentContext.nodeById.get(selection.nodeIds[0])
+        : undefined;
+  const selectedEdge =
+    selection.primary?.type === "edge"
+      ? documentContext.edgeById.get(selection.primary.id)
+      : selection.edgeIds[0]
+        ? documentContext.edgeById.get(selection.edgeIds[0])
+        : undefined;
+  const selectedNodes = selection.nodeIds.flatMap((id) => {
+    const node = documentContext.nodeById.get(id);
+    return node ? [node] : [];
+  });
+  const selectedEdges = selection.edgeIds.flatMap((id) => {
+    const edge = documentContext.edgeById.get(id);
+    return edge ? [edge] : [];
+  });
+  const filteredItems = useMemo(
+    () => filterWorkflowWorkbenchPaletteTemplates(nodeTemplates, paletteSearchValue),
+    [nodeTemplates, paletteSearchValue],
+  );
+  const groups = useMemo(
+    () => createWorkflowWorkbenchPaletteCategoryGroups(filteredItems),
+    [filteredItems],
+  );
+
+  const setSelection = (nextSelection: WorkflowEditorSelectionState) => {
+    const normalizedSelection = normalizeWorkflowEditorSelection(document, nextSelection);
+    if (!externalSelectionProvided) {
+      setInternalSelection(normalizedSelection);
+    }
+    onSelectionStateChange?.(normalizedSelection);
+    onSelectionChange?.(selectionStateToSingleSelection(document, normalizedSelection));
+  };
+  const updateDocument = (nextDocument: WorkflowEditorDocument<TNodeData, TEdgeData>) => {
+    if (!readOnly) {
+      onDocumentChange?.(nextDocument);
+    }
+  };
+  const updateSelectedNode = (patch: Partial<WorkflowEditorNode<TNodeData>>) => {
+    if (!readOnly && selectedNode) {
+      onDocumentChange?.(updateWorkflowEditorNode(document, selectedNode.id, patch));
+    }
+  };
+  const updateSelectedEdge = (patch: Partial<WorkflowEditorEdge<TEdgeData>>) => {
+    if (!readOnly && selectedEdge) {
+      onDocumentChange?.({
+        ...document,
+        edges: document.edges.map((edge) =>
+          edge.id === selectedEdge.id ? { ...edge, ...patch, id: edge.id } : edge,
+        ),
+      });
+    }
+  };
+  const addTemplateNode = (
+    template: WorkflowWorkbenchPaletteItem<TTemplateData>,
+    position?: WorkflowEditorPoint,
+  ) => {
+    if (readOnly) {
+      return;
+    }
+    const id = createTemplateNodeId(document.nodes, template.id);
+    const node: WorkflowEditorNode<TNodeData> = {
+      id,
+      label: template.label,
+      description: template.description,
+      kind: template.kind,
+      category: template.category,
+      categoryPath: template.categoryPath ? [...template.categoryPath] : undefined,
+      eyebrow: template.eyebrow,
+      packageLabel: template.packageLabel,
+      status: template.status,
+      tone: template.tone,
+      variant: template.variant,
+      minimized: template.minimized,
+      tags: template.tags,
+      x: position?.x ?? 120 + document.nodes.length * 36,
+      y: position?.y ?? 120 + document.nodes.length * 28,
+      inputs: template.inputs,
+      outputs: template.outputs,
+      data: template.data as TNodeData | undefined,
+      workflowRef: template.workflowRef,
+      composition: template.composition as WorkflowEditorNode<TNodeData>["composition"],
+    };
+    const nextDocument = { ...document, nodes: [...document.nodes, node] };
+    onDocumentChange?.(nextDocument);
+    setSelection({ nodeIds: [id], edgeIds: [], primary: { type: "node", id } });
+  };
+  const deleteSelection = () => {
+    if (!readOnly && (selection.nodeIds.length > 0 || selection.edgeIds.length > 0)) {
+      const nextDocument = removeWorkflowEditorSelection(document, selection);
+      onDocumentChange?.(nextDocument);
+      setSelection(emptyWorkflowEditorSelection);
+    }
+  };
+  const duplicateSelection = () => {
+    if (readOnly || (selection.nodeIds.length === 0 && selection.edgeIds.length === 0)) {
+      return;
+    }
+    const result = duplicateWorkflowEditorSelection(document, selection);
+    onDocumentChange?.(result.document);
+    setSelection({
+      nodeIds: result.nodeIds,
+      edgeIds: result.edgeIds,
+      ...(result.nodeIds[0] ? { primary: { type: "node", id: result.nodeIds[0] } } : {}),
+    });
+  };
+  const copySelection = () => {
+    if (selection.nodeIds.length === 0 && selection.edgeIds.length === 0) {
+      return;
+    }
+    const text = JSON.stringify(copyWorkflowEditorSelection(document, selection));
+    workflowEditorMemoryClipboard = text;
+    void navigator.clipboard?.writeText(text).catch(() => {});
+  };
+  const pasteSelection = async () => {
+    if (readOnly) {
+      return;
+    }
+    let text = workflowEditorMemoryClipboard;
+    if (!text) {
+      try {
+        text = (await navigator.clipboard?.readText?.()) ?? null;
+      } catch {
+        text = null;
+      }
+    }
+    if (!text) {
+      return;
+    }
+    try {
+      const result = pasteWorkflowEditorClipboardPayload(document, JSON.parse(text));
+      onDocumentChange?.(result.document);
+      setSelection({
+        nodeIds: result.nodeIds,
+        edgeIds: result.edgeIds,
+        ...(result.nodeIds[0] ? { primary: { type: "node", id: result.nodeIds[0] } } : {}),
+      });
+    } catch {
+      return;
+    }
+  };
+  const arrangeSelection = () => {
+    if (!readOnly && selection.nodeIds.length > 0) {
+      onDocumentChange?.(
+        layoutWorkflowEditorDocument(document, { nodeIds: selection.nodeIds }).document,
+      );
+    }
+  };
+  const arrangeAll = () => {
+    if (!readOnly && document.nodes.length > 0) {
+      onDocumentChange?.(layoutWorkflowEditorDocument(document).document);
+    }
+  };
+  const updateSelectedNodeWorkflowReference = (documentId: string | null) => {
+    if (!readOnly && selectedNode) {
+      onDocumentChange?.(
+        updateWorkflowEditorNodeWorkflowReference(
+          document,
+          selectedNode.id,
+          documentId ? { documentId } : null,
+        ),
+      );
+    }
+  };
+  const inspectorContext = {
+    document,
+    documentReferences,
+    readOnly,
+    selection,
+    selectedEdges,
+    selectedNodes,
+    selectedEdge,
+    selectedNode,
+    openSelectedNodeWorkflow: selectedNode
+      ? () => selectedNode && onOpenWorkflowReference?.(selectedNode)
+      : undefined,
+    createSelectedNodeWorkflow: selectedNode
+      ? () => selectedNode && onCreateWorkflowReference?.(selectedNode)
+      : undefined,
+    updateDocument,
+    updateSelectedEdge,
+    updateSelectedNode,
+    updateSelectedNodeWorkflowReference,
+  } satisfies WorkflowWorkbenchInspectorContext<TNodeData, TEdgeData>;
+
+  return {
+    document,
+    readOnly,
+    selection,
+    selectedEdge,
+    selectedEdges,
+    selectedNode,
+    selectedNodes,
+    palette: {
+      groups,
+      items: nodeTemplates,
+      filteredItems,
+      minimized: paletteMinimized,
+      placement: palettePlacement,
+      position: palettePosition,
+      searchValue: paletteSearchValue,
+      setMinimized: setPaletteMinimized,
+      setPlacement: setPalettePlacement,
+      setPosition: setPalettePosition,
+      setSearchValue: setPaletteSearchValue,
+    },
+    inspector: {
+      context: inspectorContext,
+      collapsed: inspectorMinimized || (!selectedNode && !selectedEdge),
+      minimized: inspectorMinimized,
+      position: inspectorPosition,
+      setMinimized: setInspectorMinimized,
+      setPosition: setInspectorPosition,
+    },
+    toolbar: { showGraphStats, showShortcutHint },
+    canvas: { containerRef },
+    overlays: {
+      palette: {
+        minimized: paletteMinimized,
+        placement: palettePlacement,
+        position: palettePosition,
+      },
+      inspector: {
+        minimized: inspectorMinimized,
+        position: inspectorPosition,
+      },
+    },
+    configuration: {
+      documentReferences,
+      nodeTemplates,
+      onCreateWorkflowReference,
+      onOpenWorkflowReference,
+      onSelectionChange,
+      onSelectionStateChange,
+      onViewportChange,
+      renderInspector,
+      renderNodeTemplate,
+      renderToolbarActions,
+      typeDefinitions,
+    },
+    actions: {
+      addTemplateNode,
+      arrangeAll,
+      arrangeSelection,
+      copySelection,
+      createSelectedNodeWorkflow: () => selectedNode && onCreateWorkflowReference?.(selectedNode),
+      deleteSelection,
+      duplicateSelection,
+      openSelectedNodeWorkflow: () => selectedNode && onOpenWorkflowReference?.(selectedNode),
+      pasteSelection,
+      setSelection,
+      updateDocument,
+      updateSelectedEdge,
+      updateSelectedNode,
+      updateSelectedNodeWorkflowReference,
+    },
+  } satisfies WorkflowWorkbenchController<TNodeData, TEdgeData, TTemplateData>;
+}
+
+export function WorkflowWorkbenchCanvas<
+  TNodeData extends Record<string, unknown> = Record<string, unknown>,
+  TEdgeData extends Record<string, unknown> = Record<string, unknown>,
+  TTemplateData = TNodeData,
+>({
+  controller,
+  className,
+}: {
+  controller: WorkflowWorkbenchController<TNodeData, TEdgeData, TTemplateData>;
+  className?: string;
+}) {
+  return (
+    <WorkflowWorkbench
+      className={className}
+      document={controller.document}
+      readOnly={controller.readOnly}
+      selectedNodeIds={controller.selection.nodeIds}
+      selectedEdgeIds={controller.selection.edgeIds}
+      nodeTemplates={controller.configuration.nodeTemplates}
+      typeDefinitions={controller.configuration.typeDefinitions}
+      documentReferences={controller.configuration.documentReferences}
+      chrome={{ toolbar: "hidden", palette: "hidden", inspector: "hidden" }}
+      onDocumentChange={controller.actions.updateDocument}
+      onSelectionChange={controller.configuration.onSelectionChange}
+      onSelectionStateChange={controller.actions.setSelection}
+      onViewportChange={controller.configuration.onViewportChange}
+      onOpenWorkflowReference={controller.configuration.onOpenWorkflowReference}
+      onCreateWorkflowReference={controller.configuration.onCreateWorkflowReference}
+      renderNodeTemplate={controller.configuration.renderNodeTemplate}
+      renderInspector={controller.configuration.renderInspector}
+      renderToolbarActions={controller.configuration.renderToolbarActions}
+    />
+  );
+}
+
+export function WorkflowWorkbenchToolbar<
+  TNodeData extends Record<string, unknown> = Record<string, unknown>,
+  TEdgeData extends Record<string, unknown> = Record<string, unknown>,
+  TTemplateData = TNodeData,
+>({
+  controller,
+}: {
+  controller: WorkflowWorkbenchController<TNodeData, TEdgeData, TTemplateData>;
+}) {
+  return (
+    <div data-slot="workbench-toolbar" className="flex flex-wrap items-center gap-2">
+      {controller.toolbar.showGraphStats ? (
+        <>
+          <Badge variant="outline">{controller.document.nodes.length} nodes</Badge>
+          <Badge variant="outline">{controller.document.edges.length} edges</Badge>
+        </>
+      ) : null}
+      <Badge variant="outline">
+        {controller.selection.nodeIds.length + controller.selection.edgeIds.length} selected
+      </Badge>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={controller.readOnly}
+        onClick={controller.actions.duplicateSelection}
+      >
+        Duplicate
+      </Button>
+      <Button type="button" size="sm" variant="outline" onClick={controller.actions.copySelection}>
+        Copy
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={controller.readOnly}
+        onClick={() => void controller.actions.pasteSelection()}
+      >
+        Paste
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={controller.readOnly}
+        onClick={controller.actions.arrangeAll}
+      >
+        Arrange all
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={controller.readOnly}
+        onClick={controller.actions.deleteSelection}
+      >
+        Delete
+      </Button>
+    </div>
+  );
+}
+
+export function WorkflowWorkbenchPalette<
+  TNodeData extends Record<string, unknown> = Record<string, unknown>,
+  TEdgeData extends Record<string, unknown> = Record<string, unknown>,
+  TTemplateData = TNodeData,
+>({
+  controller,
+  mode = "inline",
+}: {
+  controller: WorkflowWorkbenchController<TNodeData, TEdgeData, TTemplateData>;
+  mode?: "inline" | "overlay";
+}) {
+  return (
+    <div
+      data-slot={mode === "overlay" ? "workflow-palette-overlay" : "workflow-palette"}
+      className="grid min-h-0 gap-3 rounded-md border border-border bg-card p-3 text-sm"
+    >
+      <SearchField
+        value={controller.palette.searchValue}
+        onValueChange={controller.palette.setSearchValue}
+        placeholder="Search nodes"
+        clearLabel="Clear node search"
+        inputProps={{ "aria-label": "Search node palette" }}
+      />
+      <div className="grid min-h-0 gap-3 overflow-y-auto">
+        {controller.palette.filteredItems.length > 0 ? (
+          controller.palette.groups.map((group) => (
+            <WorkflowWorkbenchPaletteGroup key={group.id} controller={controller} group={group} />
+          ))
+        ) : (
+          <div className="rounded-md border border-dashed p-3 text-muted-foreground">
+            {controller.palette.items.length > 0
+              ? "No matching node templates"
+              : "No node templates"}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function WorkflowWorkbenchPaletteGroup<
+  TNodeData extends Record<string, unknown>,
+  TEdgeData extends Record<string, unknown>,
+  TTemplateData,
+>({
+  controller,
+  group,
+}: {
+  controller: WorkflowWorkbenchController<TNodeData, TEdgeData, TTemplateData>;
+  group: WorkflowWorkbenchPaletteCategoryGroup<TTemplateData>;
+}) {
+  return (
+    <section className="grid gap-2" aria-label={group.label}>
+      <div className="flex items-center justify-between gap-3 text-[0.68rem] font-semibold uppercase text-muted-foreground">
+        <span>{group.label}</span>
+        {group.templates.length > 0 ? (
+          <Badge variant="secondary">{group.templates.length}</Badge>
+        ) : null}
+      </div>
+      <div className="grid gap-2">
+        {group.templates.map((template) => (
+          <Button
+            key={template.id}
+            type="button"
+            variant="ghost"
+            className="h-auto justify-start border border-border bg-background px-3 py-2 text-left"
+            disabled={controller.readOnly}
+            onClick={() => controller.actions.addTemplateNode(template)}
+          >
+            {template.label}
+          </Button>
+        ))}
+      </div>
+      {group.children.map((child) => (
+        <div key={child.id} className="border-l border-border/60 pl-3">
+          <WorkflowWorkbenchPaletteGroup controller={controller} group={child} />
+        </div>
+      ))}
+    </section>
+  );
+}
+
+export function WorkflowWorkbenchInspector<
+  TNodeData extends Record<string, unknown> = Record<string, unknown>,
+  TEdgeData extends Record<string, unknown> = Record<string, unknown>,
+  TTemplateData = TNodeData,
+>({
+  controller,
+}: {
+  controller: WorkflowWorkbenchController<TNodeData, TEdgeData, TTemplateData>;
+}) {
+  return (
+    <div data-slot="workflow-inspector" className="min-h-0 overflow-y-auto">
+      {controller.configuration.renderInspector ? (
+        controller.configuration.renderInspector(controller.inspector.context)
+      ) : (
+        <DefaultWorkflowInspector context={controller.inspector.context} />
+      )}
+    </div>
+  );
+}
+
+export function WorkflowWorkbenchOverlayPanel({
+  children,
+  className,
+  style,
+}: {
+  children?: ReactNode;
+  className?: string;
+  style?: CSSProperties;
+}) {
+  return (
+    <div
+      data-slot="workflow-overlay-panel"
+      className={cn(
+        "absolute z-[20000] flex max-h-[calc(100%-1.5rem)] max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-md border border-border/70 bg-card/95 text-sm shadow-md supports-backdrop-filter:backdrop-blur-xl",
+        className,
+      )}
+      style={style}
+    >
+      {children}
+    </div>
+  );
+}
+
+export function WorkflowWorkbenchNodeControls() {
+  return null;
+}
+
+export const WorkflowWorkbenchSelectionOverlay = WorkflowSelectionOverlay;
 
 type WorkflowSelectionMarquee = {
   startX: number;
@@ -2144,9 +2956,9 @@ type WorkflowCanvasPanState = {
   panning: boolean;
 };
 
-type WorkflowPaletteCorner = "top-left" | "top-right" | "bottom-left" | "bottom-right";
+type WorkflowPaletteCorner = WorkflowWorkbenchPanelPlacement;
 
-type WorkflowOverlayPosition = { x: number; y: number } | null;
+type WorkflowOverlayPosition = WorkflowWorkbenchOverlayPosition;
 
 type WorkflowOverlayDragState = {
   pointerId: number;
@@ -2158,7 +2970,7 @@ type WorkflowOverlayDragState = {
   height: number;
 };
 
-type WorkflowEditorPoint = {
+export type WorkflowEditorPoint = {
   x: number;
   y: number;
 };
@@ -2180,52 +2992,6 @@ function getWorkflowEditorPointFromClient(
     x: (clientX - rect.left) / zoom,
     y: (clientY - rect.top) / zoom,
   };
-}
-
-function clampWorkflowOverlayPosition(
-  position: NonNullable<WorkflowOverlayPosition>,
-  container: HTMLElement | null,
-  overlay: HTMLElement | null,
-  size?: { width: number; height: number },
-) {
-  const containerRect = container?.getBoundingClientRect();
-  const overlayRect = overlay?.getBoundingClientRect();
-  const width = size?.width ?? overlayRect?.width ?? 0;
-  const height = size?.height ?? overlayRect?.height ?? 0;
-
-  if (!containerRect || width <= 0 || height <= 0) {
-    return position;
-  }
-
-  const minX = workflowEditorPaletteMargin;
-  const minY = workflowEditorPaletteMargin;
-  const maxX = Math.max(minX, containerRect.width - width - workflowEditorPaletteMargin);
-  const maxY = Math.max(minY, containerRect.height - height - workflowEditorPaletteMargin);
-
-  return {
-    x: Math.min(Math.max(position.x, minX), maxX),
-    y: Math.min(Math.max(position.y, minY), maxY),
-  };
-}
-
-function getWorkflowOverlayMaxHeight(top: number) {
-  return `calc(100% - ${Math.max(top, 0) + workflowEditorPaletteMargin}px)`;
-}
-
-function getWorkflowPalettePinnedStyle(corner: WorkflowPaletteCorner): CSSProperties {
-  const offset = "0.75rem";
-
-  switch (corner) {
-    case "top-right":
-      return { right: offset, top: offset };
-    case "bottom-left":
-      return { bottom: offset, left: offset };
-    case "bottom-right":
-      return { bottom: offset, right: offset };
-    case "top-left":
-    default:
-      return { left: offset, top: offset };
-  }
 }
 
 function clampWorkflowEditorZoom(zoom: number) {
@@ -2289,6 +3055,7 @@ function WorkflowWorkbenchNodeLayerStyles<TNodeData extends Record<string, unkno
       if (isWorkflowEditorJsonPrimitiveNode(node)) {
         rules.push(
           `${selector} [data-slot="workflow-node"]:not([data-minimized="true"]) [data-slot="workflow-node-port"][data-port-direction="output"][data-port-id="value"] > div > div > div:first-child { display: none !important; }`,
+          `${selector} [data-slot="workflow-node"]:not([data-minimized="true"]) [data-slot="workflow-node-port"][data-port-direction="output"][data-port-id="value"] > div > span:nth-of-type(2) { display: none !important; }`,
           `${selector} [data-slot="workflow-node"][data-minimized="true"] [data-slot="workflow-node-select"] > div { visibility: hidden; }`,
         );
       }
@@ -3179,7 +3946,7 @@ function getWorkflowNodeActionMenuOffset<TNodeData>(
   };
 }
 
-function WorkflowSelectionOverlay<
+export function WorkflowSelectionOverlay<
   TNodeData extends Record<string, unknown>,
   TEdgeData extends Record<string, unknown>,
 >({
@@ -3295,7 +4062,7 @@ function toUiConnectionInvalidReason(
   return reason;
 }
 
-function DefaultWorkflowInspector<
+export function DefaultWorkflowInspector<
   TNodeData extends Record<string, unknown>,
   TEdgeData extends Record<string, unknown>,
 >({ context }: { context: WorkflowWorkbenchInspectorContext<TNodeData, TEdgeData> }) {

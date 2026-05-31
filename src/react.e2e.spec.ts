@@ -357,7 +357,7 @@ test.describe("WorkflowWorkbench desktop", () => {
     const outputCard = page.getByRole("button", { name: "Start String Value" });
     await expect(
       page.locator(
-        '[data-slot="workflow-builder-node"][data-node-id="json-string"] [data-slot="workflow-node"]:not([data-minimized="true"]) [data-slot="workflow-node-port"][data-port-direction="output"][data-port-id="value"] > div > div > div:first-child',
+        '[data-slot="workflow-builder-node"][data-node-id="json-string"] [data-slot="workflow-node"]:not([data-minimized="true"]) [data-slot="workflow-node-port"][data-port-direction="output"][data-port-id="value"] > div > span:nth-of-type(2)',
       ),
     ).toHaveCSS("display", "none");
     const expandedInputBox = await valueInput.boundingBox();
