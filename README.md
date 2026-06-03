@@ -91,6 +91,8 @@ movable chrome components for custom layouts.
 
 ```tsx
 import {
+  WorkflowEditorOverviewPanel,
+  WorkflowEditorSettingsPanel,
   WorkflowEditorDocumentMenu,
   WorkflowWorkbenchCanvas,
   WorkflowWorkbenchInspector,
@@ -105,13 +107,58 @@ export function CustomWorkflowEditor(props) {
     <div className="grid h-screen grid-cols-[18rem_minmax(0,1fr)_22rem] grid-rows-[auto_1fr]">
       <header className="col-span-3">
         <WorkflowEditorDocumentMenu controller={controller} />
+        <WorkflowEditorSettingsPanel controller={controller} />
       </header>
       <WorkflowWorkbenchPalette controller={controller.workbench} />
       <WorkflowWorkbenchCanvas controller={controller.workbench} />
-      <WorkflowWorkbenchInspector controller={controller.workbench} />
+      <aside className="grid min-h-0 gap-3 overflow-y-auto">
+        <WorkflowWorkbenchInspector controller={controller.workbench} />
+        <WorkflowEditorOverviewPanel controller={controller} />
+      </aside>
     </div>
   );
 }
+```
+
+Settings and catalogs are controlled by the host app. Scalar editor props remain supported; when
+both a scalar prop and `settings.editor` provide the same value, the scalar prop wins.
+
+```tsx
+const [settings, setSettings] = useState({
+  editor: {
+    compactControls: false,
+    enableNestedWorkflows: true,
+    maxNestedWorkflowDepth: 64,
+    maxVersions: 10,
+    readOnly: false,
+    showDocumentPath: true,
+    showDocumentStats: true,
+    showWorkbenchStats: true,
+  },
+  app: { environment: "staging" },
+});
+const [typeDefinitions, setTypeDefinitions] = useState([]);
+const [nodeTemplates, setNodeTemplates] = useState(defaultWorkflowEditorNodeTemplates);
+
+const controller = useWorkflowEditorController({
+  settings,
+  settingsFields: [
+    {
+      key: "environment",
+      label: "Environment",
+      kind: "select",
+      options: [
+        { value: "staging", label: "Staging" },
+        { value: "production", label: "Production" },
+      ],
+    },
+  ],
+  onSettingsChange: setSettings,
+  typeDefinitions,
+  onTypeDefinitionsChange: setTypeDefinitions,
+  nodeTemplates,
+  onNodeTemplatesChange: setNodeTemplates,
+});
 ```
 
 For smaller changes, use slots on the existing components:

@@ -4,6 +4,9 @@ import { getWorkflowNodeSize } from "./react/workflow-node";
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 
 import {
+  WorkflowEditorComposedNodesPanel,
+  WorkflowEditorCurrentNodeTypesPanel,
+  WorkflowEditorCurrentNodesPanel,
   WorkflowWorkbench,
   WorkflowWorkbenchInspector,
   WorkflowWorkbenchPalette,
@@ -96,6 +99,50 @@ function readStatefulDocument() {
 
 function readStatefulSelection() {
   return JSON.parse(screen.getByTestId("stateful-selection-json").textContent ?? "") as
+    | WorkflowEditorSelectionState
+    | never;
+}
+
+function WorkbenchPanelHarness({
+  initialDocument = document,
+  panel,
+}: {
+  initialDocument?: WorkflowEditorDocument;
+  panel: "nodes" | "types" | "composed";
+}) {
+  const [currentDocument, setCurrentDocument] = useState(initialDocument);
+  const [selection, setSelection] = useState<WorkflowEditorSelectionState>({
+    nodeIds: [],
+    edgeIds: [],
+  });
+  const controller = useWorkflowWorkbenchController({
+    document: currentDocument,
+    selectedNodeIds: selection.nodeIds,
+    selectedEdgeIds: selection.edgeIds,
+    selectedGroupIds: selection.groupIds,
+    onDocumentChange: setCurrentDocument,
+    onSelectionStateChange: setSelection,
+  });
+
+  return (
+    <>
+      {panel === "nodes" ? <WorkflowEditorCurrentNodesPanel controller={controller} /> : null}
+      {panel === "types" ? <WorkflowEditorCurrentNodeTypesPanel controller={controller} /> : null}
+      {panel === "composed" ? <WorkflowEditorComposedNodesPanel controller={controller} /> : null}
+      <pre data-testid="panel-document-json">{JSON.stringify(currentDocument)}</pre>
+      <pre data-testid="panel-selection-json">{JSON.stringify(selection)}</pre>
+    </>
+  );
+}
+
+function readPanelDocument() {
+  return JSON.parse(screen.getByTestId("panel-document-json").textContent ?? "") as
+    | WorkflowEditorDocument
+    | never;
+}
+
+function readPanelSelection() {
+  return JSON.parse(screen.getByTestId("panel-selection-json").textContent ?? "") as
     | WorkflowEditorSelectionState
     | never;
 }
@@ -1297,5 +1344,86 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
         nodes: expect.arrayContaining([expect.objectContaining({ id: "decision-2" })]),
       }),
     );
+  });
+
+  test("current nodes panel selects renames duplicates deletes and arranges nodes", () => {
+    render(<WorkbenchPanelHarness panel="nodes" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Input" }));
+    expect(readPanelSelection()).toEqual({
+      nodeIds: ["input"],
+      edgeIds: [],
+      primary: { type: "node", id: "input" },
+    });
+
+    fireEvent.change(screen.getByLabelText("Rename Input"), { target: { value: "Source" } });
+    fireEvent.blur(screen.getByLabelText("Rename Input"));
+    expect(readPanelDocument().nodes.find((node) => node.id === "input")?.label).toBe("Source");
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Duplicate" })[0]!);
+    expect(readPanelDocument().nodes.some((node) => node.id === "input-copy")).toBe(true);
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Arrange selection" })[0]!);
+    expect(readPanelDocument().nodes.find((node) => node.id === "input")).toEqual(
+      expect.objectContaining({ x: 0 }),
+    );
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Delete" })[0]!);
+    expect(readPanelDocument().nodes.some((node) => node.id === "input")).toBe(false);
+  });
+
+  test("current node types panel groups by kind and selects matching nodes", () => {
+    const typedDocument = normalizeWorkflowEditorDocument({
+      ...document,
+      nodes: document.nodes.map((node, index) =>
+        Object.assign({}, node, { kind: index < 2 ? "io" : "terminal" }),
+      ),
+    });
+
+    render(<WorkbenchPanelHarness panel="types" initialDocument={typedDocument} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /io/u }));
+    expect(readPanelSelection().nodeIds).toEqual(["input", "transform"]);
+  });
+
+  test("composed nodes panel manages composed document nodes", () => {
+    const composedDocument = normalizeWorkflowEditorDocument({
+      nodes: [
+        {
+          id: "wrapped",
+          label: "Wrapped",
+          x: 0,
+          y: 0,
+          composition: {
+            nodes: [{ id: "inner", label: "Inner", x: 0, y: 0 }],
+            edges: [],
+            inputBoundaries: [],
+            outputBoundaries: [],
+          },
+        },
+      ],
+      edges: [],
+    });
+
+    render(<WorkbenchPanelHarness panel="composed" initialDocument={composedDocument} />);
+
+    expect(screen.getByRole("button", { name: "Wrapped" })).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Wrapped" }));
+    expect(readPanelSelection().nodeIds).toEqual(["wrapped"]);
+
+    fireEvent.change(screen.getByLabelText("Rename composed node Wrapped"), {
+      target: { value: "Restorable" },
+    });
+    fireEvent.blur(screen.getByLabelText("Rename composed node Wrapped"));
+    expect(readPanelDocument().nodes[0]?.label).toBe("Restorable");
+
+    fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
+    expect(readPanelDocument().nodes.some((node) => node.id === "wrapped-copy")).toBe(true);
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Restore" })[0]!);
+    expect(readPanelDocument().nodes.some((node) => node.id === "inner")).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(readPanelDocument().nodes.some((node) => node.id === "wrapped-copy")).toBe(false);
   });
 });

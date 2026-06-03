@@ -1,13 +1,23 @@
+import { type ReactNode, useState } from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 
 import {
   WorkflowEditor,
+  WorkflowEditorAppSettingsPanel,
+  WorkflowEditorBuiltInSettingsPanel,
   WorkflowEditorDocumentMenu,
+  WorkflowEditorNodeTemplatesPanel,
+  WorkflowEditorTypesPanel,
   createWorkflowEditorEntry,
   createWorkflowEditorLibrary,
+  defaultWorkflowEditorBuiltInSettings,
   normalizeWorkflowEditorDocument,
+  resolveWorkflowEditorSettings,
+  useWorkflowEditorController,
   type WorkflowEditorDocument,
+  type WorkflowEditorSettings,
+  type WorkflowEditorTypeDefinition,
 } from "@moritzbrantner/workflow-editor";
 
 const document: WorkflowEditorDocument = normalizeWorkflowEditorDocument({
@@ -45,6 +55,89 @@ const document: WorkflowEditorDocument = normalizeWorkflowEditorDocument({
     },
   ],
 });
+
+const editorTestStorage = {
+  loadLibrary: vi.fn(async () => null),
+  saveLibrary: vi.fn(async () => {}),
+};
+
+function EditorControllerHarness<
+  TAppSettings extends Record<string, unknown> = Record<string, unknown>,
+>({
+  appSettings,
+  children,
+  nodeTemplates,
+  onNodeTemplatesChange,
+  onSettingsChange,
+  onTypeDefinitionsChange,
+  settingsFields,
+  typeDefinitions,
+}: {
+  appSettings?: TAppSettings;
+  children: (
+    controller: ReturnType<
+      typeof useWorkflowEditorController<
+        Record<string, unknown>,
+        Record<string, unknown>,
+        Record<string, unknown>,
+        TAppSettings
+      >
+    >,
+  ) => ReactNode;
+  nodeTemplates?: Array<{
+    id: string;
+    label: string;
+    inputs?: unknown;
+    outputs?: unknown;
+    data?: unknown;
+  }>;
+  onNodeTemplatesChange?: (templates: readonly any[]) => void;
+  onSettingsChange?: (settings: WorkflowEditorSettings<TAppSettings>) => void;
+  onTypeDefinitionsChange?: (definitions: readonly WorkflowEditorTypeDefinition[]) => void;
+  settingsFields?: Parameters<
+    typeof useWorkflowEditorController<
+      Record<string, unknown>,
+      Record<string, unknown>,
+      Record<string, unknown>,
+      TAppSettings
+    >
+  >[0]["settingsFields"];
+  typeDefinitions?: readonly WorkflowEditorTypeDefinition[];
+}) {
+  const [settings, setSettings] = useState<Partial<WorkflowEditorSettings<TAppSettings>>>({
+    editor: defaultWorkflowEditorBuiltInSettings,
+    ...(appSettings ? { app: appSettings } : {}),
+  });
+  const [types, setTypes] = useState(typeDefinitions ?? []);
+  const [templates, setTemplates] = useState(nodeTemplates ?? []);
+  const controller = useWorkflowEditorController({
+    storage: editorTestStorage,
+    settings,
+    settingsFields,
+    onSettingsChange: onSettingsChange
+      ? (next) => {
+          setSettings(next);
+          onSettingsChange(next);
+        }
+      : undefined,
+    typeDefinitions: types,
+    onTypeDefinitionsChange: onTypeDefinitionsChange
+      ? (next) => {
+          setTypes([...next]);
+          onTypeDefinitionsChange(next);
+        }
+      : undefined,
+    nodeTemplates: templates as any,
+    onNodeTemplatesChange: onNodeTemplatesChange
+      ? (next) => {
+          setTemplates([...next] as any);
+          onNodeTemplatesChange(next);
+        }
+      : undefined,
+  });
+
+  return children(controller);
+}
 
 beforeAll(() => {
   vi.stubGlobal(
@@ -218,5 +311,135 @@ describe("@moritzbrantner/workflow-editor editor shell", () => {
     await waitFor(() => expect(screen.getByTestId("external-document-menu")).not.toBeNull());
     expect(screen.getByRole("button", { name: "New" })).not.toBeNull();
     expect(screen.queryByText("Path")).toBeNull();
+  });
+
+  test("resolves settings while keeping scalar props compatible", () => {
+    expect(
+      resolveWorkflowEditorSettings({
+        readOnly: false,
+        settings: { editor: { ...defaultWorkflowEditorBuiltInSettings, readOnly: true } },
+      }).editor.readOnly,
+    ).toBe(false);
+  });
+
+  test("settings panels update built-in and app settings", async () => {
+    const handleSettingsChange = vi.fn();
+
+    render(
+      <EditorControllerHarness
+        appSettings={{ mode: "basic", audits: false }}
+        settingsFields={[
+          {
+            key: "mode",
+            label: "Mode",
+            kind: "select",
+            options: [
+              { value: "basic", label: "Basic" },
+              { value: "advanced", label: "Advanced" },
+            ],
+          },
+          { key: "audits", label: "Audits", kind: "boolean" },
+        ]}
+        onSettingsChange={handleSettingsChange}
+      >
+        {(controller) => (
+          <>
+            <WorkflowEditorBuiltInSettingsPanel controller={controller} />
+            <WorkflowEditorAppSettingsPanel controller={controller} />
+          </>
+        )}
+      </EditorControllerHarness>,
+    );
+
+    fireEvent.click(screen.getByLabelText("Read only"));
+    expect(handleSettingsChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ editor: expect.objectContaining({ readOnly: true }) }),
+    );
+
+    fireEvent.change(screen.getByLabelText("Mode"), { target: { value: "advanced" } });
+    expect(handleSettingsChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ app: expect.objectContaining({ mode: "advanced" }) }),
+    );
+  });
+
+  test("settings controls are disabled without onSettingsChange", () => {
+    render(
+      <EditorControllerHarness>
+        {(controller) => <WorkflowEditorBuiltInSettingsPanel controller={controller} />}
+      </EditorControllerHarness>,
+    );
+
+    expect(screen.getByLabelText("Read only")).toHaveProperty("disabled", true);
+  });
+
+  test("type definition panel creates updates deletes and blocks duplicate names", () => {
+    const handleTypeDefinitionsChange = vi.fn();
+
+    render(
+      <EditorControllerHarness
+        typeDefinitions={[
+          { name: "User", type: { kind: "object" } },
+          { name: "Account", type: { kind: "object" } },
+        ]}
+        onTypeDefinitionsChange={handleTypeDefinitionsChange}
+      >
+        {(controller) => <WorkflowEditorTypesPanel controller={controller} />}
+      </EditorControllerHarness>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    expect(handleTypeDefinitionsChange).toHaveBeenCalledWith(
+      expect.arrayContaining([expect.objectContaining({ name: "Type" })]),
+    );
+
+    handleTypeDefinitionsChange.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "User" }));
+    fireEvent.change(screen.getByLabelText("Type name"), { target: { value: "Account" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(screen.getByText("Duplicate type name: Account")).not.toBeNull();
+    expect(handleTypeDefinitionsChange).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText("Type name"), { target: { value: "Customer" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(handleTypeDefinitionsChange).toHaveBeenCalledWith(
+      expect.arrayContaining([expect.objectContaining({ name: "Customer" })]),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(handleTypeDefinitionsChange).toHaveBeenCalled();
+  });
+
+  test("node template panel creates updates deletes and reports invalid JSON", () => {
+    const handleNodeTemplatesChange = vi.fn();
+
+    render(
+      <EditorControllerHarness
+        nodeTemplates={[{ id: "input", label: "Input" }]}
+        onNodeTemplatesChange={handleNodeTemplatesChange}
+      >
+        {(controller) => <WorkflowEditorNodeTemplatesPanel controller={controller} />}
+      </EditorControllerHarness>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    expect(handleNodeTemplatesChange).toHaveBeenCalledWith(
+      expect.arrayContaining([expect.objectContaining({ id: "template" })]),
+    );
+
+    handleNodeTemplatesChange.mockClear();
+    fireEvent.change(screen.getByLabelText("Template inputs JSON"), { target: { value: "{" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(screen.getByText(/Invalid JSON in inputs/u)).not.toBeNull();
+    expect(handleNodeTemplatesChange).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText("Template inputs JSON"), { target: { value: "[]" } });
+    fireEvent.change(screen.getByLabelText("Template label"), { target: { value: "Input node" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(handleNodeTemplatesChange).toHaveBeenCalledWith(
+      expect.arrayContaining([expect.objectContaining({ label: "Input node" })]),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(handleNodeTemplatesChange).toHaveBeenCalled();
   });
 });

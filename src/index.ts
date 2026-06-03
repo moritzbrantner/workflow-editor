@@ -134,6 +134,9 @@ export {
 } from "./core";
 export {
   DefaultWorkflowInspector,
+  WorkflowEditorComposedNodesPanel,
+  WorkflowEditorCurrentNodeTypesPanel,
+  WorkflowEditorCurrentNodesPanel,
   WorkflowWorkbench,
   WorkflowWorkbenchCanvas,
   WorkflowWorkbenchInspector,
@@ -159,7 +162,13 @@ export {
 } from "./react";
 export {
   WorkflowEditor,
+  WorkflowEditorAppSettingsPanel,
+  WorkflowEditorBuiltInSettingsPanel,
   WorkflowEditorCompactMenu,
+  WorkflowEditorOverviewPanel,
+  WorkflowEditorNodeTemplatesPanel,
+  WorkflowEditorSettingsPanel,
+  WorkflowEditorTypesPanel,
   WorkflowEditorDefaultLayout,
   WorkflowEditorDocumentControls,
   WorkflowEditorDocumentMenu,
@@ -169,13 +178,21 @@ export {
   WorkflowEditorImportExportControls,
   WorkflowEditorSaveStateBadge,
   WorkflowEditorVersionControls,
+  defaultWorkflowEditorBuiltInSettings,
+  resolveWorkflowEditorSettings,
+  updateWorkflowEditorAppSetting,
+  updateWorkflowEditorBuiltInSetting,
   useWorkflowEditorController,
+  type WorkflowEditorBuiltInSettings,
+  type WorkflowEditorCatalogController,
   type WorkflowEditorChrome,
   type WorkflowEditorChromeRenderer,
   type WorkflowEditorController,
   type WorkflowEditorControllerProps,
   type WorkflowEditorProps,
   type WorkflowEditorSaveState,
+  type WorkflowEditorSettings,
+  type WorkflowEditorSettingsField,
 } from "./editor";
 export {
   canRedoWorkflowEditorHistory,

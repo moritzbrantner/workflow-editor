@@ -11,6 +11,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
   Input,
+  SearchField,
+  Textarea,
   WorkbenchToolbar,
   cn,
 } from "@moritzbrantner/ui";
@@ -52,6 +54,9 @@ import {
 } from "./persistence";
 import {
   WorkflowWorkbench,
+  WorkflowEditorComposedNodesPanel,
+  WorkflowEditorCurrentNodeTypesPanel,
+  WorkflowEditorCurrentNodesPanel,
   defaultWorkflowWorkbenchHotkeys,
   useWorkflowWorkbenchController,
   type WorkflowWorkbenchPaletteItem,
@@ -61,10 +66,12 @@ import {
 } from "./react";
 import { formatShortcutLabel } from "./shortcut-label";
 import {
+  analyzeWorkflowEditorPortTypes,
   defaultWorkflowEditorNodeTemplates,
   normalizeWorkflowEditorSelection,
   updateWorkflowEditorNodeWorkflowReference,
   type WorkflowEditorDocument,
+  type WorkflowEditorNodeTemplate,
   type WorkflowEditorNode,
   type WorkflowEditorSelectionState,
   type WorkflowEditorTypeDefinition,
@@ -76,13 +83,88 @@ export type WorkflowEditorDocumentPathItem = {
 
 export type WorkflowEditorSaveState = "loading" | "dirty" | "saving" | "saved" | "error";
 
+export type WorkflowEditorBuiltInSettings = {
+  compactControls: boolean;
+  enableNestedWorkflows: boolean;
+  maxNestedWorkflowDepth: number;
+  maxVersions: number;
+  readOnly: boolean;
+  showDocumentPath: boolean;
+  showDocumentStats: boolean;
+  showWorkbenchStats: boolean;
+};
+
+export type WorkflowEditorSettings<
+  TAppSettings extends Record<string, unknown> = Record<string, unknown>,
+> = {
+  editor: WorkflowEditorBuiltInSettings;
+  app?: TAppSettings;
+};
+
+export type WorkflowEditorSettingsField<TAppSettings extends Record<string, unknown>> = {
+  key: keyof TAppSettings & string;
+  label: string;
+  description?: string;
+  kind: "boolean" | "number" | "string" | "select";
+  min?: number;
+  max?: number;
+  step?: number;
+  options?: Array<{ value: string; label: string }>;
+};
+
+export const defaultWorkflowEditorBuiltInSettings: WorkflowEditorBuiltInSettings = {
+  compactControls: false,
+  enableNestedWorkflows: true,
+  maxNestedWorkflowDepth: 64,
+  maxVersions: defaultWorkflowEditorMaxVersions,
+  readOnly: false,
+  showDocumentPath: true,
+  showDocumentStats: true,
+  showWorkbenchStats: true,
+};
+
+export type WorkflowEditorCatalogController<
+  TNodeData extends Record<string, unknown> = Record<string, unknown>,
+  _TEdgeData extends Record<string, unknown> = Record<string, unknown>,
+  TTemplateData = TNodeData,
+  TAppSettings extends Record<string, unknown> = Record<string, unknown>,
+> = {
+  settings: WorkflowEditorSettings<TAppSettings>;
+  settingsFields: readonly WorkflowEditorSettingsField<TAppSettings>[];
+  typeDefinitions: readonly WorkflowEditorTypeDefinition[];
+  nodeTemplates: readonly WorkflowEditorNodeTemplate<TTemplateData>[];
+  writable: {
+    settings: boolean;
+    typeDefinitions: boolean;
+    nodeTemplates: boolean;
+  };
+  actions: {
+    updateSettings(next: WorkflowEditorSettings<TAppSettings>): void;
+    updateBuiltInSetting<K extends keyof WorkflowEditorBuiltInSettings>(
+      key: K,
+      value: WorkflowEditorBuiltInSettings[K],
+    ): void;
+    updateAppSetting<K extends keyof TAppSettings & string>(key: K, value: TAppSettings[K]): void;
+    createTypeDefinition(): void;
+    updateTypeDefinition(name: string, next: WorkflowEditorTypeDefinition): void;
+    duplicateTypeDefinition(name: string): void;
+    deleteTypeDefinition(name: string): void;
+    createNodeTemplate(): void;
+    updateNodeTemplate(id: string, next: WorkflowEditorNodeTemplate<TTemplateData>): void;
+    duplicateNodeTemplate(id: string): void;
+    deleteNodeTemplate(id: string): void;
+  };
+};
+
 export type WorkflowEditorController<
   TNodeData extends Record<string, unknown> = Record<string, unknown>,
   TEdgeData extends Record<string, unknown> = Record<string, unknown>,
   TTemplateData = TNodeData,
+  TAppSettings extends Record<string, unknown> = Record<string, unknown>,
 > = {
   activeDocument: WorkflowEditorDocument<TNodeData, TEdgeData>;
   activeEntry: WorkflowEditorLibraryEntry<TNodeData, TEdgeData> | null;
+  catalog: WorkflowEditorCatalogController<TNodeData, TEdgeData, TTemplateData, TAppSettings>;
   documentPath: WorkflowEditorDocumentPathItem[];
   documentPathEntries: Array<{
     documentId: string;
@@ -96,6 +178,7 @@ export type WorkflowEditorController<
   saveState: WorkflowEditorSaveState;
   selectedVersionId: string;
   selection: WorkflowEditorSelectionState;
+  settings: WorkflowEditorSettings<TAppSettings>;
   workbench?: WorkflowWorkbenchController<TNodeData, TEdgeData, TTemplateData>;
   actions: {
     createDocument: () => void;
@@ -123,22 +206,26 @@ export type WorkflowEditorChromeRenderer<
   TNodeData extends Record<string, unknown> = Record<string, unknown>,
   TEdgeData extends Record<string, unknown> = Record<string, unknown>,
   TTemplateData = TNodeData,
-> = (controller: WorkflowEditorController<TNodeData, TEdgeData, TTemplateData>) => ReactNode;
+  TAppSettings extends Record<string, unknown> = Record<string, unknown>,
+> = (
+  controller: WorkflowEditorController<TNodeData, TEdgeData, TTemplateData, TAppSettings>,
+) => ReactNode;
 
 export type WorkflowEditorChrome<
   TNodeData extends Record<string, unknown> = Record<string, unknown>,
   TEdgeData extends Record<string, unknown> = Record<string, unknown>,
   TTemplateData = TNodeData,
+  TAppSettings extends Record<string, unknown> = Record<string, unknown>,
 > = {
   documentControls?:
     | "default"
     | "compact-menu"
     | "hidden"
-    | WorkflowEditorChromeRenderer<TNodeData, TEdgeData, TTemplateData>;
+    | WorkflowEditorChromeRenderer<TNodeData, TEdgeData, TTemplateData, TAppSettings>;
   documentPath?:
     | "default"
     | "hidden"
-    | WorkflowEditorChromeRenderer<TNodeData, TEdgeData, TTemplateData>;
+    | WorkflowEditorChromeRenderer<TNodeData, TEdgeData, TTemplateData, TAppSettings>;
   inspector?: WorkflowWorkbenchProps<TNodeData, TEdgeData, TTemplateData>["chrome"] extends infer C
     ? C extends { inspector?: infer I }
       ? I
@@ -164,24 +251,32 @@ export type WorkflowEditorProps<
   TNodeData extends Record<string, unknown> = Record<string, unknown>,
   TEdgeData extends Record<string, unknown> = Record<string, unknown>,
   TTemplateData = TNodeData,
+  TAppSettings extends Record<string, unknown> = Record<string, unknown>,
 > = {
   storageKey?: string;
   initialLibrary?: WorkflowEditorLibrary<TNodeData, TEdgeData>;
   storage?: WorkflowEditorStorageAdapter<TNodeData, TEdgeData>;
   nodeTemplates?: ReadonlyArray<WorkflowWorkbenchPaletteItem<TTemplateData>>;
+  onNodeTemplatesChange?: (
+    templates: ReadonlyArray<WorkflowEditorNodeTemplate<TTemplateData>>,
+  ) => void;
   readOnly?: boolean;
   className?: string;
   typeDefinitions?: readonly WorkflowEditorTypeDefinition[];
+  onTypeDefinitionsChange?: (definitions: readonly WorkflowEditorTypeDefinition[]) => void;
   maxVersions?: number;
   enableNestedWorkflows?: boolean;
   maxNestedWorkflowDepth?: number;
   compactControls?: boolean;
+  settings?: Partial<WorkflowEditorSettings<TAppSettings>>;
+  settingsFields?: readonly WorkflowEditorSettingsField<TAppSettings>[];
+  onSettingsChange?: (settings: WorkflowEditorSettings<TAppSettings>) => void;
   layout?: "default" | "unstyled";
-  chrome?: WorkflowEditorChrome<TNodeData, TEdgeData, TTemplateData>;
+  chrome?: WorkflowEditorChrome<TNodeData, TEdgeData, TTemplateData, TAppSettings>;
   showDocumentStats?: boolean;
   showDocumentPath?: boolean;
   showWorkbenchStats?: boolean;
-  renderChrome?: WorkflowEditorChromeRenderer<TNodeData, TEdgeData, TTemplateData>;
+  renderChrome?: WorkflowEditorChromeRenderer<TNodeData, TEdgeData, TTemplateData, TAppSettings>;
   renderCompactMenuActions?: () => ReactNode;
   onLibraryChange?: (library: WorkflowEditorLibrary<TNodeData, TEdgeData>) => void;
   onDocumentPathChange?: (path: WorkflowEditorDocumentPathItem[]) => void;
@@ -209,10 +304,209 @@ const emptyWorkflowEditorSelection: WorkflowEditorSelectionState = {
   edgeIds: [],
 };
 
+type WorkflowEditorSettingsResolutionProps<
+  TAppSettings extends Record<string, unknown> = Record<string, unknown>,
+> = {
+  compactControls?: boolean;
+  enableNestedWorkflows?: boolean;
+  maxNestedWorkflowDepth?: number;
+  maxVersions?: number;
+  readOnly?: boolean;
+  settings?: Partial<WorkflowEditorSettings<TAppSettings>>;
+  showDocumentPath?: boolean;
+  showDocumentStats?: boolean;
+  showWorkbenchStats?: boolean;
+};
+
+export function resolveWorkflowEditorSettings<
+  TAppSettings extends Record<string, unknown> = Record<string, unknown>,
+>({
+  compactControls,
+  enableNestedWorkflows,
+  maxNestedWorkflowDepth,
+  maxVersions,
+  readOnly,
+  settings,
+  showDocumentPath,
+  showDocumentStats,
+  showWorkbenchStats,
+}: WorkflowEditorSettingsResolutionProps<TAppSettings>): WorkflowEditorSettings<TAppSettings> {
+  const editor = {
+    ...defaultWorkflowEditorBuiltInSettings,
+    ...(settings?.editor ?? {}),
+    ...(compactControls !== undefined ? { compactControls } : {}),
+    ...(enableNestedWorkflows !== undefined ? { enableNestedWorkflows } : {}),
+    ...(maxNestedWorkflowDepth !== undefined ? { maxNestedWorkflowDepth } : {}),
+    ...(maxVersions !== undefined ? { maxVersions } : {}),
+    ...(readOnly !== undefined ? { readOnly } : {}),
+    ...(showDocumentPath !== undefined ? { showDocumentPath } : {}),
+    ...(showDocumentStats !== undefined ? { showDocumentStats } : {}),
+    ...(showWorkbenchStats !== undefined ? { showWorkbenchStats } : {}),
+  };
+
+  return {
+    editor,
+    ...(settings?.app ? { app: settings.app as TAppSettings } : {}),
+  };
+}
+
+export function updateWorkflowEditorBuiltInSetting<
+  TAppSettings extends Record<string, unknown>,
+  K extends keyof WorkflowEditorBuiltInSettings,
+>(
+  settings: WorkflowEditorSettings<TAppSettings>,
+  key: K,
+  value: WorkflowEditorBuiltInSettings[K],
+): WorkflowEditorSettings<TAppSettings> {
+  return { ...settings, editor: { ...settings.editor, [key]: value } };
+}
+
+export function updateWorkflowEditorAppSetting<
+  TAppSettings extends Record<string, unknown>,
+  K extends keyof TAppSettings & string,
+>(
+  settings: WorkflowEditorSettings<TAppSettings>,
+  key: K,
+  value: TAppSettings[K],
+): WorkflowEditorSettings<TAppSettings> {
+  return { ...settings, app: { ...(settings.app ?? ({} as TAppSettings)), [key]: value } };
+}
+
+function createWorkflowEditorCatalogController<
+  TNodeData extends Record<string, unknown>,
+  TEdgeData extends Record<string, unknown>,
+  TTemplateData,
+  TAppSettings extends Record<string, unknown>,
+>({
+  settings,
+  settingsFields,
+  typeDefinitions = [],
+  nodeTemplates,
+  onSettingsChange,
+  onTypeDefinitionsChange,
+  onNodeTemplatesChange,
+}: {
+  settings: WorkflowEditorSettings<TAppSettings>;
+  settingsFields: readonly WorkflowEditorSettingsField<TAppSettings>[];
+  typeDefinitions?: readonly WorkflowEditorTypeDefinition[];
+  nodeTemplates: ReadonlyArray<WorkflowEditorNodeTemplate<TTemplateData>>;
+  onSettingsChange?: (settings: WorkflowEditorSettings<TAppSettings>) => void;
+  onTypeDefinitionsChange?: (definitions: readonly WorkflowEditorTypeDefinition[]) => void;
+  onNodeTemplatesChange?: (
+    templates: ReadonlyArray<WorkflowEditorNodeTemplate<TTemplateData>>,
+  ) => void;
+}): WorkflowEditorCatalogController<TNodeData, TEdgeData, TTemplateData, TAppSettings> {
+  const updateSettings = (next: WorkflowEditorSettings<TAppSettings>) => {
+    onSettingsChange?.(next);
+  };
+
+  return {
+    settings,
+    settingsFields,
+    typeDefinitions,
+    nodeTemplates,
+    writable: {
+      settings: Boolean(onSettingsChange),
+      typeDefinitions: Boolean(onTypeDefinitionsChange),
+      nodeTemplates: Boolean(onNodeTemplatesChange),
+    },
+    actions: {
+      updateSettings,
+      updateBuiltInSetting: (key, value) => {
+        updateSettings(updateWorkflowEditorBuiltInSetting(settings, key, value));
+      },
+      updateAppSetting: (key, value) => {
+        updateSettings(updateWorkflowEditorAppSetting(settings, key, value));
+      },
+      createTypeDefinition: () => {
+        if (!onTypeDefinitionsChange) {
+          return;
+        }
+        const names = new Set(typeDefinitions.map((definition) => definition.name));
+        const name = createWorkflowEditorUniqueCatalogId(names, "Type");
+        onTypeDefinitionsChange([...typeDefinitions, { name, type: { kind: "object" } }]);
+      },
+      updateTypeDefinition: (name, next) => {
+        if (
+          !onTypeDefinitionsChange ||
+          !next.name.trim() ||
+          typeDefinitions.some(
+            (definition) => definition.name !== name && definition.name === next.name,
+          )
+        ) {
+          return;
+        }
+        onTypeDefinitionsChange(
+          typeDefinitions.map((definition) => (definition.name === name ? next : definition)),
+        );
+      },
+      duplicateTypeDefinition: (name) => {
+        if (!onTypeDefinitionsChange) {
+          return;
+        }
+        const definition = typeDefinitions.find((candidate) => candidate.name === name);
+        if (!definition) {
+          return;
+        }
+        const nextName = createWorkflowEditorUniqueCatalogId(
+          new Set(typeDefinitions.map((candidate) => candidate.name)),
+          `${definition.name}Copy`,
+        );
+        onTypeDefinitionsChange([...typeDefinitions, { ...definition, name: nextName }]);
+      },
+      deleteTypeDefinition: (name) => {
+        onTypeDefinitionsChange?.(typeDefinitions.filter((definition) => definition.name !== name));
+      },
+      createNodeTemplate: () => {
+        if (!onNodeTemplatesChange) {
+          return;
+        }
+        const ids = new Set(nodeTemplates.map((template) => template.id));
+        const id = createWorkflowEditorUniqueCatalogId(ids, "template");
+        onNodeTemplatesChange([...nodeTemplates, { id, label: "New node template" }]);
+      },
+      updateNodeTemplate: (id, next) => {
+        if (
+          !onNodeTemplatesChange ||
+          !next.id.trim() ||
+          !next.label.trim() ||
+          nodeTemplates.some((template) => template.id !== id && template.id === next.id)
+        ) {
+          return;
+        }
+        onNodeTemplatesChange(
+          nodeTemplates.map((template) => (template.id === id ? next : template)),
+        );
+      },
+      duplicateNodeTemplate: (id) => {
+        if (!onNodeTemplatesChange) {
+          return;
+        }
+        const template = nodeTemplates.find((candidate) => candidate.id === id);
+        if (!template) {
+          return;
+        }
+        const nextId = createWorkflowEditorUniqueCatalogId(
+          new Set(nodeTemplates.map((candidate) => candidate.id)),
+          `${template.id}-copy`,
+        );
+        onNodeTemplatesChange([
+          ...nodeTemplates,
+          { ...template, id: nextId, label: `${template.label} Copy` },
+        ]);
+      },
+      deleteNodeTemplate: (id) => {
+        onNodeTemplatesChange?.(nodeTemplates.filter((template) => template.id !== id));
+      },
+    },
+  };
+}
+
 export function WorkflowEditor<
   TNodeData extends Record<string, unknown> = Record<string, unknown>,
   TEdgeData extends Record<string, unknown> = Record<string, unknown>,
   TTemplateData = TNodeData,
+  TAppSettings extends Record<string, unknown> = Record<string, unknown>,
 >({
   storageKey = defaultWorkflowEditorStorageKey,
   initialLibrary,
@@ -220,18 +514,23 @@ export function WorkflowEditor<
   nodeTemplates = defaultWorkflowEditorNodeTemplates as ReadonlyArray<
     WorkflowWorkbenchPaletteItem<TTemplateData>
   >,
-  readOnly = false,
+  onNodeTemplatesChange,
+  readOnly: readOnlyProp,
   className,
   typeDefinitions,
-  maxVersions = defaultWorkflowEditorMaxVersions,
-  enableNestedWorkflows = true,
-  maxNestedWorkflowDepth = 64,
-  compactControls = false,
+  onTypeDefinitionsChange,
+  maxVersions: maxVersionsProp,
+  enableNestedWorkflows: enableNestedWorkflowsProp,
+  maxNestedWorkflowDepth: maxNestedWorkflowDepthProp,
+  compactControls: compactControlsProp,
+  settings,
+  settingsFields = [],
+  onSettingsChange,
   layout = "default",
   chrome,
-  showDocumentStats = true,
-  showDocumentPath = true,
-  showWorkbenchStats = true,
+  showDocumentStats: showDocumentStatsProp,
+  showDocumentPath: showDocumentPathProp,
+  showWorkbenchStats: showWorkbenchStatsProp,
   onLibraryChange,
   onDocumentPathChange,
   onError,
@@ -241,7 +540,28 @@ export function WorkflowEditor<
   renderToolbarActions,
   renderCompactMenuActions,
   renderChrome,
-}: WorkflowEditorProps<TNodeData, TEdgeData, TTemplateData>) {
+}: WorkflowEditorProps<TNodeData, TEdgeData, TTemplateData, TAppSettings>) {
+  const resolvedSettings = resolveWorkflowEditorSettings<TAppSettings>({
+    compactControls: compactControlsProp,
+    enableNestedWorkflows: enableNestedWorkflowsProp,
+    maxNestedWorkflowDepth: maxNestedWorkflowDepthProp,
+    maxVersions: maxVersionsProp,
+    readOnly: readOnlyProp,
+    settings,
+    showDocumentPath: showDocumentPathProp,
+    showDocumentStats: showDocumentStatsProp,
+    showWorkbenchStats: showWorkbenchStatsProp,
+  });
+  const {
+    compactControls,
+    enableNestedWorkflows,
+    maxNestedWorkflowDepth,
+    maxVersions,
+    readOnly,
+    showDocumentPath,
+    showDocumentStats,
+    showWorkbenchStats,
+  } = resolvedSettings.editor;
   const fallbackLibrary = useMemo(
     () => initialLibrary ?? createWorkflowEditorLibrary<TNodeData, TEdgeData>(),
     [initialLibrary],
@@ -722,9 +1042,25 @@ export function WorkflowEditor<
     showShortcutHint: !compactControls,
   });
 
+  const catalogController = createWorkflowEditorCatalogController<
+    TNodeData,
+    TEdgeData,
+    TTemplateData,
+    TAppSettings
+  >({
+    settings: resolvedSettings,
+    settingsFields,
+    typeDefinitions,
+    nodeTemplates,
+    onSettingsChange,
+    onTypeDefinitionsChange,
+    onNodeTemplatesChange,
+  });
+
   const editorController = {
     activeDocument,
     activeEntry,
+    catalog: catalogController,
     documentPath,
     documentPathEntries,
     documentReferenceOptions,
@@ -735,6 +1071,7 @@ export function WorkflowEditor<
     saveState,
     selectedVersionId,
     selection: normalizedSelection,
+    settings: resolvedSettings,
     workbench: workbenchController,
     actions: {
       createDocument,
@@ -756,7 +1093,7 @@ export function WorkflowEditor<
       undo,
       updateActiveDocument: updateDocument,
     },
-  } satisfies WorkflowEditorController<TNodeData, TEdgeData, TTemplateData>;
+  } satisfies WorkflowEditorController<TNodeData, TEdgeData, TTemplateData, TAppSettings>;
 
   const documentControlsChrome =
     chrome?.documentControls ?? (compactControls ? "compact-menu" : "default");
@@ -1212,12 +1549,14 @@ export type WorkflowEditorControllerProps<
   TNodeData extends Record<string, unknown> = Record<string, unknown>,
   TEdgeData extends Record<string, unknown> = Record<string, unknown>,
   TTemplateData = TNodeData,
-> = WorkflowEditorProps<TNodeData, TEdgeData, TTemplateData>;
+  TAppSettings extends Record<string, unknown> = Record<string, unknown>,
+> = WorkflowEditorProps<TNodeData, TEdgeData, TTemplateData, TAppSettings>;
 
 export function useWorkflowEditorController<
   TNodeData extends Record<string, unknown> = Record<string, unknown>,
   TEdgeData extends Record<string, unknown> = Record<string, unknown>,
   TTemplateData = TNodeData,
+  TAppSettings extends Record<string, unknown> = Record<string, unknown>,
 >({
   storageKey = defaultWorkflowEditorStorageKey,
   initialLibrary,
@@ -1225,13 +1564,20 @@ export function useWorkflowEditorController<
   nodeTemplates = defaultWorkflowEditorNodeTemplates as ReadonlyArray<
     WorkflowWorkbenchPaletteItem<TTemplateData>
   >,
-  readOnly = false,
+  onNodeTemplatesChange,
+  readOnly: readOnlyProp,
   typeDefinitions,
-  maxVersions = defaultWorkflowEditorMaxVersions,
-  enableNestedWorkflows = true,
-  maxNestedWorkflowDepth = 64,
-  showWorkbenchStats = true,
-  compactControls = false,
+  onTypeDefinitionsChange,
+  maxVersions: maxVersionsProp,
+  enableNestedWorkflows: enableNestedWorkflowsProp,
+  maxNestedWorkflowDepth: maxNestedWorkflowDepthProp,
+  showDocumentPath: showDocumentPathProp,
+  showDocumentStats: showDocumentStatsProp,
+  showWorkbenchStats: showWorkbenchStatsProp,
+  compactControls: compactControlsProp,
+  settings,
+  settingsFields = [],
+  onSettingsChange,
   onLibraryChange,
   onDocumentPathChange,
   onError,
@@ -1239,7 +1585,26 @@ export function useWorkflowEditorController<
   renderNodeTemplate,
   renderInspector,
   renderToolbarActions,
-}: WorkflowEditorControllerProps<TNodeData, TEdgeData, TTemplateData>) {
+}: WorkflowEditorControllerProps<TNodeData, TEdgeData, TTemplateData, TAppSettings>) {
+  const resolvedSettings = resolveWorkflowEditorSettings<TAppSettings>({
+    compactControls: compactControlsProp,
+    enableNestedWorkflows: enableNestedWorkflowsProp,
+    maxNestedWorkflowDepth: maxNestedWorkflowDepthProp,
+    maxVersions: maxVersionsProp,
+    readOnly: readOnlyProp,
+    settings,
+    showDocumentPath: showDocumentPathProp,
+    showDocumentStats: showDocumentStatsProp,
+    showWorkbenchStats: showWorkbenchStatsProp,
+  });
+  const {
+    compactControls,
+    enableNestedWorkflows,
+    maxNestedWorkflowDepth,
+    maxVersions,
+    readOnly,
+    showWorkbenchStats,
+  } = resolvedSettings.editor;
   const fallbackLibrary = useMemo(
     () => initialLibrary ?? createWorkflowEditorLibrary<TNodeData, TEdgeData>(),
     [initialLibrary],
@@ -1635,9 +2000,25 @@ export function useWorkflowEditorController<
     showShortcutHint: !compactControls,
   });
 
+  const catalog = createWorkflowEditorCatalogController<
+    TNodeData,
+    TEdgeData,
+    TTemplateData,
+    TAppSettings
+  >({
+    settings: resolvedSettings,
+    settingsFields,
+    typeDefinitions,
+    nodeTemplates,
+    onSettingsChange,
+    onTypeDefinitionsChange,
+    onNodeTemplatesChange,
+  });
+
   return {
     activeDocument,
     activeEntry,
+    catalog,
     documentPath,
     documentPathEntries,
     documentReferenceOptions,
@@ -1648,6 +2029,7 @@ export function useWorkflowEditorController<
     saveState,
     selectedVersionId,
     selection: normalizedSelection,
+    settings: resolvedSettings,
     workbench,
     actions: {
       createDocument,
@@ -1669,7 +2051,7 @@ export function useWorkflowEditorController<
       undo,
       updateActiveDocument,
     },
-  } satisfies WorkflowEditorController<TNodeData, TEdgeData, TTemplateData>;
+  } satisfies WorkflowEditorController<TNodeData, TEdgeData, TTemplateData, TAppSettings>;
 }
 
 export function WorkflowEditorSaveStateBadge<
@@ -1951,6 +2333,783 @@ export function WorkflowEditorDocumentPath<
   );
 }
 
+export function WorkflowEditorSettingsPanel<
+  TNodeData extends Record<string, unknown> = Record<string, unknown>,
+  TEdgeData extends Record<string, unknown> = Record<string, unknown>,
+  TTemplateData = TNodeData,
+  TAppSettings extends Record<string, unknown> = Record<string, unknown>,
+>({
+  controller,
+}: {
+  controller: WorkflowEditorController<TNodeData, TEdgeData, TTemplateData, TAppSettings>;
+}) {
+  return (
+    <section className="grid gap-4 rounded-md border border-border bg-card p-3 text-sm">
+      <WorkflowEditorBuiltInSettingsPanel controller={controller} />
+      <WorkflowEditorAppSettingsPanel controller={controller} />
+    </section>
+  );
+}
+
+export function WorkflowEditorBuiltInSettingsPanel<
+  TNodeData extends Record<string, unknown> = Record<string, unknown>,
+  TEdgeData extends Record<string, unknown> = Record<string, unknown>,
+  TTemplateData = TNodeData,
+  TAppSettings extends Record<string, unknown> = Record<string, unknown>,
+>({
+  controller,
+}: {
+  controller: WorkflowEditorController<TNodeData, TEdgeData, TTemplateData, TAppSettings>;
+}) {
+  const disabled = !controller.catalog.writable.settings;
+  const editor = controller.catalog.settings.editor;
+
+  return (
+    <section className="grid gap-3" aria-label="Editor settings">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-sm font-semibold">Editor settings</h2>
+        {!controller.catalog.writable.settings ? <Badge variant="outline">Read only</Badge> : null}
+      </div>
+      <WorkflowEditorBooleanSetting
+        label="Compact controls"
+        checked={editor.compactControls}
+        disabled={disabled}
+        onChange={(value) =>
+          controller.catalog.actions.updateBuiltInSetting("compactControls", value)
+        }
+      />
+      <WorkflowEditorBooleanSetting
+        label="Enable nested workflows"
+        checked={editor.enableNestedWorkflows}
+        disabled={disabled}
+        onChange={(value) =>
+          controller.catalog.actions.updateBuiltInSetting("enableNestedWorkflows", value)
+        }
+      />
+      <WorkflowEditorNumberSetting
+        label="Max nested workflow depth"
+        value={editor.maxNestedWorkflowDepth}
+        min={1}
+        step={1}
+        disabled={disabled}
+        onChange={(value) =>
+          controller.catalog.actions.updateBuiltInSetting("maxNestedWorkflowDepth", value)
+        }
+      />
+      <WorkflowEditorNumberSetting
+        label="Max versions"
+        value={editor.maxVersions}
+        min={1}
+        step={1}
+        disabled={disabled}
+        onChange={(value) => controller.catalog.actions.updateBuiltInSetting("maxVersions", value)}
+      />
+      <WorkflowEditorBooleanSetting
+        label="Read only"
+        checked={editor.readOnly}
+        disabled={disabled}
+        onChange={(value) => controller.catalog.actions.updateBuiltInSetting("readOnly", value)}
+      />
+      <WorkflowEditorBooleanSetting
+        label="Show document path"
+        checked={editor.showDocumentPath}
+        disabled={disabled}
+        onChange={(value) =>
+          controller.catalog.actions.updateBuiltInSetting("showDocumentPath", value)
+        }
+      />
+      <WorkflowEditorBooleanSetting
+        label="Show document stats"
+        checked={editor.showDocumentStats}
+        disabled={disabled}
+        onChange={(value) =>
+          controller.catalog.actions.updateBuiltInSetting("showDocumentStats", value)
+        }
+      />
+      <WorkflowEditorBooleanSetting
+        label="Show workbench stats"
+        checked={editor.showWorkbenchStats}
+        disabled={disabled}
+        onChange={(value) =>
+          controller.catalog.actions.updateBuiltInSetting("showWorkbenchStats", value)
+        }
+      />
+    </section>
+  );
+}
+
+export function WorkflowEditorAppSettingsPanel<
+  TNodeData extends Record<string, unknown> = Record<string, unknown>,
+  TEdgeData extends Record<string, unknown> = Record<string, unknown>,
+  TTemplateData = TNodeData,
+  TAppSettings extends Record<string, unknown> = Record<string, unknown>,
+>({
+  controller,
+}: {
+  controller: WorkflowEditorController<TNodeData, TEdgeData, TTemplateData, TAppSettings>;
+}) {
+  if (controller.catalog.settingsFields.length === 0) {
+    return null;
+  }
+
+  const disabled = !controller.catalog.writable.settings;
+  const appSettings = controller.catalog.settings.app ?? ({} as TAppSettings);
+
+  return (
+    <section className="grid gap-3" aria-label="App settings">
+      <h2 className="text-sm font-semibold">App settings</h2>
+      {controller.catalog.settingsFields.map((field) => {
+        const value = appSettings[field.key];
+        return (
+          <label key={field.key} className="grid gap-1.5">
+            <span className="text-xs font-medium">{field.label}</span>
+            {field.description ? (
+              <span className="text-xs text-muted-foreground">{field.description}</span>
+            ) : null}
+            {field.kind === "boolean" ? (
+              <input
+                type="checkbox"
+                className="size-4"
+                checked={value === true}
+                disabled={disabled}
+                onChange={(event) =>
+                  controller.catalog.actions.updateAppSetting(
+                    field.key,
+                    event.target.checked as TAppSettings[typeof field.key],
+                  )
+                }
+              />
+            ) : field.kind === "number" ? (
+              <Input
+                aria-label={field.label}
+                type="number"
+                value={typeof value === "number" ? value : 0}
+                min={field.min}
+                max={field.max}
+                step={field.step}
+                disabled={disabled}
+                onChange={(event) =>
+                  controller.catalog.actions.updateAppSetting(
+                    field.key,
+                    Number(event.target.value) as TAppSettings[typeof field.key],
+                  )
+                }
+              />
+            ) : field.kind === "select" ? (
+              <select
+                aria-label={field.label}
+                className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                value={typeof value === "string" ? value : ""}
+                disabled={disabled}
+                onChange={(event) =>
+                  controller.catalog.actions.updateAppSetting(
+                    field.key,
+                    event.target.value as TAppSettings[typeof field.key],
+                  )
+                }
+              >
+                {(field.options ?? []).map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <Input
+                aria-label={field.label}
+                value={typeof value === "string" ? value : ""}
+                disabled={disabled}
+                onChange={(event) =>
+                  controller.catalog.actions.updateAppSetting(
+                    field.key,
+                    event.target.value as TAppSettings[typeof field.key],
+                  )
+                }
+              />
+            )}
+          </label>
+        );
+      })}
+    </section>
+  );
+}
+
+export function WorkflowEditorTypesPanel<
+  TNodeData extends Record<string, unknown> = Record<string, unknown>,
+  TEdgeData extends Record<string, unknown> = Record<string, unknown>,
+  TTemplateData = TNodeData,
+  TAppSettings extends Record<string, unknown> = Record<string, unknown>,
+>({
+  controller,
+}: {
+  controller: WorkflowEditorController<TNodeData, TEdgeData, TTemplateData, TAppSettings>;
+}) {
+  const [search, setSearch] = useState("");
+  const [selectedName, setSelectedName] = useState<string | null>(
+    controller.catalog.typeDefinitions[0]?.name ?? null,
+  );
+  const filtered = controller.catalog.typeDefinitions.filter((definition) =>
+    definition.name.toLowerCase().includes(search.trim().toLowerCase()),
+  );
+  const selected =
+    controller.catalog.typeDefinitions.find((definition) => definition.name === selectedName) ??
+    filtered[0] ??
+    null;
+
+  return (
+    <section className="grid gap-3 rounded-md border border-border bg-card p-3 text-sm">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-sm font-semibold">Types</h2>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={!controller.catalog.writable.typeDefinitions}
+          onClick={controller.catalog.actions.createTypeDefinition}
+        >
+          Create
+        </Button>
+      </div>
+      <SearchField
+        value={search}
+        onValueChange={setSearch}
+        placeholder="Search types"
+        clearLabel="Clear type search"
+        inputProps={{ "aria-label": "Search types" }}
+      />
+      <div className="grid gap-2">
+        {filtered.map((definition) => (
+          <Button
+            key={definition.name}
+            type="button"
+            size="sm"
+            variant={definition.name === selected?.name ? "secondary" : "ghost"}
+            className="justify-start"
+            onClick={() => setSelectedName(definition.name)}
+          >
+            {definition.name}
+          </Button>
+        ))}
+      </div>
+      {selected ? (
+        <WorkflowEditorTypeDefinitionForm
+          key={selected.name}
+          controller={controller}
+          definition={selected}
+        />
+      ) : (
+        <div className="rounded-md border border-dashed p-3 text-muted-foreground">No types</div>
+      )}
+    </section>
+  );
+}
+
+export function WorkflowEditorNodeTemplatesPanel<
+  TNodeData extends Record<string, unknown> = Record<string, unknown>,
+  TEdgeData extends Record<string, unknown> = Record<string, unknown>,
+  TTemplateData = TNodeData,
+  TAppSettings extends Record<string, unknown> = Record<string, unknown>,
+>({
+  controller,
+}: {
+  controller: WorkflowEditorController<TNodeData, TEdgeData, TTemplateData, TAppSettings>;
+}) {
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(
+    controller.catalog.nodeTemplates[0]?.id ?? null,
+  );
+  const categories = Array.from(
+    new Set(controller.catalog.nodeTemplates.flatMap((template) => template.category ?? [])),
+  ).filter(Boolean);
+  const query = search.trim().toLowerCase();
+  const filtered = controller.catalog.nodeTemplates.filter((template) => {
+    const text = [
+      template.id,
+      template.label,
+      template.kind,
+      template.category,
+      template.description,
+    ]
+      .filter((value): value is string => typeof value === "string")
+      .join("\n")
+      .toLowerCase();
+    return (!query || text.includes(query)) && (!category || template.category === category);
+  });
+  const selected =
+    controller.catalog.nodeTemplates.find((template) => template.id === selectedId) ??
+    filtered[0] ??
+    null;
+
+  return (
+    <section className="grid gap-3 rounded-md border border-border bg-card p-3 text-sm">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-sm font-semibold">Node templates</h2>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={!controller.catalog.writable.nodeTemplates}
+          onClick={controller.catalog.actions.createNodeTemplate}
+        >
+          Create
+        </Button>
+      </div>
+      <SearchField
+        value={search}
+        onValueChange={setSearch}
+        placeholder="Search templates"
+        clearLabel="Clear template search"
+        inputProps={{ "aria-label": "Search templates" }}
+      />
+      <select
+        aria-label="Template category"
+        className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+        value={category}
+        onChange={(event) => setCategory(event.target.value)}
+      >
+        <option value="">All categories</option>
+        {categories.map((candidate) => (
+          <option key={candidate} value={candidate}>
+            {candidate}
+          </option>
+        ))}
+      </select>
+      <div className="grid gap-2">
+        {filtered.map((template) => (
+          <Button
+            key={template.id}
+            type="button"
+            size="sm"
+            variant={template.id === selected?.id ? "secondary" : "ghost"}
+            className="justify-start"
+            onClick={() => setSelectedId(template.id)}
+          >
+            {template.label}
+          </Button>
+        ))}
+      </div>
+      {selected ? (
+        <WorkflowEditorNodeTemplateForm
+          key={selected.id}
+          controller={controller}
+          template={selected}
+        />
+      ) : (
+        <div className="rounded-md border border-dashed p-3 text-muted-foreground">
+          No node templates
+        </div>
+      )}
+    </section>
+  );
+}
+
+export function WorkflowEditorOverviewPanel<
+  TNodeData extends Record<string, unknown> = Record<string, unknown>,
+  TEdgeData extends Record<string, unknown> = Record<string, unknown>,
+  TTemplateData = TNodeData,
+  TAppSettings extends Record<string, unknown> = Record<string, unknown>,
+>({
+  controller,
+}: {
+  controller: WorkflowEditorController<TNodeData, TEdgeData, TTemplateData, TAppSettings>;
+}) {
+  return (
+    <section className="grid gap-4 rounded-md border border-border bg-card p-3 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant="outline">{controller.activeDocument.nodes.length} nodes</Badge>
+        <Badge variant="outline">{controller.activeDocument.edges.length} edges</Badge>
+        <Badge variant="outline">{controller.catalog.typeDefinitions.length} types</Badge>
+        <Badge variant="outline">{controller.catalog.nodeTemplates.length} templates</Badge>
+      </div>
+      <WorkflowEditorSettingsPanel controller={controller} />
+      <WorkflowEditorTypesPanel controller={controller} />
+      <WorkflowEditorNodeTemplatesPanel controller={controller} />
+      {controller.workbench ? (
+        <>
+          <WorkflowEditorCurrentNodesPanel controller={controller.workbench} />
+          <WorkflowEditorCurrentNodeTypesPanel controller={controller.workbench} />
+          <WorkflowEditorComposedNodesPanel controller={controller.workbench} />
+        </>
+      ) : null}
+    </section>
+  );
+}
+
+function WorkflowEditorBooleanSetting({
+  checked,
+  disabled,
+  label,
+  onChange,
+}: {
+  checked: boolean;
+  disabled?: boolean;
+  label: string;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className="flex items-center justify-between gap-3">
+      <span>{label}</span>
+      <input
+        aria-label={label}
+        type="checkbox"
+        className="size-4"
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+    </label>
+  );
+}
+
+function WorkflowEditorNumberSetting({
+  disabled,
+  label,
+  max,
+  min,
+  onChange,
+  step,
+  value,
+}: {
+  disabled?: boolean;
+  label: string;
+  max?: number;
+  min?: number;
+  onChange: (value: number) => void;
+  step?: number;
+  value: number;
+}) {
+  return (
+    <label className="grid gap-1.5">
+      <span className="text-xs font-medium">{label}</span>
+      <Input
+        aria-label={label}
+        type="number"
+        value={value}
+        min={min}
+        max={max}
+        step={step}
+        disabled={disabled}
+        onChange={(event) => onChange(Number(event.target.value))}
+      />
+    </label>
+  );
+}
+
+function WorkflowEditorTypeDefinitionForm<
+  TNodeData extends Record<string, unknown>,
+  TEdgeData extends Record<string, unknown>,
+  TTemplateData,
+  TAppSettings extends Record<string, unknown>,
+>({
+  controller,
+  definition,
+}: {
+  controller: WorkflowEditorController<TNodeData, TEdgeData, TTemplateData, TAppSettings>;
+  definition: WorkflowEditorTypeDefinition;
+}) {
+  const [name, setName] = useState(definition.name);
+  const [extendsDraft, setExtendsDraft] = useState((definition.extends ?? []).join(", "));
+  const [typeDraft, setTypeDraft] = useState(formatWorkflowEditorJsonDraft(definition.type));
+  const [error, setError] = useState("");
+  const disabled = !controller.catalog.writable.typeDefinitions;
+
+  const commit = () => {
+    const parsed = parseWorkflowEditorJsonDraft(typeDraft, "type");
+    if (!parsed.ok) {
+      setError(parsed.message);
+      return;
+    }
+    const next: WorkflowEditorTypeDefinition = {
+      name: name.trim(),
+      type: parsed.value as WorkflowEditorTypeDefinition["type"],
+      ...(extendsDraft.trim()
+        ? {
+            extends: extendsDraft
+              .split(",")
+              .map((value) => value.trim())
+              .filter(Boolean),
+          }
+        : {}),
+    };
+    const validation = validateWorkflowEditorTypeDefinitionDraft(
+      controller.catalog.typeDefinitions,
+      definition.name,
+      next,
+    );
+    if (validation) {
+      setError(validation);
+      return;
+    }
+    setError("");
+    controller.catalog.actions.updateTypeDefinition(definition.name, next);
+  };
+
+  return (
+    <div className="grid gap-3 rounded-md border border-border p-3">
+      <Input
+        aria-label="Type name"
+        value={name}
+        disabled={disabled}
+        onChange={(event) => setName(event.target.value)}
+      />
+      <Input
+        aria-label="Extended types"
+        value={extendsDraft}
+        disabled={disabled}
+        placeholder="BaseType, OtherType"
+        onChange={(event) => setExtendsDraft(event.target.value)}
+      />
+      <Textarea
+        aria-label="Type JSON"
+        className="min-h-32 font-mono text-xs"
+        value={typeDraft}
+        disabled={disabled}
+        onChange={(event) => setTypeDraft(event.target.value)}
+      />
+      {error ? <div className="text-xs text-destructive">{error}</div> : null}
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" size="sm" variant="outline" disabled={disabled} onClick={commit}>
+          Save
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={disabled}
+          onClick={() => controller.catalog.actions.duplicateTypeDefinition(definition.name)}
+        >
+          Duplicate
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={disabled}
+          onClick={() => controller.catalog.actions.deleteTypeDefinition(definition.name)}
+        >
+          Delete
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function WorkflowEditorNodeTemplateForm<
+  TNodeData extends Record<string, unknown>,
+  TEdgeData extends Record<string, unknown>,
+  TTemplateData,
+  TAppSettings extends Record<string, unknown>,
+>({
+  controller,
+  template,
+}: {
+  controller: WorkflowEditorController<TNodeData, TEdgeData, TTemplateData, TAppSettings>;
+  template: WorkflowEditorNodeTemplate<TTemplateData>;
+}) {
+  const [id, setId] = useState(template.id);
+  const [label, setLabel] = useState(template.label);
+  const [kind, setKind] = useState(template.kind ?? "");
+  const [category, setCategory] = useState(template.category ?? "");
+  const [description, setDescription] = useState(template.description ?? "");
+  const [tags, setTags] = useState((template.tags ?? []).join(", "));
+  const [minimized, setMinimized] = useState(template.minimized === true);
+  const [inputsDraft, setInputsDraft] = useState(
+    formatWorkflowEditorJsonDraft(template.inputs ?? []),
+  );
+  const [outputsDraft, setOutputsDraft] = useState(
+    formatWorkflowEditorJsonDraft(template.outputs ?? []),
+  );
+  const [dataDraft, setDataDraft] = useState(formatWorkflowEditorJsonDraft(template.data ?? null));
+  const [compositionDraft, setCompositionDraft] = useState(
+    formatWorkflowEditorJsonDraft(template.composition ?? null),
+  );
+  const [error, setError] = useState("");
+  const disabled = !controller.catalog.writable.nodeTemplates;
+
+  const commit = () => {
+    const inputs = parseWorkflowEditorJsonDraft(inputsDraft, "inputs");
+    const outputs = parseWorkflowEditorJsonDraft(outputsDraft, "outputs");
+    const data = parseWorkflowEditorJsonDraft(dataDraft, "data");
+    const composition = parseWorkflowEditorJsonDraft(compositionDraft, "composition");
+    const invalid = [inputs, outputs, data, composition].find((result) => !result.ok);
+    if (invalid && !invalid.ok) {
+      setError(invalid.message);
+      return;
+    }
+    if (!inputs.ok || !outputs.ok || !data.ok || !composition.ok) {
+      return;
+    }
+    const next: WorkflowEditorNodeTemplate<TTemplateData> = {
+      ...template,
+      id: id.trim(),
+      label: label.trim(),
+      ...(kind.trim() ? { kind: kind.trim() } : { kind: undefined }),
+      ...(category.trim() ? { category: category.trim() } : { category: undefined }),
+      ...(description.trim() ? { description: description.trim() } : { description: undefined }),
+      ...(tags.trim()
+        ? {
+            tags: tags
+              .split(",")
+              .map((value) => value.trim())
+              .filter(Boolean),
+          }
+        : { tags: undefined }),
+      minimized,
+      inputs: inputs.value as WorkflowEditorNodeTemplate<TTemplateData>["inputs"],
+      outputs: outputs.value as WorkflowEditorNodeTemplate<TTemplateData>["outputs"],
+      data: data.value === null ? undefined : (data.value as TTemplateData),
+      composition:
+        composition.value === null
+          ? undefined
+          : (composition.value as WorkflowEditorNodeTemplate<TTemplateData>["composition"]),
+    };
+    const validation = validateWorkflowEditorNodeTemplateDraft(
+      controller.catalog.nodeTemplates,
+      controller.catalog.typeDefinitions,
+      template.id,
+      next,
+    );
+    if (validation) {
+      setError(validation);
+      return;
+    }
+    setError("");
+    controller.catalog.actions.updateNodeTemplate(template.id, next);
+  };
+
+  return (
+    <div className="grid gap-3 rounded-md border border-border p-3">
+      <Input
+        aria-label="Template id"
+        value={id}
+        disabled={disabled}
+        onChange={(event) => setId(event.target.value)}
+      />
+      <Input
+        aria-label="Template label"
+        value={label}
+        disabled={disabled}
+        onChange={(event) => setLabel(event.target.value)}
+      />
+      <Input
+        aria-label="Template kind"
+        value={kind}
+        disabled={disabled}
+        onChange={(event) => setKind(event.target.value)}
+      />
+      <Input
+        aria-label="Template category"
+        value={category}
+        disabled={disabled}
+        onChange={(event) => setCategory(event.target.value)}
+      />
+      <Input
+        aria-label="Template description"
+        value={description}
+        disabled={disabled}
+        onChange={(event) => setDescription(event.target.value)}
+      />
+      <Input
+        aria-label="Template tags"
+        value={tags}
+        disabled={disabled}
+        onChange={(event) => setTags(event.target.value)}
+      />
+      <WorkflowEditorBooleanSetting
+        label="Template minimized"
+        checked={minimized}
+        disabled={disabled}
+        onChange={setMinimized}
+      />
+      <WorkflowEditorJsonDraftArea
+        label="Template inputs JSON"
+        value={inputsDraft}
+        disabled={disabled}
+        onChange={setInputsDraft}
+      />
+      <WorkflowEditorJsonDraftArea
+        label="Template outputs JSON"
+        value={outputsDraft}
+        disabled={disabled}
+        onChange={setOutputsDraft}
+      />
+      <WorkflowEditorJsonDraftArea
+        label="Template data JSON"
+        value={dataDraft}
+        disabled={disabled}
+        onChange={setDataDraft}
+      />
+      <WorkflowEditorJsonDraftArea
+        label="Template composition JSON"
+        value={compositionDraft}
+        disabled={disabled}
+        onChange={setCompositionDraft}
+      />
+      {error ? <div className="text-xs text-destructive">{error}</div> : null}
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" size="sm" variant="outline" disabled={disabled} onClick={commit}>
+          Save
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={disabled}
+          onClick={() => controller.catalog.actions.duplicateNodeTemplate(template.id)}
+        >
+          Duplicate
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={disabled}
+          onClick={() => controller.catalog.actions.deleteNodeTemplate(template.id)}
+        >
+          Delete
+        </Button>
+        {controller.workbench ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={controller.workbench.readOnly}
+            onClick={() => controller.workbench?.actions.addTemplateNode(template)}
+          >
+            Add to document
+          </Button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function WorkflowEditorJsonDraftArea({
+  disabled,
+  label,
+  onChange,
+  value,
+}: {
+  disabled?: boolean;
+  label: string;
+  onChange: (value: string) => void;
+  value: string;
+}) {
+  return (
+    <label className="grid gap-1.5">
+      <span className="text-xs font-medium">{label}</span>
+      <Textarea
+        aria-label={label}
+        className="min-h-24 font-mono text-xs"
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </label>
+  );
+}
+
 export function WorkflowEditorDefaultLayout({ children }: { children?: ReactNode }) {
   return <section className="grid gap-3">{children}</section>;
 }
@@ -2016,6 +3175,98 @@ function safeFilename(value: string) {
       .replace(/[^a-z0-9._-]+/g, "-")
       .replace(/^-+|-+$/g, "") || "workflow-document"
   );
+}
+
+function createWorkflowEditorUniqueCatalogId(existing: ReadonlySet<string>, base: string) {
+  const cleanBase =
+    base
+      .trim()
+      .replace(/\s+/g, "-")
+      .replace(/[^a-zA-Z0-9._-]+/g, "") || "item";
+  if (!existing.has(cleanBase)) {
+    return cleanBase;
+  }
+
+  for (let index = 2; index < 10000; index += 1) {
+    const candidate = `${cleanBase}-${index}`;
+    if (!existing.has(candidate)) {
+      return candidate;
+    }
+  }
+
+  return `${cleanBase}-${Date.now()}`;
+}
+
+function formatWorkflowEditorJsonDraft(value: unknown) {
+  return JSON.stringify(value, null, 2);
+}
+
+function parseWorkflowEditorJsonDraft(
+  value: string,
+  label: string,
+): { ok: true; value: unknown } | { ok: false; message: string } {
+  try {
+    return { ok: true, value: JSON.parse(value) };
+  } catch (error) {
+    return {
+      ok: false,
+      message: `Invalid JSON in ${label}: ${
+        error instanceof Error ? error.message : "Unable to parse value"
+      }`,
+    };
+  }
+}
+
+function validateWorkflowEditorTypeDefinitionDraft(
+  definitions: readonly WorkflowEditorTypeDefinition[],
+  originalName: string,
+  next: WorkflowEditorTypeDefinition,
+) {
+  if (!next.name) {
+    return "Type name is required";
+  }
+
+  if (
+    definitions.some(
+      (definition) => definition.name !== originalName && definition.name === next.name,
+    )
+  ) {
+    return `Duplicate type name: ${next.name}`;
+  }
+
+  const availableNames = new Set(definitions.map((definition) => definition.name));
+  for (const extendedName of next.extends ?? []) {
+    if (!availableNames.has(extendedName)) {
+      return `Missing extended type: ${extendedName}`;
+    }
+  }
+
+  return "";
+}
+
+function validateWorkflowEditorNodeTemplateDraft<TTemplateData>(
+  templates: readonly WorkflowEditorNodeTemplate<TTemplateData>[],
+  typeDefinitions: readonly WorkflowEditorTypeDefinition[],
+  originalId: string,
+  next: WorkflowEditorNodeTemplate<TTemplateData>,
+) {
+  if (!next.id) {
+    return "Template id is required";
+  }
+
+  if (!next.label) {
+    return "Template label is required";
+  }
+
+  if (templates.some((template) => template.id !== originalId && template.id === next.id)) {
+    return `Duplicate template id: ${next.id}`;
+  }
+
+  const diagnostics = analyzeWorkflowEditorPortTypes(
+    { nodes: [{ ...next, x: 0, y: 0 }], edges: [] },
+    { typeDefinitions },
+  );
+  return diagnostics[0]?.message ?? "";
 }
 
 function selectionStateToSingleSelection<
