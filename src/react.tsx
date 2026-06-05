@@ -137,7 +137,10 @@ import {
   snapWorkflowEditorNodePositionToCompatiblePort,
   snapWorkflowEditorNodeToCompatiblePort,
 } from "./react-snap";
-import { getWorkflowEditorMinimizedNodeWidth } from "./core-rendered-node-size";
+import {
+  getWorkflowEditorMinimizedNodeWidth,
+  workflowEditorMinimizedNodeHeight,
+} from "./core-rendered-node-size";
 import { formatShortcutLabel } from "./shortcut-label";
 
 export {
@@ -2240,7 +2243,7 @@ export function WorkflowWorkbench<
               primaryNodeId={primarySelectedNodeId}
             />
             <WorkflowBuilder
-              className="flex h-full min-h-0 min-w-0 flex-col [&>[data-slot='workflow-builder-surface']]:flex-1 [&>[data-slot='workflow-builder-surface']]:basis-0 [&_[data-slot='workflow-node'][data-minimized='true']]:!h-9 [&_[data-slot='workflow-node'][data-minimized='true']]:!min-h-9 [&_[data-slot='workflow-node'][data-minimized='true']]:!flex-row [&_[data-slot='workflow-node'][data-minimized='true']]:items-stretch [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:relative [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:z-10 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:!h-9 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:!min-h-9 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:!flex-1 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:!rounded-lg [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:!border-b-0 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:!px-2 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:!py-1.5 [&_[data-slot='workflow-node'][data-minimized='true']_[data-slot='workflow-node-header']>div]:items-center [&_[data-slot='workflow-node'][data-minimized='true']_[data-slot='workflow-node-header']>div>div:last-child]:!mt-0 [&_[data-slot='workflow-node'][data-minimized='true']_[data-slot='workflow-node-select']>div+div]:hidden [&_[data-slot='workflow-node'][data-minimized='true']_[data-slot='workflow-node-minimize']]:relative [&_[data-slot='workflow-node'][data-minimized='true']_[data-slot='workflow-node-minimize']]:z-20 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']]:!absolute [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']]:inset-0 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']]:z-0 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']]:!h-auto [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']]:!border-t-0 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']]:!bg-transparent [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']]:pointer-events-none [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']>div]:hidden [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']>[data-slot='workflow-node-port']]:!z-0 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']>[data-slot='workflow-node-port']]:pointer-events-auto [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']>[data-slot='workflow-node-port']]:-translate-y-1/2 [&_[data-slot='workflow-node'][data-compact='true']_[data-slot='workflow-node-port']]:!z-0"
+              className="flex h-full min-h-0 min-w-0 flex-col [&>[data-slot='workflow-builder-surface']]:flex-1 [&>[data-slot='workflow-builder-surface']]:basis-0 [&_[data-slot='workflow-node'][data-minimized='true']]:!h-9 [&_[data-slot='workflow-node'][data-minimized='true']]:!min-h-9 [&_[data-slot='workflow-node'][data-minimized='true']]:!flex-row [&_[data-slot='workflow-node'][data-minimized='true']]:items-stretch [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:relative [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:z-10 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:!h-9 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:!min-h-9 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:!flex-1 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:!rounded-lg [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:!border-b-0 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:!px-2 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:!py-1.5 [&_[data-slot='workflow-node'][data-minimized='true']_[data-slot='workflow-node-header']>div]:items-center [&_[data-slot='workflow-node'][data-minimized='true']_[data-slot='workflow-node-header']>div>div:last-child]:!mt-0 [&_[data-slot='workflow-node'][data-minimized='true']_[data-slot='workflow-node-select']>div+div]:hidden [&_[data-slot='workflow-node'][data-minimized='true']_[data-slot='workflow-node-minimize']]:relative [&_[data-slot='workflow-node'][data-minimized='true']_[data-slot='workflow-node-minimize']]:z-20 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']]:!absolute [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']]:inset-0 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']]:z-0 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']]:!h-auto [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']]:!border-t-0 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']]:!bg-transparent [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']]:pointer-events-none [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']>div]:hidden [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']>[data-slot='workflow-node-port']]:!z-30 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']>[data-slot='workflow-node-port']]:pointer-events-auto [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']>[data-slot='workflow-node-port']]:-translate-y-1/2 [&_[data-slot='workflow-node'][data-compact='true']_[data-slot='workflow-node-port']]:!z-0"
               nodes={uiNodes}
               edges={uiEdges}
               selectedNodeId={primarySelectedNodeId}
@@ -2251,6 +2254,7 @@ export function WorkflowWorkbench<
               readOnly={readOnly}
               showMiniMap
               showPortColumnHeaders={false}
+              measurePorts="dom"
               surfaceHeight="auto"
               minZoom={workflowEditorMinZoom}
               maxZoom={workflowEditorMaxZoom}
@@ -3754,6 +3758,19 @@ function WorkflowWorkbenchNodeLayerStyles<TNodeData extends Record<string, unkno
   const styles = [
     `[data-slot="workbench-layout"] [data-slot="workflow-node"]:not([data-compact="true"]) > div.grid:not([data-slot]) > div > div:first-child { display: none !important; }`,
     `[data-slot="workbench-layout"] [data-slot="workflow-builder-node"] [data-slot="workflow-node-menu-trigger"] { visibility: hidden; pointer-events: none; }`,
+    `[data-slot="workbench-layout"] [data-slot="workflow-node"][data-minimized="true"] { height: ${workflowEditorMinimizedNodeHeight}px !important; min-height: ${workflowEditorMinimizedNodeHeight}px !important; display: flex !important; flex-direction: row !important; align-items: stretch !important; }`,
+    `[data-slot="workbench-layout"] [data-slot="workflow-node"][data-minimized="true"] > [data-slot="workflow-node-header"] { position: relative !important; z-index: 10 !important; height: ${workflowEditorMinimizedNodeHeight}px !important; min-height: ${workflowEditorMinimizedNodeHeight}px !important; flex: 1 1 auto !important; border-bottom: 0 !important; border-radius: inherit !important; padding: 6px 8px !important; }`,
+    `[data-slot="workbench-layout"] [data-slot="workflow-node"][data-minimized="true"] [data-slot="workflow-node-header"] > div { align-items: center !important; }`,
+    `[data-slot="workbench-layout"] [data-slot="workflow-node"][data-minimized="true"] [data-slot="workflow-node-header"] > div > div:last-child { margin-top: 0 !important; }`,
+    `[data-slot="workbench-layout"] [data-slot="workflow-node"][data-minimized="true"] [data-slot="workflow-node-select"] > div + div { display: none !important; }`,
+    `[data-slot="workbench-layout"] [data-slot="workflow-node"][data-minimized="true"] [data-slot="workflow-node-minimize"] { position: relative !important; z-index: 20 !important; }`,
+    `[data-slot="workbench-layout"] [data-slot="workflow-node"][data-minimized="true"] > [data-slot="workflow-node-minimized-ports"] { position: absolute !important; inset: 0 !important; z-index: 30 !important; height: auto !important; border-top: 0 !important; background: transparent !important; pointer-events: none !important; }`,
+    `[data-slot="workbench-layout"] [data-slot="workflow-node"][data-minimized="true"] > [data-slot="workflow-node-minimized-ports"] > div { display: none !important; }`,
+    `[data-slot="workbench-layout"] [data-slot="workflow-node"][data-minimized="true"] > [data-slot="workflow-node-minimized-ports"] > [data-slot="workflow-node-port"] { z-index: 40 !important; width: 12px !important; height: 12px !important; border-radius: 9999px !important; pointer-events: auto !important; transform: translateY(-50%) !important; }`,
+    `[data-slot="workbench-layout"] [data-slot="workflow-node"][data-minimized="true"] > [data-slot="workflow-node-minimized-ports"] > [data-slot="workflow-node-port"][data-port-direction="input"] { left: -6px !important; }`,
+    `[data-slot="workbench-layout"] [data-slot="workflow-node"][data-minimized="true"] > [data-slot="workflow-node-minimized-ports"] > [data-slot="workflow-node-port"][data-port-direction="output"] { right: -6px !important; }`,
+    `[data-slot="workbench-layout"] [data-slot="workflow-node"][data-minimized="true"] > [data-slot="workflow-node-minimized-ports"] [data-slot="workflow-node-port-dot"] { display: block !important; width: 100% !important; height: 100% !important; border-radius: 9999px !important; }`,
+    `[data-slot="workbench-layout"] [data-slot="workflow-node"][data-compact="true"] [data-slot="workflow-node-port"] { z-index: 0 !important; }`,
     ...nodes.map((node, index) => {
       const selector = `[data-slot="workflow-builder-node"][data-node-id="${cssAttributeValue(node.id)}"]`;
       const layer = getWorkflowEditorNodeLayerIndex(index, node.id, primaryNodeId);
@@ -3761,6 +3778,13 @@ function WorkflowWorkbenchNodeLayerStyles<TNodeData extends Record<string, unkno
       const uiNode = toUiWorkflowBuilderNodes([node])[0]!;
 
       rules.push(...getWorkflowEditorPortColorRules(selector, uiNode));
+
+      if (isWorkflowEditorJsonNode(node)) {
+        rules.push(
+          `${selector} [data-slot="workflow-node-header"] > div > div:last-child > span:first-child:not([aria-hidden="true"]) { display: none !important; }`,
+          `${selector} [data-slot="workflow-node-port"] > div > span:nth-of-type(3) > span:first-child { display: none !important; }`,
+        );
+      }
 
       if ((node.inputs ?? []).length === 0) {
         rules.push(
@@ -5538,6 +5562,12 @@ function isWorkflowEditorJsonPrimitiveNode<TData>(
     node.kind === "json.number" ||
     node.kind === "json.boolean" ||
     node.kind === "json.null"
+  );
+}
+
+function isWorkflowEditorJsonNode<TData>(node: WorkflowEditorNode<TData>) {
+  return (
+    node.category === "JSON" || (typeof node.kind === "string" && node.kind.startsWith("json."))
   );
 }
 

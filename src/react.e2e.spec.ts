@@ -99,6 +99,49 @@ async function clickPort(page: Page, name: string) {
   await page.getByRole("button", { name }).first().evaluate(clickElement);
 }
 
+async function readEdgeSourceAnchorDelta(
+  page: Page,
+  edgeId: string,
+  nodeId: string,
+  portId: string,
+) {
+  return page.evaluate(
+    ({ edgeId, nodeId, portId }) => {
+      const viewport = document.querySelector<HTMLElement>(
+        '[data-slot="workflow-builder-viewport"]',
+      );
+      const edgePath = document.querySelector<SVGPathElement>(
+        `[data-slot="workflow-builder-edge-hit"][aria-label="Connection ${CSS.escape(edgeId)}"]`,
+      );
+      const portDot = document.querySelector<HTMLElement>(
+        `[data-slot="workflow-builder-node"][data-node-id="${CSS.escape(nodeId)}"] [data-slot="workflow-node-port"][data-port-direction="output"][data-port-id="${CSS.escape(portId)}"] [data-slot="workflow-node-port-dot"]`,
+      );
+      const pathMatch = edgePath
+        ?.getAttribute("d")
+        ?.match(/^M\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)/);
+
+      if (!viewport || !portDot || !pathMatch) {
+        return null;
+      }
+
+      const viewportRect = viewport.getBoundingClientRect();
+      const dotRect = portDot.getBoundingClientRect();
+      const transform = new DOMMatrixReadOnly(getComputedStyle(viewport).transform);
+      const zoom = transform.a > 0 ? transform.a : 1;
+      const pathX = Number(pathMatch[1]);
+      const pathY = Number(pathMatch[2]);
+      const dotX = (dotRect.left + dotRect.width / 2 - viewportRect.left) / zoom;
+      const dotY = (dotRect.top + dotRect.height / 2 - viewportRect.top) / zoom;
+
+      return {
+        x: Math.abs(pathX - dotX),
+        y: Math.abs(pathY - dotY),
+      };
+    },
+    { edgeId, nodeId, portId },
+  );
+}
+
 function clickElement(element: Element) {
   if (element instanceof HTMLElement) {
     element.click();
@@ -361,6 +404,16 @@ test.describe("WorkflowWorkbench desktop", () => {
         '[data-slot="workflow-builder-node"][data-node-id="json-string"] [data-slot="workflow-node"]:not([data-minimized="true"]) [data-slot="workflow-node-port"][data-port-direction="output"][data-port-id="value"] > div > span:nth-of-type(2)',
       ),
     ).toHaveCSS("display", "none");
+    await expect(
+      page.locator(
+        '[data-slot="workflow-builder-node"][data-node-id="json-string"] [data-slot="workflow-node-header"] > div > div:last-child > span:first-child:not([aria-hidden="true"])',
+      ),
+    ).toHaveCSS("display", "none");
+    await expect(
+      page.locator(
+        '[data-slot="workflow-builder-node"][data-node-id="json-string"] [data-slot="workflow-node-port"][data-port-direction="output"][data-port-id="value"] > div > span:nth-of-type(3) > span:first-child',
+      ),
+    ).toHaveCSS("display", "none");
     const expandedInputBox = await valueInput.boundingBox();
     const outputCardBox = await outputCard.boundingBox();
     expect(expandedInputBox).not.toBeNull();
@@ -383,6 +436,44 @@ test.describe("WorkflowWorkbench desktop", () => {
     expect(reminimizedInputBox!.x + reminimizedInputBox!.width).toBeLessThanOrEqual(
       reminimizedMenuBox!.x,
     );
+
+    const minimizedOutputPort = page.locator(
+      '[data-slot="workflow-builder-node"][data-node-id="json-string"] [data-slot="workflow-node"][data-minimized="true"] [data-slot="workflow-node-port"][data-port-direction="output"][data-port-id="value"]',
+    );
+    await expect(minimizedOutputPort).toBeVisible();
+    await expect
+      .poll(
+        () =>
+          minimizedOutputPort.evaluate((element) => {
+            const rect = element.getBoundingClientRect();
+            const topElement = document.elementFromPoint(
+              rect.left + rect.width / 2,
+              rect.top + rect.height / 2,
+            );
+
+            return topElement === element || element.contains(topElement);
+          }),
+        { message: "minimized output port is the visible hit target" },
+      )
+      .toBe(true);
+
+    await clickPort(page, "Start String Value");
+    await clickPort(page, "Connect to Output In");
+    await expect(page.getByTestId("summary-json")).toContainText("json-string:value->output:in");
+    await expect
+      .poll(
+        async () =>
+          (
+            await readEdgeSourceAnchorDelta(
+              page,
+              "json-string:value->output:in",
+              "json-string",
+              "value",
+            )
+          )?.y ?? 999,
+        { message: "edge source follows the minimized output port" },
+      )
+      .toBeLessThan(1.5);
   });
 
   test("hides object constructor expression controls while minimized", async ({
