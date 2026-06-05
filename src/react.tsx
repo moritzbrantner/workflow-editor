@@ -4,6 +4,7 @@ import {
   type DragEvent as ReactDragEvent,
   type Dispatch,
   type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type MutableRefObject,
   type PointerEvent as ReactPointerEvent,
   type CSSProperties,
@@ -171,7 +172,7 @@ const emptyWorkflowEditorSelection: WorkflowEditorSelectionState = {
   edgeIds: [],
 };
 const workflowWorkbenchOverlayInteractionSelector =
-  "[data-slot='workflow-palette-overlay'], [data-slot='workflow-inspector-overlay'], [data-slot='workflow-node-rename-control'], [data-slot='workflow-json-primitive-node-control'], [data-slot='workflow-object-constructor-node-control'], [data-slot='select-content'], [data-slot='dropdown-menu-content']";
+  "[data-slot='workflow-palette-overlay'], [data-slot='workflow-inspector-overlay'], [data-slot='workflow-node-rename-control'], [data-slot='workflow-json-primitive-node-control'], [data-slot='workflow-object-constructor-node-control'], [data-slot='workflow-port-connection-menu'], [data-slot='select-content'], [data-slot='dropdown-menu-content']";
 const workflowWorkbenchOverlaySelectionPreservationMs = 1500;
 
 const workflowEditorPaletteDragType = "application/x-workflow-editor-node-template";
@@ -183,6 +184,10 @@ let workflowEditorMemoryClipboard: string | null = null;
 const workflowNodeControlFrameClassName = "pointer-events-auto absolute z-20";
 const workflowNodeTextControlClassName =
   "border-zinc-300 bg-white/95 text-[11px] font-medium text-zinc-950 shadow-sm [--ui-input-height:1.5rem] [--ui-input-padding-x:0.5rem] [--ui-input-radius:0.25rem] focus-visible:ring-zinc-950/35 disabled:opacity-70";
+const workflowJsonPrimitiveTextControlClassName = cn(
+  workflowNodeTextControlClassName,
+  "h-6 min-h-0 py-0 leading-none",
+);
 const workflowNodeTextareaControlClassName =
   "resize-none rounded border-zinc-300 bg-white/95 px-2 py-1.5 font-mono text-[11px] leading-4 text-zinc-950 shadow-sm focus-visible:ring-zinc-950/35 disabled:bg-white/95 disabled:opacity-70";
 const workflowNodeToggleGroupControlClassName =
@@ -385,6 +390,24 @@ type WorkflowWorkbenchConnectionCoordinates = Pick<
   "sourceNodeId" | "sourcePortId" | "targetNodeId" | "targetPortId"
 >;
 
+type WorkflowWorkbenchPortDirection = "input" | "output";
+
+type WorkflowWorkbenchPortConnectionMenuState = {
+  direction: WorkflowWorkbenchPortDirection;
+  nodeId: string;
+  portId: string;
+  x: number;
+  y: number;
+};
+
+type WorkflowWorkbenchPortConnectionMenuOption = {
+  connection: WorkflowWorkbenchConnectionCoordinates;
+  id: string;
+  nodeLabel: string;
+  portLabel: string;
+  portTypeLabel?: string;
+};
+
 function toWorkflowWorkbenchConnectionInput(
   connection: WorkflowWorkbenchConnectionCoordinates,
 ): WorkflowEditorConnectionInput {
@@ -463,6 +486,8 @@ export function WorkflowWorkbench<
   const [paletteDragging, setPaletteDragging] = useState(false);
   const [palettePosition, setPalettePosition] = useState<WorkflowOverlayPosition>(null);
   const [paletteSearchValue, setPaletteSearchValue] = useState("");
+  const [portConnectionMenu, setPortConnectionMenu] =
+    useState<WorkflowWorkbenchPortConnectionMenuState | null>(null);
   const [renamingNodeId, setRenamingNodeId] = useState<string | null>(null);
   const [objectConstructorExpressionDrafts, setObjectConstructorExpressionDrafts] = useState<
     Record<string, string>
@@ -661,6 +686,57 @@ export function WorkflowWorkbench<
       setInternalSelection((current) => normalizeWorkflowEditorSelection(document, current));
     }
   }, [document, externalSelectionProvided]);
+
+  useEffect(() => {
+    if (!portConnectionMenu) {
+      return;
+    }
+
+    const portExists =
+      portConnectionMenu.direction === "input"
+        ? !!documentContext.getInputPort(portConnectionMenu.nodeId, portConnectionMenu.portId)
+        : !!documentContext.getOutputPort(portConnectionMenu.nodeId, portConnectionMenu.portId);
+
+    if (!portExists) {
+      setPortConnectionMenu(null);
+    }
+  }, [documentContext, portConnectionMenu]);
+
+  useEffect(() => {
+    if (!portConnectionMenu) {
+      return;
+    }
+
+    const ownerDocument = containerRef.current?.ownerDocument ?? globalThis.document;
+
+    if (!ownerDocument) {
+      return;
+    }
+
+    const closeOnPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest("[data-slot='workflow-port-connection-menu']")
+      ) {
+        return;
+      }
+
+      setPortConnectionMenu(null);
+    };
+    const closeOnKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setPortConnectionMenu(null);
+      }
+    };
+
+    ownerDocument.addEventListener("pointerdown", closeOnPointerDown, true);
+    ownerDocument.addEventListener("keydown", closeOnKeyDown);
+    return () => {
+      ownerDocument.removeEventListener("pointerdown", closeOnPointerDown, true);
+      ownerDocument.removeEventListener("keydown", closeOnKeyDown);
+    };
+  }, [portConnectionMenu]);
 
   useEffect(() => {
     if (typeof window.matchMedia !== "function") {
@@ -1417,6 +1493,26 @@ export function WorkflowWorkbench<
     }
 
     startMarquee(event);
+  };
+
+  const openPortConnectionMenu = (event: ReactMouseEvent<HTMLDivElement>) => {
+    const container = containerRef.current;
+    const portTarget = getWorkflowPortContextTarget(container, event);
+
+    if (!container || !portTarget || readOnly) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    connectionInProgressRef.current = false;
+    ignoreSelectionClearUntilRef.current =
+      Date.now() + workflowWorkbenchOverlaySelectionPreservationMs;
+    setPortConnectionMenu({
+      ...portTarget,
+      x: Math.round(event.clientX + 4),
+      y: Math.round(event.clientY + 4),
+    });
   };
 
   const startMarquee = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -2233,6 +2329,7 @@ export function WorkflowWorkbench<
               pendingNodeSnapRef.current = null;
               setMarquee(null);
             }}
+            onContextMenuCapture={openPortConnectionMenu}
             onDoubleClickCapture={startNodeRenameFromDoubleClick}
             onDragOver={handleTemplateDragOver}
             onDrop={handleTemplateDrop}
@@ -2364,6 +2461,18 @@ export function WorkflowWorkbench<
                 openSelectedNodeWorkflow();
               }}
             />
+            {portConnectionMenu ? (
+              <WorkflowPortConnectionMenu
+                document={document}
+                menu={portConnectionMenu}
+                typeDefinitions={typeDefinitions}
+                onClose={() => setPortConnectionMenu(null)}
+                onConnect={(connection) => {
+                  setPortConnectionMenu(null);
+                  commitWorkflowEditorConnection(connection);
+                }}
+              />
+            ) : null}
             {chrome?.nodeControls === "hidden" ? null : (
               <>
                 <WorkflowNodeActionMenus
@@ -3794,7 +3903,9 @@ function WorkflowWorkbenchNodeLayerStyles<TNodeData extends Record<string, unkno
       }
 
       if (isWorkflowEditorJsonPrimitiveNode(node)) {
+        const width = getWorkflowEditorMinimizedNodeWidth(uiNode);
         rules.push(
+          `${selector}, ${selector} > [data-slot="workflow-node"] { width: ${width}px !important; }`,
           `${selector} [data-slot="workflow-node"]:not([data-minimized="true"]) [data-slot="workflow-node-port"][data-port-direction="output"][data-port-id="value"] > div > div > div:first-child { display: none !important; }`,
           `${selector} [data-slot="workflow-node"]:not([data-minimized="true"]) [data-slot="workflow-node-port"][data-port-direction="output"][data-port-id="value"] > div > span:nth-of-type(2) { display: none !important; }`,
           `${selector} [data-slot="workflow-node"][data-minimized="true"] [data-slot="workflow-node-select"] > div { visibility: hidden; }`,
@@ -4229,7 +4340,7 @@ function WorkflowJsonPrimitiveNodeValueControl<TNodeData extends Record<string, 
         >
           <Input
             aria-label={label}
-            className={workflowNodeTextControlClassName}
+            className={workflowJsonPrimitiveTextControlClassName}
             disabled={readOnly}
             value={typeof value === "string" ? value : ""}
             onChange={(event) => onValueChange(node.id, event.currentTarget.value)}
@@ -4246,7 +4357,7 @@ function WorkflowJsonPrimitiveNodeValueControl<TNodeData extends Record<string, 
         >
           <Input
             aria-label={label}
-            className={workflowNodeTextControlClassName}
+            className={workflowJsonPrimitiveTextControlClassName}
             disabled={readOnly}
             inputMode="decimal"
             type="number"
@@ -4301,7 +4412,7 @@ function WorkflowJsonPrimitiveNodeValueControl<TNodeData extends Record<string, 
         >
           <Input
             aria-label={label}
-            className={workflowNodeTextControlClassName}
+            className={workflowJsonPrimitiveTextControlClassName}
             disabled
             value="null"
             readOnly
@@ -4330,13 +4441,18 @@ function getWorkflowJsonPrimitiveNodeControlOffset<TNodeData>(node: WorkflowEdit
     return { x: 58, y: 13, width: 112 };
   }
 
-  const size = getWorkflowEditorRenderedNodeSize(uiNode);
+  const size = {
+    ...getWorkflowEditorRenderedNodeSize(uiNode, { showPortColumnHeaders: false }),
+    width: getWorkflowEditorMinimizedNodeWidth(uiNode),
+  };
   const width = Math.min(170, Math.max(112, size.width - 64));
   const outputIndex = Math.max(
     0,
     (node.outputs ?? []).findIndex((output) => output.id === "value"),
   );
-  const portCenterY = getWorkflowEditorPortCenterOffset(uiNode, "output", outputIndex);
+  const portCenterY = getWorkflowEditorPortCenterOffset(uiNode, "output", outputIndex, {
+    showPortColumnHeaders: false,
+  });
 
   return {
     x: Math.round((size.width - width) / 2),
@@ -4849,6 +4965,159 @@ function getWorkflowObjectConstructorNodeControlOffset<TNodeData>(
   };
 }
 
+function WorkflowPortConnectionMenu<
+  TNodeData extends Record<string, unknown>,
+  TEdgeData extends Record<string, unknown>,
+>({
+  document,
+  menu,
+  typeDefinitions,
+  onClose,
+  onConnect,
+}: {
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>;
+  menu: WorkflowWorkbenchPortConnectionMenuState;
+  typeDefinitions?: readonly WorkflowEditorTypeDefinition[];
+  onClose: () => void;
+  onConnect: (connection: WorkflowWorkbenchConnectionCoordinates) => void;
+}) {
+  const context = useMemo(() => createWorkflowEditorDocumentContext(document), [document]);
+  const node = context.nodeById.get(menu.nodeId);
+  const port =
+    menu.direction === "input"
+      ? context.getInputPort(menu.nodeId, menu.portId)
+      : context.getOutputPort(menu.nodeId, menu.portId);
+  const options = useMemo(
+    () => getWorkflowPortConnectionMenuOptions(document, menu, typeDefinitions),
+    [document, menu, typeDefinitions],
+  );
+  const title = `${node?.label ?? menu.nodeId} ${port?.label ?? menu.portId}`;
+  const targetLabel = menu.direction === "output" ? "Possible inputs" : "Possible outputs";
+  const ownerDocument = globalThis.document;
+
+  const stopInteractionPropagation = (event: SyntheticEvent) => {
+    event.stopPropagation();
+  };
+
+  if (!ownerDocument?.body) {
+    return null;
+  }
+
+  return createPortal(
+    <div
+      role="menu"
+      data-slot="workflow-port-connection-menu"
+      aria-label={`${title} ${targetLabel}`}
+      className="fixed z-[30000] grid max-h-72 w-56 gap-1 overflow-auto rounded-md bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10"
+      style={{
+        left: Math.max(8, menu.x),
+        top: Math.max(8, menu.y),
+      }}
+      onClick={stopInteractionPropagation}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      }}
+      onMouseDown={stopInteractionPropagation}
+      onPointerDown={stopInteractionPropagation}
+    >
+      <div className="px-1.5 py-1">
+        <div className="truncate text-xs font-medium text-muted-foreground">{targetLabel}</div>
+        <div className="truncate text-[11px] text-muted-foreground/80">{title}</div>
+      </div>
+      {options.length === 0 ? (
+        <div
+          role="menuitem"
+          aria-disabled="true"
+          className="rounded-sm px-1.5 py-1.5 text-sm text-muted-foreground"
+        >
+          No compatible {menu.direction === "output" ? "inputs" : "outputs"}
+        </div>
+      ) : (
+        options.map((option) => (
+          <button
+            key={option.id}
+            type="button"
+            role="menuitem"
+            aria-label={`${option.nodeLabel} ${option.portLabel}`}
+            className="grid min-w-0 gap-0.5 rounded-sm px-1.5 py-1.5 text-left text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+            onClick={() => {
+              onConnect(option.connection);
+              onClose();
+            }}
+          >
+            <span className="truncate font-medium">
+              {option.nodeLabel} {option.portLabel}
+            </span>
+            {option.portTypeLabel ? (
+              <span className="truncate text-[11px] text-muted-foreground">
+                {option.portTypeLabel}
+              </span>
+            ) : null}
+          </button>
+        ))
+      )}
+    </div>,
+    ownerDocument.body,
+  );
+}
+
+function getWorkflowPortConnectionMenuOptions<
+  TNodeData extends Record<string, unknown>,
+  TEdgeData extends Record<string, unknown>,
+>(
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>,
+  menu: WorkflowWorkbenchPortConnectionMenuState,
+  typeDefinitions?: readonly WorkflowEditorTypeDefinition[],
+): WorkflowWorkbenchPortConnectionMenuOption[] {
+  const options: WorkflowWorkbenchPortConnectionMenuOption[] = [];
+
+  for (const node of document.nodes) {
+    const ports = menu.direction === "output" ? (node.inputs ?? []) : (node.outputs ?? []);
+
+    for (const port of ports) {
+      const connection =
+        menu.direction === "output"
+          ? {
+              sourceNodeId: menu.nodeId,
+              sourcePortId: menu.portId,
+              targetNodeId: node.id,
+              targetPortId: port.id,
+            }
+          : {
+              sourceNodeId: node.id,
+              sourcePortId: port.id,
+              targetNodeId: menu.nodeId,
+              targetPortId: menu.portId,
+            };
+      const validity = validateWorkflowEditorConnection(document, connection, { typeDefinitions });
+
+      if (!validity.valid) {
+        continue;
+      }
+
+      options.push({
+        connection,
+        id: getWorkflowWorkbenchConnectionKey(connection),
+        nodeLabel: node.label,
+        portLabel: port.label,
+        portTypeLabel: formatWorkflowPortConnectionMenuType(port.type),
+      });
+    }
+  }
+
+  return options;
+}
+
+function formatWorkflowPortConnectionMenuType(type: unknown) {
+  if (!type || typeof type !== "object" || !("kind" in type)) {
+    return undefined;
+  }
+
+  const kind = (type as { kind?: unknown }).kind;
+  return typeof kind === "string" ? kind : undefined;
+}
+
 function WorkflowNodeActionMenus<
   TNodeData extends Record<string, unknown>,
   TEdgeData extends Record<string, unknown>,
@@ -5068,6 +5337,72 @@ function isEditableEventTarget(target: EventTarget | null) {
       "input, textarea, select, [contenteditable='true'], [role='textbox'], [data-slot='workflow-json-primitive-node-control']",
     )
   );
+}
+
+function getWorkflowPortContextTarget(
+  container: HTMLElement | null,
+  event: ReactMouseEvent,
+): Pick<WorkflowWorkbenchPortConnectionMenuState, "direction" | "nodeId" | "portId"> | null {
+  if (!container) {
+    return null;
+  }
+
+  const eventTarget = event.target;
+  const directPort =
+    eventTarget instanceof Element
+      ? eventTarget.closest<HTMLElement>(
+          "[data-slot='workflow-node-port'][data-port-direction][data-port-id]",
+        )
+      : null;
+  const portElement =
+    directPort && container.contains(directPort)
+      ? directPort
+      : getWorkflowPortElementFromPoint(container, event.clientX, event.clientY);
+  const nodeElement = portElement?.closest<HTMLElement>(
+    "[data-slot='workflow-builder-node'][data-node-id]",
+  );
+  const direction = portElement?.dataset.portDirection;
+  const nodeId = nodeElement?.dataset.nodeId;
+  const portId = portElement?.dataset.portId;
+
+  if (
+    !nodeId ||
+    !portId ||
+    (direction !== "input" && direction !== "output") ||
+    !container.contains(nodeElement)
+  ) {
+    return null;
+  }
+
+  return { direction, nodeId, portId };
+}
+
+function getWorkflowPortElementFromPoint(container: HTMLElement, clientX: number, clientY: number) {
+  let bestPort: HTMLElement | null = null;
+  let bestArea = Number.POSITIVE_INFINITY;
+
+  for (const portElement of container.querySelectorAll<HTMLElement>(
+    "[data-slot='workflow-node-port'][data-port-direction][data-port-id]",
+  )) {
+    const rect = portElement.getBoundingClientRect();
+
+    if (
+      clientX < rect.left ||
+      clientX > rect.right ||
+      clientY < rect.top ||
+      clientY > rect.bottom
+    ) {
+      continue;
+    }
+
+    const area = rect.width * rect.height;
+    if (area < bestArea) {
+      bestArea = area;
+      bestPort = portElement;
+    }
+  }
+
+  return bestPort;
 }
 
 function isWorkflowWorkbenchOverlayInteractionTarget(target: EventTarget | null) {

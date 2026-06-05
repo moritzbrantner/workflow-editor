@@ -99,6 +99,22 @@ async function clickPort(page: Page, name: string) {
   await page.getByRole("button", { name }).first().evaluate(clickElement);
 }
 
+async function rightClickPort(
+  page: Page,
+  nodeId: string,
+  direction: "input" | "output",
+  portId: string,
+) {
+  const port = page
+    .locator(
+      `[data-slot="workflow-builder-node"][data-node-id="${nodeId}"] [data-slot="workflow-node-port"][data-port-direction="${direction}"][data-port-id="${portId}"]`,
+    )
+    .first();
+  const box = await port.boundingBox();
+  expect(box).not.toBeNull();
+  await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2, { button: "right" });
+}
+
 async function readEdgeSourceAnchorDelta(
   page: Page,
   edgeId: string,
@@ -398,6 +414,9 @@ test.describe("WorkflowWorkbench desktop", () => {
 
     await page.getByRole("button", { name: "Expand String", exact: true }).click();
     await expect(valueInput).toBeVisible();
+    const expandedNode = page.locator(
+      '[data-slot="workflow-builder-node"][data-node-id="json-string"] [data-slot="workflow-node"]:not([data-minimized="true"])',
+    );
     const outputCard = page.getByRole("button", { name: "Start String Value" });
     await expect(
       page.locator(
@@ -415,9 +434,12 @@ test.describe("WorkflowWorkbench desktop", () => {
       ),
     ).toHaveCSS("display", "none");
     const expandedInputBox = await valueInput.boundingBox();
+    const expandedNodeBox = await expandedNode.boundingBox();
     const outputCardBox = await outputCard.boundingBox();
     expect(expandedInputBox).not.toBeNull();
+    expect(expandedNodeBox).not.toBeNull();
     expect(outputCardBox).not.toBeNull();
+    expect(expandedNodeBox!.width).toBeLessThanOrEqual(240);
     expect(expandedInputBox!.x + expandedInputBox!.width / 2).toBeGreaterThan(outputCardBox!.x);
     expect(expandedInputBox!.x + expandedInputBox!.width / 2).toBeLessThan(
       outputCardBox!.x + outputCardBox!.width,
@@ -426,6 +448,24 @@ test.describe("WorkflowWorkbench desktop", () => {
     expect(expandedInputBox!.y + expandedInputBox!.height / 2).toBeLessThan(
       outputCardBox!.y + outputCardBox!.height,
     );
+    expect(expandedInputBox!.y).toBeGreaterThanOrEqual(outputCardBox!.y);
+    expect(expandedInputBox!.y + expandedInputBox!.height).toBeLessThanOrEqual(
+      outputCardBox!.y + outputCardBox!.height,
+    );
+    expect(
+      Math.abs(
+        expandedInputBox!.x +
+          expandedInputBox!.width / 2 -
+          (outputCardBox!.x + outputCardBox!.width / 2),
+      ),
+    ).toBeLessThanOrEqual(1.5);
+    expect(
+      Math.abs(
+        expandedInputBox!.y +
+          expandedInputBox!.height / 2 -
+          (outputCardBox!.y + outputCardBox!.height / 2),
+      ),
+    ).toBeLessThanOrEqual(1.5);
 
     await page.getByRole("button", { name: "Minimize String", exact: true }).click();
     await expect(valueInput).toBeVisible();
@@ -911,6 +951,28 @@ test.describe("WorkflowWorkbench desktop", () => {
         targetPortId: "in",
       }),
     );
+  });
+
+  test("creates an edge from an output context menu", async ({ page }, testInfo) => {
+    await gotoWorkflowEditor(page, testInfo);
+
+    await rightClickPort(page, "input", "output", "out");
+    await expect(page.getByRole("menu", { name: /Possible inputs/ })).toBeVisible();
+    await page.getByRole("menuitem", { name: "Output In", exact: true }).click();
+
+    await expectEdgeCount(page, 2);
+    await expect(page.getByTestId("summary-json")).toContainText("input:out->output:in");
+  });
+
+  test("creates an edge from an input context menu", async ({ page }, testInfo) => {
+    await gotoWorkflowEditor(page, testInfo);
+
+    await rightClickPort(page, "output", "input", "in");
+    await expect(page.getByRole("menu", { name: /Possible outputs/ })).toBeVisible();
+    await page.getByRole("menuitem", { name: "Transform Out", exact: true }).click();
+
+    await expectEdgeCount(page, 2);
+    await expect(page.getByTestId("summary-json")).toContainText("transform:out->output:in");
   });
 
   test("snaps compatible ports together while dragging nodes", async ({ page }, testInfo) => {

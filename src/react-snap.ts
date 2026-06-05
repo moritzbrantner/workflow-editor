@@ -25,6 +25,7 @@ const workflowEditorObjectConstructorValidationHeight = 20;
 type WorkflowEditorObjectConstructorLayoutOptions = {
   objectConstructorExpression?: string;
   objectConstructorValidationMessage?: string;
+  showPortColumnHeaders?: boolean;
 };
 
 type WorkflowEditorPoint = {
@@ -245,7 +246,9 @@ export function getWorkflowEditorRenderedNodeSize(
     };
   }
 
-  const size = getWorkflowNodeSize(node);
+  const size = getWorkflowNodeSize(node, {
+    showPortColumnHeaders: options.showPortColumnHeaders,
+  });
 
   if (node.kind === "json.object") {
     return {
@@ -280,7 +283,9 @@ export function getWorkflowEditorPortCenterOffset(
     return ((portIndex + 1) / (portCount + 1)) * workflowEditorMinimizedNodeHeight;
   }
 
-  const offset = getWorkflowNodePortCenterOffset(node, portIndex);
+  const offset = getWorkflowNodePortCenterOffset(node, portIndex, {
+    showPortColumnHeaders: options.showPortColumnHeaders,
+  });
 
   if (
     node.kind === "json.object" &&
