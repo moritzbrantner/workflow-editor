@@ -1,5 +1,7 @@
 import { describe, expect, test } from "vitest";
 
+import { GraphCanvas, GraphNode, normalizeGraphEditorDocument } from "@moritzbrantner/graph-editor";
+import * as workflowEditorPackage from "@moritzbrantner/workflow-editor";
 import {
   WorkflowEditor,
   WorkflowWorkbench,
@@ -21,5 +23,13 @@ describe("@moritzbrantner/workflow-editor root exports", () => {
     expect(typeof createWorkflowEditorHistory).toBe("function");
     expect(typeof createWorkflowEditorLibrary).toBe("function");
     expect(typeof encodeWorkflowEditorSharePayload).toBe("function");
+  });
+
+  test("keeps generic graph exports in the graph-editor package", () => {
+    expect(typeof GraphCanvas).toBe("function");
+    expect(typeof GraphNode).toBe("function");
+    expect(typeof normalizeGraphEditorDocument).toBe("function");
+    expect("GraphCanvas" in workflowEditorPackage).toBe(false);
+    expect("normalizeGraphEditorDocument" in workflowEditorPackage).toBe(false);
   });
 });
