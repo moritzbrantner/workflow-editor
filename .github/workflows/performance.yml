@@ -1,0 +1,30 @@
+name: Performance
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  performance-validation:
+    name: Performance Validation
+    permissions:
+      contents: read
+      packages: read
+    uses: moritzbrantner/reusable-workflows/.github/workflows/performance-validation.yml@workflow-standard-v1
+    with:
+      bun_version: "1.3.14"
+      install_command: bun install --frozen-lockfile
+      build_command: bun run build
+      benchmark_command: bun run bench
+      upload_artifacts_on: always
+      artifact_paths: benchmark-results
+      timeout_minutes: 30
+    secrets:
+      GH_PACKAGES_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN }}
