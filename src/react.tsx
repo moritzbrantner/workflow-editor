@@ -2353,6 +2353,7 @@ export function WorkflowWorkbench<
                 connectionInProgressRef.current = false;
                 if (!readOnly) {
                   commitWorkflowEditorConnection(connection);
+                  return true;
                 }
               }}
               onDoubleClick={() => {
