@@ -1,3 +1,5 @@
+import { normalizeGraphEditorSelection } from "@moritzbrantner/graph-editor/core";
+
 import {
   normalizeWorkflowEditorDocument,
   type WorkflowEditorDocument,
@@ -47,39 +49,7 @@ export function normalizeWorkflowEditorSelection<
   document: WorkflowEditorDocument<TNodeData, TEdgeData>,
   selection: WorkflowEditorSelectionState,
 ): WorkflowEditorSelectionState {
-  const nodeIds = orderedUnique(
-    document.nodes.map((node) => node.id),
-    selection.nodeIds,
-  );
-  const edgeIds = orderedUnique(
-    document.edges.map((edge) => edge.id),
-    selection.edgeIds,
-  );
-  const groupIds = orderedUnique(
-    (document.groups ?? []).map((group) => group.id),
-    selection.groupIds ?? [],
-  );
-  const primary =
-    selection.primary?.type === "node" && nodeIds.includes(selection.primary.id)
-      ? selection.primary
-      : selection.primary?.type === "edge" && edgeIds.includes(selection.primary.id)
-        ? selection.primary
-        : selection.primary?.type === "group" && groupIds.includes(selection.primary.id)
-          ? selection.primary
-          : groupIds.length > 0
-            ? ({ type: "group", id: groupIds.at(-1)! } as const)
-            : nodeIds.length > 0
-              ? ({ type: "node", id: nodeIds.at(-1)! } as const)
-              : edgeIds.length > 0
-                ? ({ type: "edge", id: edgeIds.at(-1)! } as const)
-                : undefined;
-
-  return {
-    nodeIds,
-    edgeIds,
-    ...(groupIds.length > 0 ? { groupIds } : {}),
-    ...(primary ? { primary } : {}),
-  };
+  return normalizeGraphEditorSelection(document, selection);
 }
 
 export function copyWorkflowEditorSelection<
@@ -310,11 +280,6 @@ function assertWorkflowEditorClipboardPayload<
   ) {
     throw new Error("Invalid workflow editor clipboard payload");
   }
-}
-
-function orderedUnique(availableIds: string[], selectedIds: readonly string[]) {
-  const selected = new Set(selectedIds);
-  return availableIds.filter((id) => selected.has(id));
 }
 
 function createUniqueWorkflowEditorId(baseId: string, existingIds: ReadonlySet<string>) {

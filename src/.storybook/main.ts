@@ -59,8 +59,16 @@ const config: StorybookConfig = {
           replacement: path.resolve(rootDir, "../graph-editor/src/layout.ts"),
         },
         {
+          find: "@moritzbrantner/graph-editor/operations",
+          replacement: path.resolve(rootDir, "../graph-editor/src/operations.ts"),
+        },
+        {
           find: "@moritzbrantner/graph-editor/react",
           replacement: path.resolve(rootDir, "../graph-editor/src/react.tsx"),
+        },
+        {
+          find: "@moritzbrantner/graph-editor/runtime",
+          replacement: path.resolve(rootDir, "../graph-editor/src/runtime.ts"),
         },
         {
           find: "@moritzbrantner/graph-editor",

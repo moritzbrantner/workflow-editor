@@ -1,11 +1,18 @@
 import type {
+  GraphEditorDocument,
+  GraphEditorEdge,
+  GraphEditorGroup,
+  GraphEditorNode,
+  GraphEditorNodeTemplate,
+  GraphEditorPort,
+  GraphEditorSelectionItem,
+  GraphEditorSelectionState,
+  GraphEditorViewport,
+} from "@moritzbrantner/graph-editor/core";
+import type {
   WorkflowBuilderConnection as UiWorkflowBuilderConnection,
   WorkflowBuilderConnectionValidity as UiWorkflowBuilderConnectionValidity,
 } from "./react/workflow-builder";
-import type {
-  WorkflowNodeData as UiWorkflowNodeData,
-  WorkflowNodePort as UiWorkflowNodePort,
-} from "./react/workflow-node";
 
 export type WorkflowEditorPortType =
   | { kind: "any" }
@@ -113,9 +120,11 @@ export type WorkflowEditorTypeDiagnostic = {
   message: string;
 };
 
-export type WorkflowEditorPort = Omit<UiWorkflowNodePort, "kind" | "type"> & {
+export type WorkflowEditorPort = Omit<
+  GraphEditorPort<WorkflowEditorPortType>,
+  "required" | "type"
+> & {
   type: WorkflowEditorPortType;
-  color?: string;
   optional?: boolean;
   defaultValue?: WorkflowEditorPortDefaultValue;
 };
@@ -138,51 +147,27 @@ export type WorkflowEditorNodeComposition<TNodeData = Record<string, unknown>> =
 };
 
 export type WorkflowEditorNode<TData = Record<string, unknown>> = Omit<
-  UiWorkflowNodeData,
-  "inputs" | "metadata" | "outputs"
+  GraphEditorNode<TData, WorkflowEditorPortType>,
+  "inputs" | "outputs"
 > & {
-  categoryPath?: readonly string[];
-  x: number;
-  y: number;
   inputs?: WorkflowEditorPort[];
   outputs?: WorkflowEditorPort[];
-  data?: TData;
   workflowRef?: WorkflowEditorWorkflowReference;
   composition?: WorkflowEditorNodeComposition<TData>;
 };
 
-export type WorkflowEditorEdge<TData = Record<string, unknown>> = {
-  id: string;
-  sourceNodeId: string;
-  sourcePortId: string;
-  targetNodeId: string;
-  targetPortId: string;
-  status?: "idle" | "running" | "success" | "error" | "warning" | string;
-  data?: TData;
-};
+export type WorkflowEditorEdge<TData = Record<string, unknown>> = GraphEditorEdge<TData>;
 
-export type WorkflowEditorGroup<TData = Record<string, unknown>> = {
-  id: string;
-  label: string;
-  nodeIds: string[];
-  minimized?: boolean;
-  data?: TData;
-};
+export type WorkflowEditorGroup<TData = Record<string, unknown>> = GraphEditorGroup<TData>;
 
-export type WorkflowEditorViewport = {
-  x: number;
-  y: number;
-  zoom: number;
-};
+export type WorkflowEditorViewport = GraphEditorViewport;
 
 export type WorkflowEditorDocument<
   TNodeData = Record<string, unknown>,
   TEdgeData = Record<string, unknown>,
-> = {
+> = Omit<GraphEditorDocument<TNodeData, TEdgeData, WorkflowEditorPortType>, "edges" | "nodes"> & {
   nodes: Array<WorkflowEditorNode<TNodeData>>;
   edges: Array<WorkflowEditorEdge<TEdgeData>>;
-  groups?: Array<WorkflowEditorGroup>;
-  viewport?: WorkflowEditorViewport;
 };
 
 export type WorkflowEditorDocumentNormalizationMode = "strict" | "repair";
@@ -249,28 +234,16 @@ export type WorkflowEditorSelection<
     }
   | null;
 
-export type WorkflowEditorSelectionItem =
-  | {
-      type: "node";
-      id: string;
-    }
-  | {
-      type: "edge";
-      id: string;
-    }
-  | {
-      type: "group";
-      id: string;
-    };
+export type WorkflowEditorSelectionItem = GraphEditorSelectionItem;
 
-export type WorkflowEditorSelectionState = {
-  nodeIds: string[];
-  edgeIds: string[];
-  groupIds?: string[];
-  primary?: WorkflowEditorSelectionItem;
-};
+export type WorkflowEditorSelectionState = GraphEditorSelectionState;
 
 export type WorkflowEditorNodeTemplate<TData = Record<string, unknown>> = Omit<
-  WorkflowEditorNode<TData>,
-  "x" | "y"
->;
+  GraphEditorNodeTemplate<TData, WorkflowEditorPortType>,
+  "inputs" | "outputs"
+> & {
+  inputs?: WorkflowEditorPort[];
+  outputs?: WorkflowEditorPort[];
+  workflowRef?: WorkflowEditorWorkflowReference;
+  composition?: WorkflowEditorNodeComposition<TData>;
+};

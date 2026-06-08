@@ -7,14 +7,39 @@ import type {
   WorkflowNodeData as UiWorkflowNodeData,
   WorkflowNodePort as UiWorkflowNodePort,
 } from "./react/workflow-node";
-import { getWorkflowBuilderConnectionValidity } from "./react/workflow-builder";
-
 import {
-  createWorkflowGraphIndex,
-  type WorkflowEditorGraphIndex,
-  type WorkflowEditorIndexedEdge,
-  type WorkflowEditorIndexedNode,
-  type WorkflowEditorSubgraph,
+  addGraphEditorEdge,
+  addGraphEditorNode,
+  createGraphEditorGraphIndex,
+  detectGraphEditorCycles,
+  duplicateGraphEditorNode,
+  isGraphEditorDirectedAcyclicGraph,
+  moveGraphEditorGroup,
+  moveGraphEditorNode,
+  normalizeGraphEditorDocument,
+  removeGraphEditorEdge,
+  ungroupGraphEditorGroup,
+  updateGraphEditorGroup,
+  updateGraphEditorNode,
+  validateGraphEditorConnection,
+  validateGraphEditorDocument,
+  wouldCreateGraphEditorCycle,
+  type GraphEditorDocumentDiagnostic,
+} from "@moritzbrantner/graph-editor/core";
+import type { GraphEditorOperation } from "@moritzbrantner/graph-editor/operations";
+import type { GraphWorkbenchController } from "@moritzbrantner/graph-editor/react";
+import {
+  applyGraphEditorOperation,
+  createGraphEditorRuntime,
+  type GraphEditorRuntimeOptions,
+  type GraphEditorRuntimeState,
+} from "@moritzbrantner/graph-editor/runtime";
+
+import type {
+  WorkflowEditorGraphIndex,
+  WorkflowEditorIndexedEdge,
+  WorkflowEditorIndexedNode,
+  WorkflowEditorSubgraph,
 } from "./graph-index";
 import {
   createWorkflowEditorDocumentContext,
@@ -25,7 +50,6 @@ import type {
   WorkflowEditorArrayConstructorItem,
   WorkflowEditorCompositionBoundary,
   WorkflowEditorConnectionInput,
-  WorkflowEditorConnectionInvalidReason,
   WorkflowEditorConnectionValidity,
   WorkflowEditorDocument,
   WorkflowEditorDocumentDiagnostic,
@@ -35,7 +59,6 @@ import type {
   WorkflowEditorGroup,
   WorkflowEditorNode,
   WorkflowEditorNodeComposition,
-  WorkflowEditorNodeTemplate,
   WorkflowEditorObjectConstructorSchema,
   WorkflowEditorObjectConstructorProperty,
   WorkflowEditorObjectConstructorExpressionDiagnostic,
@@ -54,6 +77,46 @@ import type {
   WorkflowEditorWorkflowReference,
 } from "./core-types";
 import { createWorkflowEditorTypeResolver } from "./core-type-resolver";
+
+export type WorkflowGraphOperation<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+  TPortType = WorkflowEditorPortType,
+> = GraphEditorOperation<TNodeData, TEdgeData, TPortType>;
+
+export type WorkflowGraphRuntimeState<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+  TPortType = WorkflowEditorPortType,
+> = GraphEditorRuntimeState<TNodeData, TEdgeData, TPortType>;
+
+export type WorkflowGraphWorkbenchController<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+  TPortType = WorkflowEditorPortType,
+> = GraphWorkbenchController<TNodeData, TEdgeData, TPortType>;
+
+export function createWorkflowGraphRuntime<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+  TPortType = WorkflowEditorPortType,
+>(
+  options: GraphEditorRuntimeOptions<TNodeData, TEdgeData, TPortType>,
+): WorkflowGraphRuntimeState<TNodeData, TEdgeData, TPortType> {
+  return createGraphEditorRuntime(options);
+}
+
+export function applyWorkflowGraphOperation<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+  TPortType = WorkflowEditorPortType,
+>(
+  state: WorkflowGraphRuntimeState<TNodeData, TEdgeData, TPortType>,
+  operation: WorkflowGraphOperation<TNodeData, TEdgeData, TPortType>,
+  options: Parameters<typeof applyGraphEditorOperation>[2] = {},
+): WorkflowGraphRuntimeState<TNodeData, TEdgeData, TPortType> {
+  return applyGraphEditorOperation(state, operation, options);
+}
 
 export type {
   WorkflowEditorDocumentContext,
@@ -103,6 +166,12 @@ export type {
   WorkflowEditorViewport,
   WorkflowEditorWorkflowReference,
 } from "./core-types";
+export {
+  defaultWorkflowEditorNodeTemplates,
+  workflowEditorCollectionNodeTemplates,
+  workflowEditorControlFlowNodeTemplates,
+  workflowEditorJsonNodeTemplates,
+} from "./core-templates";
 
 export class WorkflowEditorDocumentValidationError extends Error {
   override name = "WorkflowEditorDocumentValidationError" as const;
@@ -114,248 +183,28 @@ export class WorkflowEditorDocumentValidationError extends Error {
   }
 }
 
-export const workflowEditorControlFlowNodeTemplates = [
-  {
-    id: "control-flow-start",
-    label: "Start",
-    description: "Begin a workflow branch.",
-    kind: "control.start",
-    category: "Control flow",
-    outputs: [{ id: "out", label: "Out", type: { kind: "any" } }],
-  },
-  {
-    id: "control-flow-if",
-    label: "If",
-    description: "Route a value by a boolean condition.",
-    kind: "control.if",
-    category: "Control flow",
-    inputs: [
-      { id: "value", label: "Value", type: { kind: "any" } },
-      { id: "condition", label: "Condition", type: { kind: "boolean" } },
-    ],
-    outputs: [
-      { id: "true", label: "True", type: { kind: "any" } },
-      { id: "false", label: "False", type: { kind: "any" } },
-    ],
-  },
-  {
-    id: "control-flow-switch",
-    label: "Switch",
-    description: "Route a value through a matching case or fallback branch.",
-    kind: "control.switch",
-    category: "Control flow",
-    inputs: [
-      { id: "value", label: "Value", type: { kind: "any" } },
-      { id: "case", label: "Case", type: { kind: "any" } },
-    ],
-    outputs: [
-      { id: "match", label: "Match", type: { kind: "any" } },
-      { id: "default", label: "Default", type: { kind: "any" } },
-    ],
-  },
-  {
-    id: "control-flow-merge",
-    label: "Merge",
-    description: "Join two branches into one value.",
-    kind: "control.merge",
-    category: "Control flow",
-    inputs: [
-      { id: "a", label: "A", type: { kind: "any" } },
-      { id: "b", label: "B", type: { kind: "any" } },
-    ],
-    outputs: [{ id: "out", label: "Out", type: { kind: "any" } }],
-  },
-  {
-    id: "control-flow-end",
-    label: "End",
-    description: "Finish a workflow branch.",
-    kind: "control.end",
-    category: "Control flow",
-    inputs: [{ id: "in", label: "In", type: { kind: "any" } }],
-  },
-] satisfies WorkflowEditorNodeTemplate[];
-
-export const workflowEditorJsonNodeTemplates = [
-  {
-    id: "json-string",
-    label: "String",
-    description: "Create a JSON string value.",
-    kind: "json.string",
-    category: "JSON",
-    minimized: true,
-    outputs: [{ id: "value", label: "Value", type: { kind: "string" } }],
-    data: { value: "", sourceName: "stringValue" },
-  },
-  {
-    id: "json-number",
-    label: "Number",
-    description: "Create a JSON number value.",
-    kind: "json.number",
-    category: "JSON",
-    minimized: true,
-    outputs: [{ id: "value", label: "Value", type: { kind: "number" } }],
-    data: { value: 0, sourceName: "numberValue" },
-  },
-  {
-    id: "json-boolean",
-    label: "Boolean",
-    description: "Create a JSON boolean value.",
-    kind: "json.boolean",
-    category: "JSON",
-    minimized: true,
-    outputs: [{ id: "value", label: "Value", type: { kind: "boolean" } }],
-    data: { value: false, sourceName: "booleanValue" },
-  },
-  {
-    id: "json-null",
-    label: "Null",
-    description: "Create a JSON null value.",
-    kind: "json.null",
-    category: "JSON",
-    minimized: true,
-    outputs: [{ id: "value", label: "Value", type: { kind: "null" } }],
-    data: { value: null, sourceName: "nullValue" },
-  },
-  {
-    id: "json-array",
-    label: "Array",
-    description: "Create a JSON array value.",
-    kind: "json.array",
-    category: "JSON",
-    inputs: [
-      {
-        id: "item-add",
-        label: "Add item",
-        type: { kind: "any" },
-        badge: "new",
-        metadata: { arrayConstructorRole: "add-item" },
-      },
-    ],
-    outputs: [{ id: "value", label: "Value", type: { kind: "array", element: { kind: "any" } } }],
-    data: { items: {} },
-  },
-  {
-    id: "json-object",
-    label: "Object",
-    description: "Construct a JSON object from named input properties.",
-    kind: "json.object",
-    category: "JSON",
-    inputs: [
-      {
-        id: "property",
-        label: "Add property",
-        type: { kind: "any" },
-        badge: "new",
-        metadata: { objectConstructorRole: "add-property" },
-      },
-    ],
-    outputs: [{ id: "value", label: "Object", type: { kind: "object" } }],
-    data: { properties: {} },
-  },
-  {
-    id: "json-object-decompose",
-    label: "Object decompose",
-    description: "Split a JSON object into named property outputs.",
-    kind: "json.object.decompose",
-    category: "JSON",
-    inputs: [{ id: "object", label: "Object", type: { kind: "object" } }],
-    outputs: [
-      {
-        id: "property",
-        label: "Add property",
-        type: { kind: "any" },
-        badge: "new",
-        metadata: { objectDecompositionRole: "add-property" },
-      },
-    ],
-    data: { properties: {} },
-  },
-] satisfies WorkflowEditorNodeTemplate[];
-
-export const workflowEditorCollectionNodeTemplates = [
-  {
-    id: "collection-filter",
-    label: "Filter",
-    description: "Keep items in a collection that satisfy a predicate.",
-    kind: "collection.filter",
-    category: "Collection",
-    inputs: [
-      { id: "items", label: "Items", type: { kind: "array", element: { kind: "any" } } },
-      { id: "predicate", label: "Predicate", type: { kind: "boolean" } },
-    ],
-    outputs: [
-      {
-        id: "items",
-        label: "Filtered",
-        type: { kind: "array", element: { kind: "any" } },
-      },
-    ],
-    data: { predicate: "" },
-  },
-  {
-    id: "collection-reduce",
-    label: "Reduce",
-    description: "Fold collection items into a single accumulated value.",
-    kind: "collection.reduce",
-    category: "Collection",
-    inputs: [
-      { id: "items", label: "Items", type: { kind: "array", element: { kind: "any" } } },
-      { id: "initial", label: "Initial", type: { kind: "any" } },
-      { id: "accumulator", label: "Accumulator", type: { kind: "any" } },
-    ],
-    outputs: [{ id: "value", label: "Value", type: { kind: "any" } }],
-    data: { reducer: "" },
-  },
-  {
-    id: "collection-aggregate",
-    label: "Aggregate",
-    description: "Calculate summary metrics for a collection.",
-    kind: "collection.aggregate",
-    category: "Collection",
-    inputs: [
-      { id: "items", label: "Items", type: { kind: "array", element: { kind: "any" } } },
-      { id: "value", label: "Value", type: { kind: "any" } },
-      { id: "group", label: "Group", type: { kind: "any" } },
-    ],
-    outputs: [
-      {
-        id: "summary",
-        label: "Summary",
-        type: {
-          kind: "object",
-          properties: {
-            count: { type: { kind: "number" } },
-            sum: { type: { kind: "number" }, optional: true },
-            average: { type: { kind: "number" }, optional: true },
-            min: { type: { kind: "number" }, optional: true },
-            max: { type: { kind: "number" }, optional: true },
-            groups: {
-              type: {
-                kind: "array",
-                element: {
-                  kind: "object",
-                  properties: {
-                    key: { type: { kind: "any" } },
-                    count: { type: { kind: "number" } },
-                    value: { type: { kind: "any" }, optional: true },
-                  },
-                },
-              },
-              optional: true,
-            },
-          },
-        },
-      },
-    ],
-    data: { operation: "count" },
-  },
-] satisfies WorkflowEditorNodeTemplate[];
-
-export const defaultWorkflowEditorNodeTemplates = [
-  ...workflowEditorControlFlowNodeTemplates,
-  ...workflowEditorJsonNodeTemplates,
-  ...workflowEditorCollectionNodeTemplates,
-] satisfies WorkflowEditorNodeTemplate[];
+function normalizeWorkflowEditorGraphDocument<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+>(
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>,
+  options: WorkflowEditorDocumentNormalizationOptions,
+): WorkflowEditorDocument<TNodeData, TEdgeData> {
+  try {
+    return normalizeGraphEditorDocument<TNodeData, TEdgeData, WorkflowEditorPortType>(
+      document,
+      options,
+    ) as WorkflowEditorDocument<TNodeData, TEdgeData>;
+  } catch (error) {
+    const diagnostics = (error as { diagnostics?: GraphEditorDocumentDiagnostic[] }).diagnostics;
+    if (Array.isArray(diagnostics)) {
+      throw new WorkflowEditorDocumentValidationError(
+        diagnostics as WorkflowEditorDocumentDiagnostic[],
+      );
+    }
+    throw error;
+  }
+}
 
 export type WorkflowEditorDuplicateNodeOptions = {
   offsetX?: number;
@@ -399,21 +248,23 @@ export function normalizeWorkflowEditorDocument<
   options: WorkflowEditorDocumentNormalizationOptions = {},
 ): WorkflowEditorDocument<TNodeData, TEdgeData> {
   const mode = options.mode ?? "strict";
-  const diagnostics = validateWorkflowEditorDocument(document, options);
+  const graphNormalized = normalizeWorkflowEditorGraphDocument(document, {
+    ...options,
+    allowCycles: options.allowCycles ?? false,
+    mode,
+  });
 
-  if (mode === "strict" && diagnostics.length > 0) {
-    throw new WorkflowEditorDocumentValidationError(diagnostics);
-  }
-
-  let nodes = Array.isArray(document.nodes)
-    ? document.nodes.flatMap((node) =>
+  let nodes = Array.isArray(graphNormalized.nodes)
+    ? graphNormalized.nodes.flatMap((node) =>
         isRecord(node) ? [normalizeWorkflowEditorNode(node as WorkflowEditorNode<TNodeData>)] : [],
       )
     : [];
   const nodeIds = new Set(nodes.map((node) => node.id));
-  let edges = Array.isArray(document.edges)
+  let edges = Array.isArray(graphNormalized.edges)
     ? (normalizeWorkflowEditorDagEdges(
-        document.edges.flatMap((edge) => (isRecord(edge) ? [edge as WorkflowEditorEdge] : [])),
+        graphNormalized.edges.flatMap((edge) =>
+          isRecord(edge) ? [edge as WorkflowEditorEdge] : [],
+        ),
         nodeIds,
       ) as Array<WorkflowEditorEdge<TEdgeData>>)
     : [];
@@ -424,7 +275,7 @@ export function normalizeWorkflowEditorDocument<
     Array.isArray(document.groups) ? document.groups : [],
     new Set(nodes.map((node) => node.id)),
   );
-  const { groups: _groups, ...documentWithoutGroups } = document;
+  const { groups: _groups, ...documentWithoutGroups } = graphNormalized;
 
   return {
     ...documentWithoutGroups,
@@ -441,352 +292,14 @@ export function normalizeWorkflowEditorDocument<
   };
 }
 
-export function validateWorkflowEditorDocument<
-  TNodeData = Record<string, unknown>,
-  TEdgeData = Record<string, unknown>,
->(
+export function validateWorkflowEditorDocument(
   value: unknown,
   options: WorkflowEditorDocumentValidationOptions = {},
 ): WorkflowEditorDocumentDiagnostic[] {
-  const diagnostics: WorkflowEditorDocumentDiagnostic[] = [];
-
-  if (!isRecord(value)) {
-    return [
-      {
-        code: "invalid-document",
-        message: "Workflow document must be an object",
-        path: "$",
-      },
-    ];
-  }
-
-  if (!Array.isArray(value.nodes)) {
-    diagnostics.push({
-      code: "invalid-document",
-      message: "Workflow document nodes must be an array",
-      path: "$.nodes",
-    });
-  }
-
-  if (!Array.isArray(value.edges)) {
-    diagnostics.push({
-      code: "invalid-document",
-      message: "Workflow document edges must be an array",
-      path: "$.edges",
-    });
-  }
-
-  if (!Array.isArray(value.nodes) || !Array.isArray(value.edges)) {
-    return diagnostics;
-  }
-
-  const nodeIds = new Set<string>();
-  const duplicateNodeIds = new Set<string>();
-  value.nodes.forEach((node, index) => {
-    const path = `$.nodes[${index}]`;
-
-    if (!isRecord(node)) {
-      diagnostics.push({
-        code: "invalid-node",
-        message: "Workflow node must be an object",
-        path,
-      });
-      return;
-    }
-
-    const nodeId = typeof node.id === "string" ? node.id : undefined;
-    if (!nodeId?.trim()) {
-      diagnostics.push({
-        code: "invalid-node",
-        message: "Workflow node id must be a non-empty string",
-        path: `${path}.id`,
-      });
-    } else if (nodeIds.has(nodeId)) {
-      duplicateNodeIds.add(nodeId);
-      diagnostics.push({
-        code: "duplicate-node-id",
-        message: `Duplicate workflow node id: ${nodeId}`,
-        path: `${path}.id`,
-        nodeId,
-      });
-    } else {
-      nodeIds.add(nodeId);
-    }
-
-    if (typeof node.label !== "string") {
-      diagnostics.push({
-        code: "invalid-node",
-        message: "Workflow node label must be a string",
-        path: `${path}.label`,
-        nodeId,
-      });
-    }
-
-    if (typeof node.x !== "number" || !Number.isFinite(node.x)) {
-      diagnostics.push({
-        code: "invalid-node",
-        message: "Workflow node x must be a finite number",
-        path: `${path}.x`,
-        nodeId,
-      });
-    }
-
-    if (typeof node.y !== "number" || !Number.isFinite(node.y)) {
-      diagnostics.push({
-        code: "invalid-node",
-        message: "Workflow node y must be a finite number",
-        path: `${path}.y`,
-        nodeId,
-      });
-    }
-
-    validateWorkflowEditorPorts(node.inputs, `${path}.inputs`, nodeId, diagnostics);
-    validateWorkflowEditorPorts(node.outputs, `${path}.outputs`, nodeId, diagnostics);
-  });
-
-  if (value.groups !== undefined && !Array.isArray(value.groups)) {
-    diagnostics.push({
-      code: "invalid-group",
-      message: "Workflow document groups must be an array",
-      path: "$.groups",
-    });
-  }
-
-  const groupIds = new Set<string>();
-  const groupedNodeIds = new Set<string>();
-  if (Array.isArray(value.groups)) {
-    value.groups.forEach((group, index) => {
-      const path = `$.groups[${index}]`;
-
-      if (!isRecord(group)) {
-        diagnostics.push({
-          code: "invalid-group",
-          message: "Workflow group must be an object",
-          path,
-        });
-        return;
-      }
-
-      const groupId = typeof group.id === "string" ? group.id : undefined;
-      if (!groupId?.trim()) {
-        diagnostics.push({
-          code: "invalid-group",
-          message: "Workflow group id must be a non-empty string",
-          path: `${path}.id`,
-        });
-      } else if (groupIds.has(groupId)) {
-        diagnostics.push({
-          code: "duplicate-group-id",
-          message: `Duplicate workflow group id: ${groupId}`,
-          path: `${path}.id`,
-          groupId,
-        });
-      } else {
-        groupIds.add(groupId);
-      }
-
-      if (typeof group.label !== "string") {
-        diagnostics.push({
-          code: "invalid-group",
-          message: "Workflow group label must be a string",
-          path: `${path}.label`,
-          groupId,
-        });
-      }
-
-      if (!Array.isArray(group.nodeIds)) {
-        diagnostics.push({
-          code: "invalid-group",
-          message: "Workflow group nodeIds must be an array",
-          path: `${path}.nodeIds`,
-          groupId,
-        });
-        return;
-      }
-
-      const groupNodeIds = new Set<string>();
-      group.nodeIds.forEach((nodeId, nodeIndex) => {
-        const nodePath = `${path}.nodeIds[${nodeIndex}]`;
-
-        if (typeof nodeId !== "string" || !nodeId.trim()) {
-          diagnostics.push({
-            code: "invalid-group",
-            message: "Workflow group node id must be a non-empty string",
-            path: nodePath,
-            groupId,
-          });
-          return;
-        }
-
-        if (!nodeIds.has(nodeId)) {
-          diagnostics.push({
-            code: "missing-group-node",
-            message: `Workflow group node does not exist: ${nodeId}`,
-            path: nodePath,
-            groupId,
-            nodeId,
-          });
-        }
-
-        if (groupNodeIds.has(nodeId) || groupedNodeIds.has(nodeId)) {
-          diagnostics.push({
-            code: "duplicate-group-node",
-            message: `Workflow node is assigned to multiple group entries: ${nodeId}`,
-            path: nodePath,
-            groupId,
-            nodeId,
-          });
-        }
-
-        groupNodeIds.add(nodeId);
-        groupedNodeIds.add(nodeId);
-      });
-
-      if (group.nodeIds.length < 2) {
-        diagnostics.push({
-          code: "invalid-group",
-          message: "Workflow group must contain at least two nodes",
-          path: `${path}.nodeIds`,
-          groupId,
-        });
-      }
-    });
-  }
-
-  const portLookup = createWorkflowEditorPortLookup(
-    value.nodes.flatMap((node) => (isRecord(node) ? [node as WorkflowEditorNode] : [])),
-  );
-  const edgeIds = new Set<string>();
-  value.edges.forEach((edge, index) => {
-    const path = `$.edges[${index}]`;
-
-    if (!isRecord(edge)) {
-      diagnostics.push({
-        code: "invalid-edge",
-        message: "Workflow edge must be an object",
-        path,
-      });
-      return;
-    }
-
-    const edgeId = typeof edge.id === "string" ? edge.id : undefined;
-    const sourceNodeId = typeof edge.sourceNodeId === "string" ? edge.sourceNodeId : undefined;
-    const sourcePortId = typeof edge.sourcePortId === "string" ? edge.sourcePortId : undefined;
-    const targetNodeId = typeof edge.targetNodeId === "string" ? edge.targetNodeId : undefined;
-    const targetPortId = typeof edge.targetPortId === "string" ? edge.targetPortId : undefined;
-
-    if (!edgeId?.trim()) {
-      diagnostics.push({
-        code: "invalid-edge",
-        message: "Workflow edge id must be a non-empty string",
-        path: `${path}.id`,
-      });
-    } else if (edgeIds.has(edgeId)) {
-      diagnostics.push({
-        code: "duplicate-edge-id",
-        message: `Duplicate workflow edge id: ${edgeId}`,
-        path: `${path}.id`,
-        edgeId,
-      });
-    } else {
-      edgeIds.add(edgeId);
-    }
-
-    for (const key of ["sourceNodeId", "sourcePortId", "targetNodeId", "targetPortId"] as const) {
-      if (typeof edge[key] !== "string" || !edge[key].trim()) {
-        diagnostics.push({
-          code: "invalid-edge",
-          message: `Workflow edge ${key} must be a non-empty string`,
-          path: `${path}.${key}`,
-          edgeId,
-          sourceNodeId,
-          targetNodeId,
-        });
-      }
-    }
-
-    if (sourceNodeId && !nodeIds.has(sourceNodeId)) {
-      diagnostics.push({
-        code: "missing-edge-node",
-        message: `Workflow edge source node does not exist: ${sourceNodeId}`,
-        path: `${path}.sourceNodeId`,
-        edgeId,
-        sourceNodeId,
-        targetNodeId,
-      });
-    }
-
-    if (targetNodeId && !nodeIds.has(targetNodeId)) {
-      diagnostics.push({
-        code: "missing-edge-node",
-        message: `Workflow edge target node does not exist: ${targetNodeId}`,
-        path: `${path}.targetNodeId`,
-        edgeId,
-        sourceNodeId,
-        targetNodeId,
-      });
-    }
-
-    if (
-      sourceNodeId &&
-      sourcePortId &&
-      nodeIds.has(sourceNodeId) &&
-      !portLookup.outputPortIdsByNodeId.get(sourceNodeId)?.has(sourcePortId)
-    ) {
-      diagnostics.push({
-        code: "missing-edge-port",
-        message: `Workflow edge source port does not exist: ${sourceNodeId}.${sourcePortId}`,
-        path: `${path}.sourcePortId`,
-        edgeId,
-        sourceNodeId,
-        targetNodeId,
-      });
-    }
-
-    if (
-      targetNodeId &&
-      targetPortId &&
-      nodeIds.has(targetNodeId) &&
-      !portLookup.inputPortIdsByNodeId.get(targetNodeId)?.has(targetPortId)
-    ) {
-      diagnostics.push({
-        code: "missing-edge-port",
-        message: `Workflow edge target port does not exist: ${targetNodeId}.${targetPortId}`,
-        path: `${path}.targetPortId`,
-        edgeId,
-        sourceNodeId,
-        targetNodeId,
-      });
-    }
-
-    if (sourceNodeId && targetNodeId && sourceNodeId === targetNodeId) {
-      diagnostics.push({
-        code: "self-edge",
-        message: `Workflow edge cannot connect node ${sourceNodeId} to itself`,
-        path,
-        edgeId,
-        sourceNodeId,
-        targetNodeId,
-      });
-    }
-  });
-
-  if (!options.allowCycles && diagnostics.length === 0) {
-    const document = value as WorkflowEditorDocument<TNodeData, TEdgeData>;
-    for (const cycle of detectWorkflowEditorCycles(document)) {
-      diagnostics.push({
-        code: "cycle",
-        message: `Workflow document contains a cycle: ${cycle.join(" -> ")}`,
-        path: "$.edges",
-        sourceNodeId: cycle[0],
-        targetNodeId: cycle.at(-1),
-      });
-    }
-  }
-
-  return diagnostics.filter((diagnostic) =>
-    diagnostic.code === "duplicate-node-id" ? duplicateNodeIds.has(diagnostic.nodeId ?? "") : true,
-  );
+  return validateGraphEditorDocument(value, {
+    ...options,
+    allowCycles: options.allowCycles ?? false,
+  }) as WorkflowEditorDocumentDiagnostic[];
 }
 
 export function assertWorkflowEditorDocument<
@@ -796,7 +309,7 @@ export function assertWorkflowEditorDocument<
   value: unknown,
   options: WorkflowEditorDocumentValidationOptions = {},
 ): asserts value is WorkflowEditorDocument<TNodeData, TEdgeData> {
-  const diagnostics = validateWorkflowEditorDocument<TNodeData, TEdgeData>(value, options);
+  const diagnostics = validateWorkflowEditorDocument(value, options);
 
   if (diagnostics.length > 0) {
     throw new WorkflowEditorDocumentValidationError(diagnostics);
@@ -809,7 +322,7 @@ export function createWorkflowEditorGraphIndex<
 >(
   document: WorkflowEditorDocument<TNodeData, TEdgeData>,
 ): WorkflowEditorGraphIndex<TNodeData, TEdgeData> {
-  return createWorkflowGraphIndex(document);
+  return createGraphEditorGraphIndex<TNodeData, TEdgeData, WorkflowEditorPortType>(document);
 }
 
 export function findWorkflowEditorNode<
@@ -925,12 +438,13 @@ export function updateWorkflowEditorGroup<
   groupId: string,
   patch: Partial<WorkflowEditorGroup>,
 ): WorkflowEditorDocument<TNodeData, TEdgeData> {
-  return normalizeWorkflowEditorDocument({
-    ...document,
-    groups: (document.groups ?? []).map((group) =>
-      group.id === groupId ? Object.assign({}, group, patch, { id: group.id }) : group,
-    ),
-  });
+  return normalizeWorkflowEditorDocument(
+    updateGraphEditorGroup<TNodeData, TEdgeData, WorkflowEditorPortType>(
+      document,
+      groupId,
+      patch,
+    ) as WorkflowEditorDocument<TNodeData, TEdgeData>,
+  );
 }
 
 export function ungroupWorkflowEditorGroup<
@@ -940,10 +454,12 @@ export function ungroupWorkflowEditorGroup<
   document: WorkflowEditorDocument<TNodeData, TEdgeData>,
   groupId: string,
 ): WorkflowEditorDocument<TNodeData, TEdgeData> {
-  return normalizeWorkflowEditorDocument({
-    ...document,
-    groups: (document.groups ?? []).filter((group) => group.id !== groupId),
-  });
+  return normalizeWorkflowEditorDocument(
+    ungroupGraphEditorGroup<TNodeData, TEdgeData, WorkflowEditorPortType>(
+      document,
+      groupId,
+    ) as WorkflowEditorDocument<TNodeData, TEdgeData>,
+  );
 }
 
 export function moveWorkflowEditorGroup<
@@ -954,19 +470,13 @@ export function moveWorkflowEditorGroup<
   groupId: string,
   delta: { x: number; y: number },
 ): WorkflowEditorDocument<TNodeData, TEdgeData> {
-  const group = findWorkflowEditorGroup(document, groupId);
-
-  if (!group) {
-    return document;
-  }
-
-  const nodeIds = new Set(group.nodeIds);
-  return normalizeWorkflowEditorDocument({
-    ...document,
-    nodes: document.nodes.map((node) =>
-      nodeIds.has(node.id) ? { ...node, x: node.x + delta.x, y: node.y + delta.y } : node,
-    ),
-  });
+  return normalizeWorkflowEditorDocument(
+    moveGraphEditorGroup<TNodeData, TEdgeData, WorkflowEditorPortType>(
+      document,
+      groupId,
+      delta,
+    ) as WorkflowEditorDocument<TNodeData, TEdgeData>,
+  );
 }
 
 export function addWorkflowEditorNode<
@@ -976,14 +486,12 @@ export function addWorkflowEditorNode<
   document: WorkflowEditorDocument<TNodeData, TEdgeData>,
   node: WorkflowEditorNode<TNodeData>,
 ): WorkflowEditorDocument<TNodeData, TEdgeData> {
-  if (document.nodes.some((candidate) => candidate.id === node.id)) {
-    throw new Error(`Duplicate workflow node id: ${node.id}`);
-  }
-
-  return normalizeWorkflowEditorDocument({
-    ...document,
-    nodes: [...document.nodes, node],
-  });
+  return normalizeWorkflowEditorDocument(
+    addGraphEditorNode<TNodeData, TEdgeData, WorkflowEditorPortType>(
+      document,
+      node,
+    ) as WorkflowEditorDocument<TNodeData, TEdgeData>,
+  );
 }
 
 export function updateWorkflowEditorNode<
@@ -994,12 +502,13 @@ export function updateWorkflowEditorNode<
   nodeId: string,
   patch: Partial<WorkflowEditorNode<TNodeData>>,
 ): WorkflowEditorDocument<TNodeData, TEdgeData> {
-  return normalizeWorkflowEditorDocument({
-    ...document,
-    nodes: document.nodes.map((node) =>
-      node.id === nodeId ? { ...node, ...patch, id: node.id } : node,
-    ),
-  });
+  return normalizeWorkflowEditorDocument(
+    updateGraphEditorNode<TNodeData, TEdgeData, WorkflowEditorPortType>(
+      document,
+      nodeId,
+      patch,
+    ) as WorkflowEditorDocument<TNodeData, TEdgeData>,
+  );
 }
 
 export function updateWorkflowEditorNodeWorkflowReference<
@@ -1917,7 +1426,13 @@ export function moveWorkflowEditorNode<
   nodeId: string,
   position: { x: number; y: number },
 ) {
-  return updateWorkflowEditorNode(document, nodeId, position);
+  return normalizeWorkflowEditorDocument(
+    moveGraphEditorNode<TNodeData, TEdgeData, WorkflowEditorPortType>(
+      document,
+      nodeId,
+      position,
+    ) as WorkflowEditorDocument<TNodeData, TEdgeData>,
+  );
 }
 
 export function removeWorkflowEditorNode<
@@ -2216,14 +1731,12 @@ export function addWorkflowEditorEdge<
   document: WorkflowEditorDocument<TNodeData, TEdgeData>,
   edge: WorkflowEditorEdge<TEdgeData>,
 ): WorkflowEditorDocument<TNodeData, TEdgeData> {
-  if (document.edges.some((candidate) => candidate.id === edge.id)) {
-    throw new Error(`Duplicate workflow edge id: ${edge.id}`);
-  }
-
-  return normalizeWorkflowEditorDocument({
-    ...document,
-    edges: [...document.edges, edge],
-  });
+  return normalizeWorkflowEditorDocument(
+    addGraphEditorEdge<TNodeData, TEdgeData, WorkflowEditorPortType>(
+      document,
+      edge,
+    ) as WorkflowEditorDocument<TNodeData, TEdgeData>,
+  );
 }
 
 export function removeWorkflowEditorEdge<
@@ -2233,10 +1746,12 @@ export function removeWorkflowEditorEdge<
   document: WorkflowEditorDocument<TNodeData, TEdgeData>,
   edgeId: string,
 ): WorkflowEditorDocument<TNodeData, TEdgeData> {
-  return {
-    ...document,
-    edges: document.edges.filter((edge) => edge.id !== edgeId),
-  };
+  return normalizeWorkflowEditorDocument(
+    removeGraphEditorEdge<TNodeData, TEdgeData, WorkflowEditorPortType>(
+      document,
+      edgeId,
+    ) as WorkflowEditorDocument<TNodeData, TEdgeData>,
+  );
 }
 
 export function validateWorkflowEditorConnection<
@@ -2248,64 +1763,40 @@ export function validateWorkflowEditorConnection<
   options: WorkflowEditorTypeValidationOptions = {},
 ): WorkflowEditorConnectionValidity {
   const context = createWorkflowEditorDocumentContext(document);
-  const sourceNode = context.nodeById.get(connection.sourceNodeId);
   const targetNode = context.nodeById.get(connection.targetNodeId);
-
-  if (!sourceNode || !targetNode) {
-    return { valid: false, reason: "missing-node" };
-  }
-
-  if (connection.sourceNodeId === connection.targetNodeId) {
-    return { valid: false, reason: "self-connection" };
-  }
-
-  const uiConnection = {
-    ...connection,
-    nodes: toUiWorkflowBuilderStructuralNodes(document.nodes),
-    edges: toUiWorkflowBuilderEdges(document.edges),
-  };
-  const structuralValidity = getWorkflowBuilderConnectionValidity({
-    ...uiConnection,
-    edges: [],
-  });
-
-  if (!structuralValidity.valid && !isWorkflowEditorUiTypeMismatch(structuralValidity.reason)) {
-    return structuralValidity;
-  }
-
-  const sourcePort = context.getOutputPort(connection.sourceNodeId, connection.sourcePortId)!;
-  const targetPort = context.getInputPort(connection.targetNodeId, connection.targetPortId)!;
+  const targetPort = targetNode
+    ? context.getInputPort(connection.targetNodeId, connection.targetPortId)
+    : undefined;
   const typeResolver = createWorkflowEditorTypeResolver(options.typeDefinitions);
   const expandsToNewTargetPort =
-    (isWorkflowEditorArrayConstructorNode(targetNode) &&
+    !!targetNode &&
+    !!targetPort &&
+    ((isWorkflowEditorArrayConstructorNode(targetNode) &&
       (isWorkflowEditorArrayConstructorAddInput(targetPort) ||
         !!context.getIncomingEdgeToPort(targetNode.id, targetPort.id))) ||
-    (isWorkflowEditorObjectConstructorNode(targetNode) &&
-      (isWorkflowEditorObjectConstructorAddInput(targetPort) ||
-        !!context.getIncomingEdgeToPort(targetNode.id, targetPort.id)));
-  const targetType = expandsToNewTargetPort ? ({ kind: "any" } as const) : targetPort.type;
+      (isWorkflowEditorObjectConstructorNode(targetNode) &&
+        (isWorkflowEditorObjectConstructorAddInput(targetPort) ||
+          !!context.getIncomingEdgeToPort(targetNode.id, targetPort.id))));
 
-  if (!typeResolver.isAssignable(sourcePort.type, targetType)) {
-    return { valid: false, reason: "kind-mismatch" };
-  }
+  const validity = validateGraphEditorConnection<TNodeData, TEdgeData, WorkflowEditorPortType>(
+    document,
+    connection,
+    {
+      allowCycles: false,
+      allowOccupiedInputs: expandsToNewTargetPort,
+      arePortsCompatible(sourcePort, targetPort) {
+        const sourceType = sourcePort.type as WorkflowEditorPortType;
+        const targetType = expandsToNewTargetPort
+          ? ({ kind: "any" } as const)
+          : (targetPort.type as WorkflowEditorPortType);
+        return typeResolver.isAssignable(sourceType, targetType)
+          ? true
+          : { valid: false, reason: "type-mismatch" };
+      },
+    },
+  );
 
-  const baseValidity = expandsToNewTargetPort
-    ? ({ valid: true } as const)
-    : getWorkflowBuilderConnectionValidity(uiConnection);
-
-  if (!baseValidity.valid && !isWorkflowEditorUiTypeMismatch(baseValidity.reason)) {
-    return baseValidity;
-  }
-
-  if (wouldCreateWorkflowEditorCycle(document, connection, context)) {
-    return { valid: false, reason: "cycle" };
-  }
-
-  return { valid: true };
-}
-
-function isWorkflowEditorUiTypeMismatch(reason: WorkflowEditorConnectionInvalidReason | undefined) {
-  return reason === "kind-mismatch" || reason === "type-mismatch";
+  return validity as WorkflowEditorConnectionValidity;
 }
 
 export function connectWorkflowEditorNodes<
@@ -2408,64 +1899,20 @@ export function duplicateWorkflowEditorNode<
   nodeId: string,
   options: WorkflowEditorDuplicateNodeOptions = {},
 ): WorkflowEditorDocument<TNodeData, TEdgeData> {
-  const node = findWorkflowEditorNode(document, nodeId);
-
-  if (!node) {
-    return document;
-  }
-
-  const existingIds = new Set(document.nodes.map((candidate) => candidate.id));
-  const nextId =
-    options.createId?.(nodeId, existingIds) ??
-    createWorkflowEditorNodeId(document, `${nodeId}-copy`);
-
-  return addWorkflowEditorNode(document, {
-    ...node,
-    id: nextId,
-    label: `${node.label} Copy`,
-    x: node.x + (options.offsetX ?? 48),
-    y: node.y + (options.offsetY ?? 48),
-  });
+  return normalizeWorkflowEditorDocument(
+    duplicateGraphEditorNode<TNodeData, TEdgeData, WorkflowEditorPortType>(
+      document,
+      nodeId,
+      options,
+    ) as WorkflowEditorDocument<TNodeData, TEdgeData>,
+  );
 }
 
 export function detectWorkflowEditorCycles<
   TNodeData = Record<string, unknown>,
   TEdgeData = Record<string, unknown>,
 >(document: WorkflowEditorDocument<TNodeData, TEdgeData>) {
-  const context = createWorkflowEditorDocumentContext(document);
-  const cycles: string[][] = [];
-  const visiting = new Set<string>();
-  const visited = new Set<string>();
-  const path: string[] = [];
-
-  function visit(nodeId: string) {
-    if (visiting.has(nodeId)) {
-      const cycleStart = path.indexOf(nodeId);
-      cycles.push([...path.slice(cycleStart), nodeId]);
-      return;
-    }
-
-    if (visited.has(nodeId)) {
-      return;
-    }
-
-    visiting.add(nodeId);
-    path.push(nodeId);
-
-    for (const nextNodeId of context.adjacencyByNodeId.get(nodeId) ?? []) {
-      visit(nextNodeId);
-    }
-
-    path.pop();
-    visiting.delete(nodeId);
-    visited.add(nodeId);
-  }
-
-  for (const node of document.nodes) {
-    visit(node.id);
-  }
-
-  return cycles;
+  return detectGraphEditorCycles<TNodeData, TEdgeData, WorkflowEditorPortType>(document);
 }
 
 export function wouldCreateWorkflowEditorCycle<
@@ -2474,23 +1921,22 @@ export function wouldCreateWorkflowEditorCycle<
 >(
   document: WorkflowEditorDocument<TNodeData, TEdgeData>,
   connection: WorkflowEditorConnectionInput,
-  context: WorkflowEditorDocumentContext<
+  _context: WorkflowEditorDocumentContext<
     TNodeData,
     TEdgeData
   > = createWorkflowEditorDocumentContext(document),
 ) {
-  if (connection.sourceNodeId === connection.targetNodeId) {
-    return true;
-  }
-
-  return context.canReach(connection.targetNodeId, connection.sourceNodeId);
+  return wouldCreateGraphEditorCycle<TNodeData, TEdgeData, WorkflowEditorPortType>(
+    document,
+    connection,
+  );
 }
 
 export function isWorkflowEditorDirectedAcyclicGraph<
   TNodeData = Record<string, unknown>,
   TEdgeData = Record<string, unknown>,
 >(document: WorkflowEditorDocument<TNodeData, TEdgeData>) {
-  return detectWorkflowEditorCycles(document).length === 0;
+  return isGraphEditorDirectedAcyclicGraph<TNodeData, TEdgeData, WorkflowEditorPortType>(document);
 }
 
 export function topologicallySortWorkflowEditorNodes<
@@ -2576,23 +2022,6 @@ export function toUiWorkflowBuilderNodes<TData = Record<string, unknown>>(
   });
 }
 
-function toUiWorkflowBuilderStructuralNodes<TData = Record<string, unknown>>(
-  nodes: Array<WorkflowEditorNode<TData>>,
-): UiWorkflowBuilderNodeData[] {
-  return nodes.map((node) => ({
-    ...toUiWorkflowBuilderNodes([node])[0]!,
-    inputs: node.inputs?.map(toUiWorkflowBuilderStructuralPort),
-    outputs: node.outputs?.map(toUiWorkflowBuilderStructuralPort),
-  }));
-}
-
-function toUiWorkflowBuilderStructuralPort(port: WorkflowEditorPort): UiWorkflowNodePort {
-  return {
-    ...port,
-    kind: "workflow-port",
-  };
-}
-
 export function fromUiWorkflowBuilderNodes<TData = Record<string, unknown>>(
   uiNodes: UiWorkflowBuilderNodeData[],
   previousNodes: Array<WorkflowEditorNode<TData>>,
@@ -2660,7 +2089,9 @@ function toUiWorkflowEditorPort(
   return {
     ...port,
     kind: formatWorkflowEditorPortType(port.type),
-    required: port.required ?? (options.direction === "input" && port.optional ? false : undefined),
+    required:
+      (port as { required?: boolean }).required ??
+      (options.direction === "input" && port.optional ? false : undefined),
     badge:
       port.badge ??
       defaultValueBadge ??
@@ -4474,103 +3905,6 @@ export {
   type WorkflowEditorPasteResult,
 } from "./core-clipboard";
 
-function validateWorkflowEditorPorts(
-  ports: unknown,
-  path: string,
-  nodeId: string | undefined,
-  diagnostics: WorkflowEditorDocumentDiagnostic[],
-) {
-  if (ports === undefined) {
-    return;
-  }
-
-  if (!Array.isArray(ports)) {
-    diagnostics.push({
-      code: "invalid-node",
-      message: "Workflow node ports must be an array",
-      path,
-      nodeId,
-    });
-    return;
-  }
-
-  ports.forEach((port, index) => {
-    const portPath = `${path}[${index}]`;
-    if (!isRecord(port)) {
-      diagnostics.push({
-        code: "invalid-node",
-        message: "Workflow node port must be an object",
-        path: portPath,
-        nodeId,
-      });
-      return;
-    }
-
-    if (typeof port.id !== "string" || !port.id.trim()) {
-      diagnostics.push({
-        code: "invalid-node",
-        message: "Workflow node port id must be a non-empty string",
-        path: `${portPath}.id`,
-        nodeId,
-      });
-    }
-
-    if (!isWorkflowEditorPortTypeLike(port.type)) {
-      diagnostics.push({
-        code: "invalid-node",
-        message: "Workflow node port type is invalid",
-        path: `${portPath}.type`,
-        nodeId,
-      });
-    }
-
-    if (port.optional !== undefined && typeof port.optional !== "boolean") {
-      diagnostics.push({
-        code: "invalid-node",
-        message: "Workflow node port optional flag must be a boolean",
-        path: `${portPath}.optional`,
-        nodeId,
-      });
-    }
-
-    if ("defaultValue" in port && !isWorkflowEditorPortDefaultValueLike(port.defaultValue)) {
-      diagnostics.push({
-        code: "invalid-node",
-        message: "Workflow node port default value must be JSON-serializable",
-        path: `${portPath}.defaultValue`,
-        nodeId,
-      });
-    }
-  });
-}
-
-function isWorkflowEditorPortDefaultValueLike(
-  value: unknown,
-  depth = 0,
-): value is WorkflowEditorPortDefaultValue {
-  if (depth > 100) {
-    return false;
-  }
-
-  if (
-    typeof value === "string" ||
-    typeof value === "boolean" ||
-    value === null ||
-    (typeof value === "number" && Number.isFinite(value))
-  ) {
-    return true;
-  }
-
-  if (Array.isArray(value)) {
-    return value.every((item) => isWorkflowEditorPortDefaultValueLike(item, depth + 1));
-  }
-
-  return (
-    isRecord(value) &&
-    Object.values(value).every((item) => isWorkflowEditorPortDefaultValueLike(item, depth + 1))
-  );
-}
-
 function isWorkflowEditorPortTypeLike(value: unknown, depth = 0): value is WorkflowEditorPortType {
   if (depth > 100 || !isRecord(value) || typeof value.kind !== "string") {
     return false;
@@ -5099,13 +4433,6 @@ function createWorkflowEditorEdgeId<
     new Set(document.edges.map((edge) => edge.id)),
     `${connection.sourceNodeId}:${connection.sourcePortId}->${connection.targetNodeId}:${connection.targetPortId}`,
   );
-}
-
-function createWorkflowEditorNodeId<
-  TNodeData = Record<string, unknown>,
-  TEdgeData = Record<string, unknown>,
->(document: WorkflowEditorDocument<TNodeData, TEdgeData>, baseId: string) {
-  return createUniqueId(new Set(document.nodes.map((node) => node.id)), baseId);
 }
 
 function createUniqueId(existingIds: ReadonlySet<string>, baseId: string) {

@@ -91,7 +91,13 @@ async function selectNodeById(page: Page, id: string) {
 
 async function selectEdge(page: Page, id: string) {
   const edge = page.getByRole("button", { name: `Connection ${id}`, exact: true }).first();
-  await edge.focus();
+  const target =
+    (await edge.count()) > 0
+      ? edge
+      : page
+          .locator(`[data-slot="workflow-builder-edge-hit"][aria-label="Connection ${id}"]`)
+          .first();
+  await target.focus();
   await page.keyboard.press("Enter");
 }
 
@@ -1259,6 +1265,78 @@ test.describe("WorkflowWorkbench accessibility and responsive smoke", () => {
     await expect(page.getByTestId("selection-json")).toContainText('"id":"decision"');
   });
 
+  test("supports keyboard node selection, actions, escape, and deletion", async ({
+    page,
+  }, testInfo) => {
+    await gotoWorkflowEditor(page, testInfo);
+
+    const inputButton = page
+      .locator(
+        '[data-slot="workflow-builder-node"][data-node-id="input"] [data-slot="workflow-node-select"][aria-label="Input"]:visible',
+      )
+      .first();
+    await inputButton.focus();
+    await page.keyboard.press("Enter");
+
+    await expect(page.getByTestId("selection-json")).toContainText('"id":"input"');
+
+    const actionButton = page.getByRole("button", { name: "Input node actions", exact: true });
+    await actionButton.focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("menu")).toBeVisible();
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("menu")).toBeHidden();
+
+    await page.getByRole("button", { name: "Delete", exact: true }).focus();
+    await page.keyboard.press("Enter");
+    await expectNodeCount(page, 2);
+    await expectEdgeCount(page, 0);
+  });
+
+  test("creates edges from focused ports", async ({ page }, testInfo) => {
+    await gotoWorkflowEditor(page, testInfo);
+
+    const sourcePort = page.getByRole("button", { name: "Start Input Out", exact: true }).first();
+    await sourcePort.focus();
+    await page.keyboard.press("Enter");
+
+    const targetPort = page.getByRole("button", { name: "Connect to Output In", exact: true });
+    await expect(targetPort).toBeVisible();
+    await targetPort.focus();
+    await page.keyboard.press("Space");
+
+    await expectEdgeCount(page, 2);
+    await expect(page.getByTestId("summary-json")).toContainText("input:out->output:in");
+  });
+
+  test("keeps keyboard shortcuts blocked in read-only mode", async ({ page }, testInfo) => {
+    await gotoWorkflowEditor(page, testInfo, { readonly: "1" });
+    await selectNode(page, "Input");
+
+    await page.keyboard.press("Delete");
+    await pressShortcut(page, "Mod+D");
+    await pressShortcut(page, "Mod+V");
+
+    await expectNodeCount(page, 3);
+    await expectEdgeCount(page, 1);
+    await expect(page.getByTestId("selection-json")).toContainText('"id":"input"');
+  });
+
+  test("passes automated accessibility checks in empty palette and edge states", async ({
+    page,
+  }, testInfo) => {
+    await gotoWorkflowEditor(page, testInfo);
+
+    await selectEdge(page, "input-transform");
+    await expect(page.getByRole("heading", { name: "Workflow edge" })).toBeVisible();
+    await expectNoAxeViolations(page);
+
+    await page.getByLabel("Search node palette").fill("not-a-template");
+    await expect(page.getByText("No matching node templates")).toBeVisible();
+    await expectNoAxeViolations(page);
+  });
+
   test("loads and edits on a mobile viewport", async ({ page, isMobile }, testInfo) => {
     test.skip(!isMobile, "Mobile smoke coverage");
     await gotoWorkflowEditor(page, testInfo);
@@ -1296,5 +1374,6 @@ test.describe("WorkflowWorkbench accessibility and responsive smoke", () => {
       .first()
       .click({ force: true });
     await expect(page.getByTestId("node-count")).toHaveText("4");
+    await expectNoAxeViolations(page);
   });
 });

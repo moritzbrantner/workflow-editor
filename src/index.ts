@@ -78,6 +78,8 @@ export {
   validateWorkflowEditorDocument,
   validateWorkflowEditorConnection,
   wouldCreateWorkflowEditorCycle,
+  applyWorkflowGraphOperation,
+  createWorkflowGraphRuntime,
   workflowEditorClipboardFormat,
   workflowEditorClipboardVersion,
   workflowEditorCollectionNodeTemplates,
@@ -130,6 +132,9 @@ export {
   type WorkflowEditorTypeValidationOptions,
   type WorkflowEditorViewport,
   type WorkflowEditorWorkflowReference,
+  type WorkflowGraphOperation,
+  type WorkflowGraphRuntimeState,
+  type WorkflowGraphWorkbenchController,
   WorkflowEditorDocumentValidationError,
 } from "./core";
 export {

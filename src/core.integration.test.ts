@@ -1596,7 +1596,7 @@ describe("@moritzbrantner/workflow-editor core", () => {
           targetPortId: "in",
         },
       ).reason,
-    ).toBe("kind-mismatch");
+    ).toBe("type-mismatch");
 
     const connected = connectWorkflowEditorNodes(document, {
       sourceNodeId: "transform",
@@ -2067,7 +2067,7 @@ describe("@moritzbrantner/workflow-editor core", () => {
         },
         { typeDefinitions },
       ).reason,
-    ).toBe("kind-mismatch");
+    ).toBe("type-mismatch");
 
     const missingTypeDocument = normalizeWorkflowEditorDocument({
       nodes: [

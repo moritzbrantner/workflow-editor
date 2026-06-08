@@ -402,7 +402,7 @@ describe("workflow editor type-aware connections", () => {
         },
         { typeDefinitions },
       ),
-    ).toEqual({ valid: false, reason: "kind-mismatch" });
+    ).toEqual({ valid: false, reason: "type-mismatch" });
     expect(
       validateWorkflowEditorConnection(document, {
         sourceNodeId: "admin-source",
@@ -410,7 +410,7 @@ describe("workflow editor type-aware connections", () => {
         targetNodeId: "user-target",
         targetPortId: "in",
       }),
-    ).toEqual({ valid: false, reason: "kind-mismatch" });
+    ).toEqual({ valid: false, reason: "type-mismatch" });
   });
 
   test("connects only type-compatible ports and keeps incompatible documents unchanged", () => {
@@ -443,7 +443,7 @@ describe("workflow editor type-aware connections", () => {
     ).toBe(incompatibleDocument);
   });
 
-  test("checks type compatibility before duplicate and cycle checks", () => {
+  test("runs graph structural validation before workflow type compatibility", () => {
     const existingEdge = {
       id: "source-target",
       sourceNodeId: "source",
@@ -460,7 +460,7 @@ describe("workflow editor type-aware connections", () => {
         targetNodeId: "target",
         targetPortId: "in",
       }),
-    ).toEqual({ valid: false, reason: "kind-mismatch" });
+    ).toEqual({ valid: false, reason: "duplicate" });
   });
 });
 

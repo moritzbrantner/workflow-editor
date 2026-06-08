@@ -49,8 +49,16 @@ export default defineConfig({
         replacement: path.resolve(rootDir, "../graph-editor/src/layout.ts"),
       },
       {
+        find: "@moritzbrantner/graph-editor/operations",
+        replacement: path.resolve(rootDir, "../graph-editor/src/operations.ts"),
+      },
+      {
         find: "@moritzbrantner/graph-editor/react",
         replacement: path.resolve(rootDir, "../graph-editor/src/react.tsx"),
+      },
+      {
+        find: "@moritzbrantner/graph-editor/runtime",
+        replacement: path.resolve(rootDir, "../graph-editor/src/runtime.ts"),
       },
       {
         find: "@moritzbrantner/graph-editor",
@@ -101,6 +109,12 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "json-summary", "html"],
+      thresholds: {
+        branches: 62,
+        functions: 70,
+        lines: 70,
+        statements: 70,
+      },
       include: ["src/**/*.{ts,tsx}"],
       exclude: [
         "src/**/*.test.{ts,tsx}",

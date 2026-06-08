@@ -245,10 +245,10 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     expect(handleSelectionStateChange).toHaveBeenLastCalledWith({
       nodeIds: ["input", "transform", "output"],
       edgeIds: [],
-      primary: { type: "node", id: "input" },
+      primary: { type: "node", id: "output" },
     });
     expect(handleSelectionChange).toHaveBeenLastCalledWith(
-      expect.objectContaining({ id: "input", type: "node" }),
+      expect.objectContaining({ id: "output", type: "node" }),
     );
   });
 

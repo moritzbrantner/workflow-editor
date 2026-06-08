@@ -1,6 +1,7 @@
 # @moritzbrantner/workflow-editor
 
-Node graph workflow document utilities and a controlled React workbench for editing workflow graphs.
+Typed DAG workflow document utilities and a controlled React editor shell built on
+`@moritzbrantner/graph-editor`.
 
 [Open the example workbench](https://moritzbrantner.github.io/workflow-editor/)
 
@@ -10,12 +11,35 @@ Node graph workflow document utilities and a controlled React workbench for edit
 bun add @moritzbrantner/workflow-editor
 ```
 
-The React workbench expects `react` as a peer dependency and consumes
-`@moritzbrantner/ui@^0.8.0`.
+The React workbench expects `react` as a peer dependency. Generic graph primitives,
+layout, runtime operations, canvas behavior, and workbench infrastructure come from
+`@moritzbrantner/graph-editor`; workflow-editor adds typed workflow semantics,
+built-in workflow node templates, nested workflows, document-library persistence,
+sharing, versions, settings, and app chrome.
+
+## Package Boundary
+
+- `@moritzbrantner/graph-editor` owns the generic graph model, document validation,
+  graph indexes, mutation primitives, layout, runtime operations, canvas, and workbench shell.
+- `@moritzbrantner/workflow-editor` specializes those primitives for executable
+  directed acyclic workflows with TypeScript-like port assignability, workflow
+  constructor/decomposition behavior, built-in templates, composed nodes, nested workflow
+  references, persistence, sharing, history, settings, and workflow-specific panels.
+
+Import generic graph extension points from graph-editor directly:
+
+```ts
+import { WorkflowEditor } from "@moritzbrantner/workflow-editor";
+import type { WorkflowEditorDocument } from "@moritzbrantner/workflow-editor/core";
+
+import { createGraphEditorRuntime } from "@moritzbrantner/graph-editor/runtime";
+import type { GraphEditorOperation } from "@moritzbrantner/graph-editor/operations";
+```
 
 ## Main APIs
 
-- `WorkflowWorkbench` for a React node graph editor built on `@moritzbrantner/ui`.
+- `WorkflowWorkbench` for a workflow-specialized React graph editor backed by
+  `@moritzbrantner/graph-editor`.
 - `WorkflowEditor` for a browser-first workflow editor shell with document library controls,
   local saving/loading, JSON import/export, explicit versions, and undo/redo.
 - `defaultWorkflowEditorNodeTemplates`,
@@ -27,7 +51,8 @@ The React workbench expects `react` as a peer dependency and consumes
 - `copyWorkflowEditorSelection(...)`, `pasteWorkflowEditorClipboardPayload(...)`,
   `duplicateWorkflowEditorSelection(...)`, and `removeWorkflowEditorSelection(...)`
   for headless selected-subgraph clipboard operations.
-- `layoutWorkflowEditorDocument(...)` for deterministic automatic graph layout powered by Dagre.
+- `layoutWorkflowEditorDocument(...)` for deterministic automatic workflow layout backed by
+  `@moritzbrantner/graph-editor/layout`.
 - `createWorkflowEditorComposedNode(...)`, `composeWorkflowEditorNodes(...)`,
   `restoreWorkflowEditorComposedNode(...)`, and `hasWorkflowEditorNodeComposition(...)`
   for reusable component-style nodes backed by embedded subgraphs.
@@ -185,7 +210,9 @@ For smaller changes, use slots on the existing components:
   `@moritzbrantner/workflow-editor/history`,
   `@moritzbrantner/workflow-editor/share`, and
   `@moritzbrantner/workflow-editor/editor`.
-- The package owns workflow document state and graph validation; `@moritzbrantner/ui` supplies the generic graph surface and inspector controls.
+- Generic graph helpers now live in `@moritzbrantner/graph-editor`. Workflow-editor keeps
+  workflow-named wrappers only when they enforce workflow semantics such as DAG behavior,
+  typed port assignability, constructor expansion, compositions, and nested workflow metadata.
 - Node templates can set `category` or `categoryPath` to group the node palette into flat
   categories or nested category trees.
 - `normalizeWorkflowEditorDocument(...)` validates strictly by default and throws
@@ -226,6 +253,9 @@ For smaller changes, use slots on the existing components:
 
 ## Development
 
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full local verification workflow, release
+expectations, and generated-file policy.
+
 Tests and benchmarks default to one worker to keep memory use predictable. Override the cap with
 `WORKFLOW_EDITOR_WORKERS`, or use the narrower `WORKFLOW_EDITOR_TEST_WORKERS` and
 `WORKFLOW_EDITOR_PLAYWRIGHT_WORKERS` variables when needed.
@@ -246,6 +276,13 @@ bun run storybook:build
 Unit, integration, e2e, and Storybook files are colocated in `src` next to the source surface they
 cover. Root config files remain at the repository root because they configure the package-wide
 tooling.
+
+Local development may use sibling source aliases for related packages in Vite and Vitest configs,
+but published package dependencies must use npm semver ranges so packed installs work in clean
+consumer projects.
+
+Coverage gates are intentionally modest starting thresholds: 70% lines/functions/statements and
+62% branches. Raise them as focused tests land for lower-coverage UI chrome and keyboard flows.
 
 ## Clipboard and Layout
 
@@ -277,8 +314,5 @@ import { layoutWorkflowEditorDocument } from "@moritzbrantner/workflow-editor/la
 
 ## Enhancement Roadmap
 
-- Configurable graph validation policies.
-- Port cardinality rules for single-input and multi-input ports.
-- Typed node template registries with validation.
-- Accessibility coverage for keyboard-only graph editing.
-- Demo pages for pipeline, automation, and branching workflow examples.
+See [docs/roadmap.md](./docs/roadmap.md) for implementation-ready roadmap items and acceptance
+criteria.

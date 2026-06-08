@@ -58,8 +58,7 @@
     "react-dom": "^19.0.0"
   },
   "dependencies": {
-    "@dagrejs/dagre": "^3.0.0",
-    "@moritzbrantner/graph-editor": "file:../graph-editor",
+    "@moritzbrantner/graph-editor": "^0.1.0",
     "@moritzbrantner/ui": "^0.8.0",
     "lucide-react": "^1.17.0"
   },
@@ -67,6 +66,7 @@
     "@axe-core/playwright": "^4.11.3",
     "@changesets/changelog-github": "^0.6.0",
     "@changesets/cli": "^2.29.7",
+    "@microsoft/api-extractor": "^7.58.7",
     "@playwright/test": "^1.60.0",
     "@storybook/addon-docs": "10.4.1",
     "@storybook/react-vite": "10.4.1",
@@ -83,6 +83,7 @@
     "react-dom": "^19.2.0",
     "storybook": "10.4.1",
     "tailwindcss": "^4.3.0",
+    "tsd": "^0.33.0",
     "tsup": "^8.5.0",
     "typescript": "6.0.3",
     "vite": "^8.0.14",
@@ -91,6 +92,15 @@
   "publishConfig": {
     "registry": "https://registry.npmjs.org",
     "access": "public"
+  },
+  "tsd": {
+    "directory": "test-d",
+    "compilerOptions": {
+      "jsx": "react-jsx",
+      "module": "NodeNext",
+      "noImplicitAny": false,
+      "strict": true
+    }
   },
   "scripts": {
     "build": "tsup src/index.ts src/core.ts src/react.tsx src/editor.tsx src/history.ts src/layout.ts src/persistence.ts src/share.ts --format esm --dts --clean --out-dir dist",
@@ -104,14 +114,19 @@
     "prepack": "bun run build",
     "check-types": "tsc --noEmit",
     "check-types:tests": "tsc --noEmit -p tsconfig.test.json",
+    "api:extract": "bun run build && api-extractor run --local",
+    "api:check": "bun run build && api-extractor run",
+    "types:public": "bun run build && node scripts/run-public-types.mjs",
+    "coverage:check": "$(dirname $(command -v npm))/node node_modules/vitest/vitest.mjs run --coverage",
     "pack:check": "bun pm pack --dry-run",
     "smoke:package": "node scripts/smoke-package-exports.mjs",
+    "smoke:packed-consumer": "node scripts/smoke-packed-consumer.mjs",
     "test": "$(dirname $(command -v npm))/node node_modules/vitest/vitest.mjs run",
     "bench": "$(dirname $(command -v npm))/node node_modules/vitest/vitest.mjs bench --passWithNoTests",
     "test:coverage": "$(dirname $(command -v npm))/node node_modules/vitest/vitest.mjs run --coverage",
     "test:playwright": "playwright test",
     "storybook": "storybook dev -p 6006 -c src/.storybook",
     "storybook:build": "storybook build -c src/.storybook -o storybook-static",
-    "verify": "bun run format:check && bun run lint && bun run check-types && bun run check-types:tests && bun run test && bun run test:playwright && bun run storybook:build && bun run example:build && bun run build && bun run smoke:package && bun run pack:check"
+    "verify": "bun run format:check && bun run lint && bun run check-types && bun run check-types:tests && bun run test && bun run coverage:check && bun run test:playwright && bun run storybook:build && bun run example:build && bun run build && bun run api:check && bun run types:public && bun run smoke:package && bun run smoke:packed-consumer && bun run pack:check"
   }
 }

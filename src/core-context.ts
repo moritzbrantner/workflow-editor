@@ -1,9 +1,12 @@
+import { createGraphEditorDocumentContext } from "@moritzbrantner/graph-editor/core";
+
 import type {
   WorkflowEditorDocument,
   WorkflowEditorEdge,
   WorkflowEditorNode,
   WorkflowEditorPort,
-} from "./core";
+  WorkflowEditorPortType,
+} from "./core-types";
 
 function portKey(nodeId: string, portId: string) {
   return `${nodeId}:${portId}`;
@@ -36,37 +39,42 @@ export function createWorkflowEditorDocumentContext<
 >(
   document: WorkflowEditorDocument<TNodeData, TEdgeData>,
 ): WorkflowEditorDocumentContext<TNodeData, TEdgeData> {
-  const nodeById = new Map(document.nodes.map((node) => [node.id, node]));
-  const edgeById = new Map(document.edges.map((edge) => [edge.id, edge]));
+  const graphContext = createGraphEditorDocumentContext<
+    TNodeData,
+    TEdgeData,
+    WorkflowEditorPortType
+  >(document);
+  const nodeById = new Map(graphContext.nodeById) as Map<string, WorkflowEditorNode<TNodeData>>;
+  const edgeById = new Map(graphContext.edgeById) as Map<string, WorkflowEditorEdge<TEdgeData>>;
   const inputPortByNodeAndId = new Map<string, WorkflowEditorPort>();
   const outputPortByNodeAndId = new Map<string, WorkflowEditorPort>();
-  const incomingEdgesByNodeId = new Map<string, Array<WorkflowEditorEdge<TEdgeData>>>();
-  const outgoingEdgesByNodeId = new Map<string, Array<WorkflowEditorEdge<TEdgeData>>>();
-  const adjacencyByNodeId = new Map(document.nodes.map((node) => [node.id, [] as string[]]));
 
   for (const node of document.nodes) {
     for (const input of node.inputs ?? []) {
       inputPortByNodeAndId.set(portKey(node.id, input.id), input);
     }
-
     for (const output of node.outputs ?? []) {
       outputPortByNodeAndId.set(portKey(node.id, output.id), output);
     }
   }
 
-  for (const edge of document.edges) {
-    const incoming = incomingEdgesByNodeId.get(edge.targetNodeId) ?? [];
-    incoming.push(edge);
-    incomingEdgesByNodeId.set(edge.targetNodeId, incoming);
+  const incomingEdgesByNodeId = new Map(
+    [...graphContext.incomingEdgesByNodeId].map(([nodeId, edges]) => [
+      nodeId,
+      [...edges] as Array<WorkflowEditorEdge<TEdgeData>>,
+    ]),
+  );
+  const outgoingEdgesByNodeId = new Map(
+    [...graphContext.outgoingEdgesByNodeId].map(([nodeId, edges]) => [
+      nodeId,
+      [...edges] as Array<WorkflowEditorEdge<TEdgeData>>,
+    ]),
+  );
+  const adjacencyByNodeId = new Map(
+    [...graphContext.adjacencyByNodeId].map(([nodeId, nodeIds]) => [nodeId, [...nodeIds]]),
+  );
 
-    const outgoing = outgoingEdgesByNodeId.get(edge.sourceNodeId) ?? [];
-    outgoing.push(edge);
-    outgoingEdgesByNodeId.set(edge.sourceNodeId, outgoing);
-
-    adjacencyByNodeId.get(edge.sourceNodeId)?.push(edge.targetNodeId);
-  }
-
-  const context: WorkflowEditorDocumentContext<TNodeData, TEdgeData> = {
+  return {
     document,
     nodeById,
     edgeById,
@@ -75,58 +83,33 @@ export function createWorkflowEditorDocumentContext<
     incomingEdgesByNodeId,
     outgoingEdgesByNodeId,
     adjacencyByNodeId,
-
     getInputPort(nodeId, portId) {
-      return inputPortByNodeAndId.get(portKey(nodeId, portId));
+      return (graphContext.getInputPort(nodeId, portId) as WorkflowEditorPort | null) ?? undefined;
     },
-
     getOutputPort(nodeId, portId) {
-      return outputPortByNodeAndId.get(portKey(nodeId, portId));
+      return (graphContext.getOutputPort(nodeId, portId) as WorkflowEditorPort | null) ?? undefined;
     },
-
     getIncomingEdges(nodeId) {
       return incomingEdgesByNodeId.get(nodeId) ?? [];
     },
-
     getOutgoingEdges(nodeId) {
       return outgoingEdgesByNodeId.get(nodeId) ?? [];
     },
-
     getIncomingEdgeToPort(nodeId, portId) {
-      return incomingEdgesByNodeId.get(nodeId)?.find((edge) => edge.targetPortId === portId);
+      return (
+        (graphContext.getIncomingEdgeToPort(
+          nodeId,
+          portId,
+        ) as WorkflowEditorEdge<TEdgeData> | null) ?? undefined
+      );
     },
-
     getOutgoingEdgesFromPort(nodeId, portId) {
       return (
         outgoingEdgesByNodeId.get(nodeId)?.filter((edge) => edge.sourcePortId === portId) ?? []
       );
     },
-
     canReach(startNodeId, targetNodeId) {
-      const queue = [startNodeId];
-      const visited = new Set<string>();
-
-      for (let cursor = 0; cursor < queue.length; cursor += 1) {
-        const nodeId = queue[cursor]!;
-
-        if (nodeId === targetNodeId) {
-          return true;
-        }
-
-        if (visited.has(nodeId)) {
-          continue;
-        }
-
-        visited.add(nodeId);
-
-        for (const nextNodeId of adjacencyByNodeId.get(nodeId) ?? []) {
-          queue.push(nextNodeId);
-        }
-      }
-
-      return false;
+      return graphContext.canReach(startNodeId, targetNodeId);
     },
   };
-
-  return context;
 }
