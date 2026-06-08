@@ -12,19 +12,24 @@ bun add @moritzbrantner/workflow-editor
 ```
 
 The React workbench expects `react` as a peer dependency. Generic graph primitives,
-layout, runtime operations, canvas behavior, and workbench infrastructure come from
+layout, runtime operations, commands, and canvas behavior come from
 `@moritzbrantner/graph-editor`; workflow-editor adds typed workflow semantics,
 built-in workflow node templates, nested workflows, document-library persistence,
-sharing, versions, settings, and app chrome.
+sharing, versions, settings, workflow panels, controls, and editor shell chrome.
 
 ## Package Boundary
 
 - `@moritzbrantner/graph-editor` owns the generic graph model, document validation,
-  graph indexes, mutation primitives, layout, runtime operations, canvas, and workbench shell.
+  graph indexes, mutation primitives, layout, runtime operations, commands, and canvas.
 - `@moritzbrantner/workflow-editor` specializes those primitives for executable
   directed acyclic workflows with TypeScript-like port assignability, workflow
-  constructor/decomposition behavior, built-in templates, composed nodes, nested workflow
-  references, persistence, sharing, history, settings, and workflow-specific panels.
+  constructor/decomposition behavior, workflow clipboard semantics, built-in templates,
+  composed nodes, nested workflow references, persistence, sharing, history, settings,
+  and workflow-specific panels/controls/editor shell.
+- `WorkflowWorkbench` does not delegate to npm `GraphWorkbench`; it uses graph-editor
+  runtime, operations, commands, and `GraphCanvas` primitives while keeping workflow-specific
+  chrome, overlays, DAG validation, constructor expansion, composed nodes, and nested
+  workflow behavior in workflow-editor.
 
 Import generic graph extension points from graph-editor directly:
 
@@ -38,8 +43,8 @@ import type { GraphEditorOperation } from "@moritzbrantner/graph-editor/operatio
 
 ## Main APIs
 
-- `WorkflowWorkbench` for a workflow-specialized React graph editor backed by
-  `@moritzbrantner/graph-editor`.
+- `WorkflowWorkbench` for a workflow-specialized React graph editor whose generic runtime,
+  operations, commands, and canvas are backed by `@moritzbrantner/graph-editor`.
 - `WorkflowEditor` for a browser-first workflow editor shell with document library controls,
   local saving/loading, JSON import/export, explicit versions, and undo/redo.
 - `defaultWorkflowEditorNodeTemplates`,

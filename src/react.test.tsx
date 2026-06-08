@@ -1,6 +1,16 @@
 import { useState } from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { getWorkflowNodeSize } from "./react/workflow-node";
+import {
+  selectionStateToSingleSelection,
+  toggleWorkflowEditorSelectionItem,
+} from "./react-selection";
+import { formatShortcutLabel } from "./shortcut-label";
+import {
+  clampWorkflowOverlayPosition,
+  getWorkflowOverlayMaxHeight,
+  getWorkflowPalettePinnedStyle,
+} from "./react/overlay-position";
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 
 import {
@@ -9,7 +19,9 @@ import {
   WorkflowEditorCurrentNodesPanel,
   WorkflowWorkbench,
   WorkflowWorkbenchInspector,
+  WorkflowWorkbenchOverlayPanel,
   WorkflowWorkbenchPalette,
+  WorkflowWorkbenchToolbar,
   connectWorkflowEditorNodes,
   createWorkflowEditorGroup,
   findWorkflowEditorNode,
@@ -135,9 +147,81 @@ function WorkbenchPanelHarness({
   );
 }
 
+function ModularWorkbenchChromeHarness({
+  initialDocument = document,
+  initialSelection = { nodeIds: [], edgeIds: [] },
+  readOnly = false,
+  documentReferences,
+  renderInspector,
+  renderToolbarActions,
+  nodeTemplates = [
+    {
+      id: "decision",
+      label: "Decision",
+      categoryPath: ["Logic", "Branching"],
+    },
+    {
+      id: "delay",
+      label: "Delay",
+      category: "Timing",
+    },
+  ],
+}: {
+  initialDocument?: WorkflowEditorDocument;
+  initialSelection?: WorkflowEditorSelectionState;
+  readOnly?: boolean;
+  documentReferences?: Array<{ id: string; name: string }>;
+  renderInspector?: Parameters<typeof useWorkflowWorkbenchController>[0]["renderInspector"];
+  renderToolbarActions?: Parameters<
+    typeof useWorkflowWorkbenchController
+  >[0]["renderToolbarActions"];
+  nodeTemplates?: Parameters<typeof useWorkflowWorkbenchController>[0]["nodeTemplates"];
+}) {
+  const [currentDocument, setCurrentDocument] = useState(initialDocument);
+  const [selection, setSelection] = useState(initialSelection);
+  const controller = useWorkflowWorkbenchController({
+    document: currentDocument,
+    selectedNodeIds: selection.nodeIds,
+    selectedEdgeIds: selection.edgeIds,
+    selectedGroupIds: selection.groupIds,
+    readOnly,
+    nodeTemplates,
+    documentReferences,
+    renderInspector,
+    renderToolbarActions,
+    onDocumentChange: setCurrentDocument,
+    onSelectionStateChange: setSelection,
+  });
+
+  return (
+    <>
+      <WorkflowWorkbenchToolbar controller={controller} />
+      <WorkflowWorkbenchPalette controller={controller} />
+      <WorkflowWorkbenchInspector controller={controller} />
+      <WorkflowWorkbenchOverlayPanel className="custom-panel" style={{ left: 12, top: 18 }}>
+        Overlay child
+      </WorkflowWorkbenchOverlayPanel>
+      <pre data-testid="modular-document-json">{JSON.stringify(currentDocument)}</pre>
+      <pre data-testid="modular-selection-json">{JSON.stringify(selection)}</pre>
+    </>
+  );
+}
+
 function readPanelDocument() {
   return JSON.parse(screen.getByTestId("panel-document-json").textContent ?? "") as
     | WorkflowEditorDocument
+    | never;
+}
+
+function readModularDocument() {
+  return JSON.parse(screen.getByTestId("modular-document-json").textContent ?? "") as
+    | WorkflowEditorDocument
+    | never;
+}
+
+function readModularSelection() {
+  return JSON.parse(screen.getByTestId("modular-selection-json").textContent ?? "") as
+    | WorkflowEditorSelectionState
     | never;
 }
 
@@ -164,6 +248,148 @@ afterEach(() => {
 });
 
 describe("@moritzbrantner/workflow-editor React workbench", () => {
+  test("maps and toggles workflow selection state branches", () => {
+    expect(
+      selectionStateToSingleSelection(document, {
+        nodeIds: [],
+        edgeIds: [],
+        primary: { type: "node", id: "input" },
+      }),
+    ).toEqual(expect.objectContaining({ id: "input", type: "node" }));
+    expect(
+      selectionStateToSingleSelection(document, {
+        nodeIds: [],
+        edgeIds: [],
+        primary: { type: "edge", id: "input-transform" },
+      }),
+    ).toEqual(expect.objectContaining({ id: "input-transform", type: "edge" }));
+    expect(
+      selectionStateToSingleSelection(document, {
+        nodeIds: ["transform"],
+        edgeIds: [],
+        primary: { type: "node", id: "missing" },
+      }),
+    ).toBeNull();
+    expect(selectionStateToSingleSelection(document, { nodeIds: ["output"], edgeIds: [] })).toEqual(
+      expect.objectContaining({ id: "output", type: "node" }),
+    );
+    expect(
+      selectionStateToSingleSelection(document, { nodeIds: [], edgeIds: ["input-transform"] }),
+    ).toEqual(expect.objectContaining({ id: "input-transform", type: "edge" }));
+    expect(selectionStateToSingleSelection(document, { nodeIds: [], edgeIds: [] })).toBeNull();
+
+    expect(
+      toggleWorkflowEditorSelectionItem(
+        { nodeIds: ["input"], edgeIds: [], groupIds: ["group-1"] },
+        { type: "node", id: "input" },
+      ),
+    ).toEqual({
+      nodeIds: [],
+      edgeIds: [],
+      groupIds: ["group-1"],
+      primary: { type: "node", id: "input" },
+    });
+    expect(
+      toggleWorkflowEditorSelectionItem({ nodeIds: [], edgeIds: [] }, { type: "node", id: "input" })
+        .nodeIds,
+    ).toEqual(["input"]);
+    expect(
+      toggleWorkflowEditorSelectionItem(
+        { nodeIds: [], edgeIds: ["input-transform"], groupIds: ["group-1"] },
+        { type: "edge", id: "input-transform" },
+      ),
+    ).toEqual({
+      nodeIds: [],
+      edgeIds: [],
+      groupIds: ["group-1"],
+      primary: { type: "edge", id: "input-transform" },
+    });
+    expect(
+      toggleWorkflowEditorSelectionItem(
+        { nodeIds: [], edgeIds: [] },
+        { type: "edge", id: "input-transform" },
+      ).edgeIds,
+    ).toEqual(["input-transform"]);
+    expect(
+      toggleWorkflowEditorSelectionItem(
+        { nodeIds: [], edgeIds: [], groupIds: ["group-1"] },
+        { type: "group", id: "group-1" },
+      ),
+    ).toEqual({
+      nodeIds: [],
+      edgeIds: [],
+      primary: { type: "group", id: "group-1" },
+    });
+    expect(
+      toggleWorkflowEditorSelectionItem(
+        { nodeIds: [], edgeIds: [] },
+        { type: "group", id: "group-1" },
+      ).groupIds,
+    ).toEqual(["group-1"]);
+  });
+
+  test("formats shortcut labels and computes overlay positioning branches", () => {
+    expect(
+      formatShortcutLabel("mod + ctrl + control + cmd + command + meta + alt + shift + x + enter"),
+    ).toBe("Mod+Ctrl+Ctrl+Meta+Meta+Meta+Alt+Shift+X+Enter");
+
+    const container = globalThis.document.createElement("div");
+    const overlay = globalThis.document.createElement("div");
+    container.getBoundingClientRect = () =>
+      ({
+        left: 0,
+        top: 0,
+        right: 400,
+        bottom: 300,
+        width: 400,
+        height: 300,
+        x: 0,
+        y: 0,
+        toJSON: () => {},
+      }) as DOMRect;
+    overlay.getBoundingClientRect = () =>
+      ({
+        left: 0,
+        top: 0,
+        right: 120,
+        bottom: 90,
+        width: 120,
+        height: 90,
+        x: 0,
+        y: 0,
+        toJSON: () => {},
+      }) as DOMRect;
+
+    expect(clampWorkflowOverlayPosition({ x: -20, y: 500 }, container, overlay)).toEqual({
+      x: 12,
+      y: 198,
+    });
+    expect(clampWorkflowOverlayPosition({ x: 20, y: 20 }, null, overlay)).toEqual({
+      x: 20,
+      y: 20,
+    });
+    expect(
+      clampWorkflowOverlayPosition({ x: 20, y: 20 }, container, overlay, {
+        width: 0,
+        height: 20,
+      }),
+    ).toEqual({ x: 20, y: 20 });
+    expect(getWorkflowOverlayMaxHeight(-4)).toBe("calc(100% - 12px)");
+    expect(getWorkflowPalettePinnedStyle("top-left")).toEqual({ left: "0.75rem", top: "0.75rem" });
+    expect(getWorkflowPalettePinnedStyle("top-right")).toEqual({
+      right: "0.75rem",
+      top: "0.75rem",
+    });
+    expect(getWorkflowPalettePinnedStyle("bottom-left")).toEqual({
+      bottom: "0.75rem",
+      left: "0.75rem",
+    });
+    expect(getWorkflowPalettePinnedStyle("bottom-right")).toEqual({
+      bottom: "0.75rem",
+      right: "0.75rem",
+    });
+  });
+
   test("hides visible input and output headers in the workflow workbench", () => {
     render(<WorkflowWorkbench document={document} />);
 
@@ -1425,5 +1651,263 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     expect(readPanelDocument().nodes.some((node) => node.id === "wrapped-copy")).toBe(false);
+  });
+
+  test("modular toolbar disables mutations in read-only mode and renders custom actions", () => {
+    render(
+      <ModularWorkbenchChromeHarness
+        readOnly
+        initialSelection={{
+          nodeIds: ["input", "transform"],
+          edgeIds: [],
+          primary: { type: "node", id: "transform" },
+        }}
+        renderToolbarActions={(context) => (
+          <button type="button">Custom {context.selectedNodes.length}</button>
+        )}
+      />,
+    );
+
+    expect(screen.getByTestId("selection-count").textContent).toBe("2 selected");
+    expect((screen.getByRole("button", { name: "Duplicate" }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    expect((screen.getByRole("button", { name: "Paste" }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    expect(
+      (screen.getByRole("button", { name: "Arrange selection" }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect((screen.getByRole("button", { name: "Group" }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    expect(
+      (screen.getByRole("button", { name: "Arrange all" }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect((screen.getByRole("button", { name: "Delete" }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    expect(screen.getByRole("button", { name: "Custom 2" })).not.toBeNull();
+  });
+
+  test("modular toolbar exposes nested workflow create and open states", () => {
+    const referencedDocument = normalizeWorkflowEditorDocument({
+      ...document,
+      nodes: [
+        { ...document.nodes[0]!, workflowRef: { documentId: "child" } },
+        document.nodes[1]!,
+        document.nodes[2]!,
+      ],
+    });
+
+    const { unmount } = render(
+      <ModularWorkbenchChromeHarness
+        initialSelection={{
+          nodeIds: ["input"],
+          edgeIds: [],
+          primary: { type: "node", id: "input" },
+        }}
+        documentReferences={[{ id: "child", name: "Child" }]}
+      />,
+    );
+
+    expect(
+      screen
+        .getAllByRole("button", { name: "Create nested workflow" })
+        .some((button) => (button as HTMLButtonElement).disabled),
+    ).toBe(true);
+
+    unmount();
+    render(
+      <ModularWorkbenchChromeHarness
+        initialDocument={referencedDocument}
+        initialSelection={{
+          nodeIds: ["input"],
+          edgeIds: [],
+          primary: { type: "node", id: "input" },
+        }}
+        documentReferences={[{ id: "child", name: "Child" }]}
+      />,
+    );
+
+    expect(
+      screen
+        .getAllByRole("button", { name: "Open workflow" })
+        .some((button) => (button as HTMLButtonElement).disabled),
+    ).toBe(true);
+  });
+
+  test("modular palette handles nested groups, empty search, and node creation", () => {
+    render(<ModularWorkbenchChromeHarness />);
+
+    expect(screen.getByRole("region", { name: "Logic" })).not.toBeNull();
+    expect(screen.getByRole("region", { name: "Branching" })).not.toBeNull();
+    expect(screen.getByRole("region", { name: "Timing" })).not.toBeNull();
+
+    fireEvent.change(screen.getByLabelText("Search node palette"), {
+      target: { value: "missing" },
+    });
+    expect(screen.getByText("No matching node templates")).not.toBeNull();
+
+    fireEvent.change(screen.getByLabelText("Search node palette"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Decision" }));
+    expect(readModularDocument().nodes.some((node) => node.id === "decision")).toBe(true);
+    expect(readModularSelection()).toEqual({
+      nodeIds: ["decision"],
+      edgeIds: [],
+      primary: { type: "node", id: "decision" },
+    });
+  });
+
+  test("headless graph controller routes workflow actions through npm runtime state", async () => {
+    function GraphControllerHarness() {
+      const [currentDocument, setCurrentDocument] = useState(document);
+      const [selection, setSelection] = useState<WorkflowEditorSelectionState>({
+        nodeIds: [],
+        edgeIds: [],
+      });
+      const controller = useWorkflowWorkbenchController({
+        document: currentDocument,
+        selectedNodeIds: selection.nodeIds,
+        selectedEdgeIds: selection.edgeIds,
+        selectedGroupIds: selection.groupIds,
+        nodeTemplates: [{ id: "decision", label: "Decision" }],
+        onDocumentChange: setCurrentDocument,
+        onSelectionStateChange: setSelection,
+      });
+
+      return (
+        <>
+          <button
+            type="button"
+            onClick={() => {
+              controller.graph.actions.setSelection({
+                nodeIds: ["input", "transform"],
+                edgeIds: [],
+                primary: { type: "node", id: "transform" },
+              });
+              controller.graph.actions.groupSelection();
+            }}
+          >
+            Same tick group
+          </button>
+          <button type="button" onClick={() => controller.graph.actions.runCommand("undo")}>
+            Graph undo
+          </button>
+          <button type="button" onClick={() => controller.graph.actions.runCommand("redo")}>
+            Graph redo
+          </button>
+          <button
+            type="button"
+            onClick={() => controller.graph.actions.runCommand("ungroup-selection")}
+          >
+            Graph ungroup
+          </button>
+          <button type="button" onClick={() => controller.graph.actions.runCommand("select-all")}>
+            Graph select all
+          </button>
+          <button type="button" onClick={() => controller.graph.actions.runCommand("fit-view")}>
+            Graph fit
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              controller.graph.actions.addTemplateNode(
+                { id: "decision", label: "Decision" },
+                { x: Number.NaN, y: Number.NaN },
+              )
+            }
+          >
+            Graph add invalid position
+          </button>
+          <pre data-testid="graph-document-json">{JSON.stringify(currentDocument)}</pre>
+          <pre data-testid="graph-selection-json">{JSON.stringify(selection)}</pre>
+          <pre data-testid="graph-command-json">
+            {JSON.stringify(controller.graph.commands.map((command) => command.id))}
+          </pre>
+        </>
+      );
+    }
+
+    const readGraphDocument = () =>
+      JSON.parse(screen.getByTestId("graph-document-json").textContent ?? "") as
+        | WorkflowEditorDocument
+        | never;
+    const readGraphSelection = () =>
+      JSON.parse(screen.getByTestId("graph-selection-json").textContent ?? "") as
+        | WorkflowEditorSelectionState
+        | never;
+
+    render(<GraphControllerHarness />);
+
+    expect(JSON.parse(screen.getByTestId("graph-command-json").textContent ?? "")).toContain(
+      "group-selection",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Same tick group" }));
+    await waitFor(() => expect(readGraphDocument().groups).toHaveLength(1));
+    expect(readGraphSelection().primary?.type).toBe("group");
+
+    fireEvent.click(screen.getByRole("button", { name: "Graph undo" }));
+    await waitFor(() => expect(readGraphDocument().groups ?? []).toHaveLength(0));
+
+    fireEvent.click(screen.getByRole("button", { name: "Graph redo" }));
+    await waitFor(() => expect(readGraphDocument().groups).toHaveLength(1));
+
+    fireEvent.click(screen.getByRole("button", { name: "Graph ungroup" }));
+    await waitFor(() => expect(readGraphDocument().groups ?? []).toHaveLength(0));
+    expect(readGraphSelection().nodeIds).toEqual(["input", "transform"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Graph select all" }));
+    expect(readGraphSelection().nodeIds).toEqual(["input", "transform", "output"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Graph fit" }));
+    expect(readGraphDocument().viewport).toEqual({ x: 96, y: 96, zoom: 1 });
+
+    fireEvent.click(screen.getByRole("button", { name: "Graph add invalid position" }));
+    await waitFor(() =>
+      expect(readGraphDocument().nodes).toEqual(
+        expect.arrayContaining([expect.objectContaining({ id: "decision", x: 228, y: 204 })]),
+      ),
+    );
+  });
+
+  test("modular palette renders overlay mode with no node templates", () => {
+    function EmptyOverlayPalette() {
+      const controller = useWorkflowWorkbenchController({
+        document,
+        nodeTemplates: [],
+      });
+
+      return <WorkflowWorkbenchPalette controller={controller} mode="overlay" />;
+    }
+
+    render(<EmptyOverlayPalette />);
+
+    expect(
+      globalThis.document.querySelector('[data-slot="workflow-palette-overlay"]'),
+    ).not.toBeNull();
+    expect(screen.getByText("No node templates")).not.toBeNull();
+  });
+
+  test("modular inspector render override and overlay panel render", () => {
+    render(
+      <ModularWorkbenchChromeHarness
+        initialSelection={{
+          nodeIds: ["input"],
+          edgeIds: [],
+          primary: { type: "node", id: "input" },
+        }}
+        renderInspector={(context) => <div>Inspector {context.selectedNode?.label}</div>}
+      />,
+    );
+
+    expect(screen.getByText("Inspector Input")).not.toBeNull();
+    const overlay = globalThis.document.querySelector<HTMLElement>(
+      "[data-slot='workflow-overlay-panel']",
+    );
+    expect(overlay?.textContent).toBe("Overlay child");
+    expect(overlay?.className).toContain("custom-panel");
+    expect(overlay?.style.left).toBe("12px");
   });
 });

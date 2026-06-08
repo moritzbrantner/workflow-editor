@@ -23,6 +23,7 @@ import {
   type WorkflowGraphRuntimeState,
 } from "@moritzbrantner/workflow-editor";
 import type { GraphEditorDocument } from "@moritzbrantner/graph-editor/core";
+import type { GraphWorkbenchController } from "@moritzbrantner/graph-editor/react";
 import {
   connectWorkflowEditorNodes,
   validateWorkflowEditorDocument,
@@ -33,6 +34,7 @@ import {
 import {
   WorkflowWorkbenchCanvas,
   useWorkflowWorkbenchController,
+  type WorkflowWorkbenchController,
   type WorkflowWorkbenchProps,
 } from "@moritzbrantner/workflow-editor/react";
 import {
@@ -181,6 +183,12 @@ expectAssignable<WorkflowEditorProps<NodeData, EdgeData>>({ initialLibrary: libr
 expectAssignable<Parameters<typeof WorkflowWorkbenchCanvas<NodeData, EdgeData>>[0]>({
   controller: useWorkflowWorkbenchController({ document }),
 });
+expectAssignable<GraphWorkbenchController<NodeData, EdgeData, WorkflowEditorPortType>>(
+  useWorkflowWorkbenchController<NodeData, EdgeData>({ document }).graph,
+);
+expectAssignable<GraphWorkbenchController<NodeData, EdgeData, WorkflowEditorPortType>>(
+  ({} as WorkflowWorkbenchController<NodeData, EdgeData>).graph,
+);
 expectAssignable<Parameters<typeof WorkflowEditorDocumentMenu<NodeData, EdgeData>>[0]>({
   controller: useWorkflowEditorController({ initialLibrary: library }),
 });

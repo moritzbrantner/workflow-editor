@@ -6,7 +6,6 @@
 
 import { applyGraphEditorOperation } from '@moritzbrantner/graph-editor/runtime';
 import { CSSProperties } from 'react';
-import { Dispatch } from 'react';
 import { GraphCanvasConnection } from '@moritzbrantner/graph-editor/react';
 import { GraphCanvasConnectionValidity } from '@moritzbrantner/graph-editor/react';
 import { GraphCanvasEdge } from '@moritzbrantner/graph-editor/react';
@@ -34,7 +33,6 @@ import * as react from 'react';
 import * as react_jsx_runtime from 'react/jsx-runtime';
 import { ReactNode } from 'react';
 import { RefObject } from 'react';
-import { SetStateAction } from 'react';
 
 // @public (undocumented)
 export function activeWorkflowEditorEntry<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(library: WorkflowEditorLibrary<TNodeData, TEdgeData>): WorkflowEditorLibraryEntry<TNodeData, TEdgeData> | null;
@@ -869,105 +867,7 @@ export function useWorkflowEditorController<TNodeData extends Record<string, unk
     selectedVersionId: string;
     selection: _moritzbrantner_graph_editor_core.GraphEditorSelectionState;
     settings: WorkflowEditorSettings<TAppSettings>;
-    workbench: {
-        document: WorkflowEditorDocument<TNodeData, TEdgeData>;
-        readOnly: boolean;
-        selection: _moritzbrantner_graph_editor_core.GraphEditorSelectionState;
-        selectedEdge: WorkflowEditorEdge<TEdgeData> | undefined;
-        selectedEdges: WorkflowEditorEdge<TEdgeData>[];
-        selectedGroup: _moritzbrantner_graph_editor_core.GraphEditorGroup<Record<string, unknown>> | undefined;
-        selectedGroups: _moritzbrantner_graph_editor_core.GraphEditorGroup<Record<string, unknown>>[];
-        selectedNode: WorkflowEditorNode<TNodeData> | undefined;
-        selectedNodes: WorkflowEditorNode<TNodeData>[];
-        palette: {
-            groups: WorkflowWorkbenchPaletteCategoryGroup<TTemplateData>[];
-            items: readonly WorkflowWorkbenchPaletteItem<TTemplateData>[];
-            filteredItems: readonly WorkflowWorkbenchPaletteItem<TTemplateData>[];
-            minimized: boolean;
-            placement: WorkflowWorkbenchPanelPlacement;
-            position: WorkflowWorkbenchOverlayPosition;
-            searchValue: string;
-            setMinimized: react.Dispatch<react.SetStateAction<boolean>>;
-            setPlacement: react.Dispatch<react.SetStateAction<WorkflowWorkbenchPanelPlacement>>;
-            setPosition: react.Dispatch<react.SetStateAction<WorkflowWorkbenchOverlayPosition>>;
-            setSearchValue: react.Dispatch<react.SetStateAction<string>>;
-        };
-        inspector: {
-            context: {
-                document: WorkflowEditorDocument<TNodeData, TEdgeData>;
-                documentReferences: WorkflowEditorDocumentReferenceOption[] | undefined;
-                readOnly: boolean;
-                selection: _moritzbrantner_graph_editor_core.GraphEditorSelectionState;
-                selectedEdges: WorkflowEditorEdge<TEdgeData>[];
-                selectedNodes: WorkflowEditorNode<TNodeData>[];
-                selectedEdge: WorkflowEditorEdge<TEdgeData> | undefined;
-                selectedNode: WorkflowEditorNode<TNodeData> | undefined;
-                openSelectedNodeWorkflow: (() => void | undefined) | undefined;
-                createSelectedNodeWorkflow: (() => void | undefined) | undefined;
-                updateDocument: (nextDocument: WorkflowEditorDocument<TNodeData, TEdgeData>) => void;
-                updateSelectedEdge: (patch: Partial<WorkflowEditorEdge<TEdgeData>>) => void;
-                updateSelectedNode: (patch: Partial<WorkflowEditorNode<TNodeData>>) => void;
-                updateSelectedNodeWorkflowReference: (documentId: string | null) => void;
-            };
-            collapsed: boolean;
-            minimized: boolean;
-            position: WorkflowWorkbenchOverlayPosition;
-            setMinimized: react.Dispatch<react.SetStateAction<boolean>>;
-            setPosition: react.Dispatch<react.SetStateAction<WorkflowWorkbenchOverlayPosition>>;
-        };
-        toolbar: {
-            showGraphStats: boolean;
-            showShortcutHint: boolean;
-        };
-        canvas: {
-            containerRef: react.RefObject<HTMLDivElement | null>;
-        };
-        overlays: {
-            palette: {
-                minimized: boolean;
-                placement: WorkflowWorkbenchPanelPlacement;
-                position: WorkflowWorkbenchOverlayPosition;
-            };
-            inspector: {
-                minimized: boolean;
-                position: WorkflowWorkbenchOverlayPosition;
-            };
-        };
-        configuration: {
-            documentReferences: WorkflowEditorDocumentReferenceOption[] | undefined;
-            nodeTemplates: readonly WorkflowWorkbenchPaletteItem<TTemplateData>[];
-            onCreateWorkflowReference: ((node: WorkflowEditorNode<TNodeData>) => void) | undefined;
-            onOpenWorkflowReference: ((node: WorkflowEditorNode<TNodeData>) => void) | undefined;
-            onSelectionChange: ((selection: WorkflowWorkbenchSelection<TNodeData, TEdgeData>) => void) | undefined;
-            onSelectionStateChange: ((selection: WorkflowEditorSelectionState) => void) | undefined;
-            onViewportChange: ((viewport: WorkflowEditorViewport) => void) | undefined;
-            renderInspector: ((context: WorkflowWorkbenchInspectorContext<TNodeData, TEdgeData>) => ReactNode) | undefined;
-            renderNodeTemplate: ((template: WorkflowWorkbenchPaletteItem<TTemplateData>) => ReactNode) | undefined;
-            renderToolbarActions: ((context: WorkflowWorkbenchInspectorContext<TNodeData, TEdgeData>) => ReactNode) | undefined;
-            typeDefinitions: readonly WorkflowEditorTypeDefinition[] | undefined;
-        };
-        actions: {
-            addTemplateNode: (template: WorkflowWorkbenchPaletteItem<TTemplateData>, position?: WorkflowEditorPoint) => void;
-            arrangeAll: () => void;
-            arrangeSelection: () => void;
-            copySelection: () => void;
-            createSelectedNodeWorkflow: () => void | undefined;
-            deleteSelection: () => void;
-            duplicateSelection: () => void;
-            groupSelection: () => void;
-            openSelectedNodeWorkflow: () => void | undefined;
-            pasteSelection: () => Promise<void>;
-            renameSelectedGroup: (label: string) => void;
-            setSelection: (nextSelection: WorkflowEditorSelectionState) => void;
-            toggleSelectedGroupMinimized: () => void;
-            ungroupSelection: () => void;
-            updateDocument: (nextDocument: WorkflowEditorDocument<TNodeData, TEdgeData>) => void;
-            updateSelectedGroup: (patch: Partial<WorkflowEditorGroup>) => void;
-            updateSelectedEdge: (patch: Partial<WorkflowEditorEdge<TEdgeData>>) => void;
-            updateSelectedNode: (patch: Partial<WorkflowEditorNode<TNodeData>>) => void;
-            updateSelectedNodeWorkflowReference: (documentId: string | null) => void;
-        };
-    };
+    workbench: WorkflowWorkbenchController<TNodeData, TEdgeData, TTemplateData>;
     actions: {
         createDocument: () => void;
         createWorkflowReference: (node: WorkflowEditorNode<TNodeData>) => void;
@@ -991,105 +891,7 @@ export function useWorkflowEditorController<TNodeData extends Record<string, unk
 };
 
 // @public (undocumented)
-export function useWorkflowWorkbenchController<TNodeData extends Record<string, unknown> = Record<string, unknown>, TEdgeData extends Record<string, unknown> = Record<string, unknown>, TTemplateData = TNodeData>(input: WorkflowWorkbenchControllerProps<TNodeData, TEdgeData, TTemplateData>): {
-    document: WorkflowEditorDocument<TNodeData, TEdgeData>;
-    readOnly: boolean;
-    selection: _moritzbrantner_graph_editor_core.GraphEditorSelectionState;
-    selectedEdge: WorkflowEditorEdge<TEdgeData> | undefined;
-    selectedEdges: WorkflowEditorEdge<TEdgeData>[];
-    selectedGroup: _moritzbrantner_graph_editor_core.GraphEditorGroup<Record<string, unknown>> | undefined;
-    selectedGroups: _moritzbrantner_graph_editor_core.GraphEditorGroup<Record<string, unknown>>[];
-    selectedNode: WorkflowEditorNode<TNodeData> | undefined;
-    selectedNodes: WorkflowEditorNode<TNodeData>[];
-    palette: {
-        groups: WorkflowWorkbenchPaletteCategoryGroup<TTemplateData>[];
-        items: readonly WorkflowWorkbenchPaletteItem<TTemplateData>[];
-        filteredItems: readonly WorkflowWorkbenchPaletteItem<TTemplateData>[];
-        minimized: boolean;
-        placement: WorkflowWorkbenchPanelPlacement;
-        position: WorkflowWorkbenchOverlayPosition;
-        searchValue: string;
-        setMinimized: Dispatch<SetStateAction<boolean>>;
-        setPlacement: Dispatch<SetStateAction<WorkflowWorkbenchPanelPlacement>>;
-        setPosition: Dispatch<SetStateAction<WorkflowWorkbenchOverlayPosition>>;
-        setSearchValue: Dispatch<SetStateAction<string>>;
-    };
-    inspector: {
-        context: {
-            document: WorkflowEditorDocument<TNodeData, TEdgeData>;
-            documentReferences: WorkflowEditorDocumentReferenceOption[] | undefined;
-            readOnly: boolean;
-            selection: _moritzbrantner_graph_editor_core.GraphEditorSelectionState;
-            selectedEdges: WorkflowEditorEdge<TEdgeData>[];
-            selectedNodes: WorkflowEditorNode<TNodeData>[];
-            selectedEdge: WorkflowEditorEdge<TEdgeData> | undefined;
-            selectedNode: WorkflowEditorNode<TNodeData> | undefined;
-            openSelectedNodeWorkflow: (() => void | undefined) | undefined;
-            createSelectedNodeWorkflow: (() => void | undefined) | undefined;
-            updateDocument: (nextDocument: WorkflowEditorDocument<TNodeData, TEdgeData>) => void;
-            updateSelectedEdge: (patch: Partial<WorkflowEditorEdge<TEdgeData>>) => void;
-            updateSelectedNode: (patch: Partial<WorkflowEditorNode<TNodeData>>) => void;
-            updateSelectedNodeWorkflowReference: (documentId: string | null) => void;
-        };
-        collapsed: boolean;
-        minimized: boolean;
-        position: WorkflowWorkbenchOverlayPosition;
-        setMinimized: Dispatch<SetStateAction<boolean>>;
-        setPosition: Dispatch<SetStateAction<WorkflowWorkbenchOverlayPosition>>;
-    };
-    toolbar: {
-        showGraphStats: boolean;
-        showShortcutHint: boolean;
-    };
-    canvas: {
-        containerRef: RefObject<HTMLDivElement | null>;
-    };
-    overlays: {
-        palette: {
-            minimized: boolean;
-            placement: WorkflowWorkbenchPanelPlacement;
-            position: WorkflowWorkbenchOverlayPosition;
-        };
-        inspector: {
-            minimized: boolean;
-            position: WorkflowWorkbenchOverlayPosition;
-        };
-    };
-    configuration: {
-        documentReferences: WorkflowEditorDocumentReferenceOption[] | undefined;
-        nodeTemplates: readonly WorkflowWorkbenchPaletteItem<TTemplateData>[];
-        onCreateWorkflowReference: ((node: WorkflowEditorNode<TNodeData>) => void) | undefined;
-        onOpenWorkflowReference: ((node: WorkflowEditorNode<TNodeData>) => void) | undefined;
-        onSelectionChange: ((selection: WorkflowWorkbenchSelection<TNodeData, TEdgeData>) => void) | undefined;
-        onSelectionStateChange: ((selection: WorkflowEditorSelectionState) => void) | undefined;
-        onViewportChange: ((viewport: WorkflowEditorViewport) => void) | undefined;
-        renderInspector: ((context: WorkflowWorkbenchInspectorContext<TNodeData, TEdgeData>) => ReactNode) | undefined;
-        renderNodeTemplate: ((template: WorkflowWorkbenchPaletteItem<TTemplateData>) => ReactNode) | undefined;
-        renderToolbarActions: ((context: WorkflowWorkbenchInspectorContext<TNodeData, TEdgeData>) => ReactNode) | undefined;
-        typeDefinitions: readonly WorkflowEditorTypeDefinition[] | undefined;
-    };
-    actions: {
-        addTemplateNode: (template: WorkflowWorkbenchPaletteItem<TTemplateData>, position?: WorkflowEditorPoint) => void;
-        arrangeAll: () => void;
-        arrangeSelection: () => void;
-        copySelection: () => void;
-        createSelectedNodeWorkflow: () => void | undefined;
-        deleteSelection: () => void;
-        duplicateSelection: () => void;
-        groupSelection: () => void;
-        openSelectedNodeWorkflow: () => void | undefined;
-        pasteSelection: () => Promise<void>;
-        renameSelectedGroup: (label: string) => void;
-        setSelection: (nextSelection: WorkflowEditorSelectionState) => void;
-        toggleSelectedGroupMinimized: () => void;
-        ungroupSelection: () => void;
-        updateDocument: (nextDocument: WorkflowEditorDocument<TNodeData, TEdgeData>) => void;
-        updateSelectedGroup: (patch: Partial<WorkflowEditorGroup>) => void;
-        updateSelectedEdge: (patch: Partial<WorkflowEditorEdge<TEdgeData>>) => void;
-        updateSelectedNode: (patch: Partial<WorkflowEditorNode<TNodeData>>) => void;
-        updateSelectedNodeWorkflowReference: (documentId: string | null) => void;
-    };
-};
+export function useWorkflowWorkbenchController<TNodeData extends Record<string, unknown> = Record<string, unknown>, TEdgeData extends Record<string, unknown> = Record<string, unknown>, TTemplateData = TNodeData>(input: WorkflowWorkbenchControllerProps<TNodeData, TEdgeData, TTemplateData>): WorkflowWorkbenchController<TNodeData, TEdgeData, TTemplateData>;
 
 // @public (undocumented)
 export function validateWorkflowEditorConnection<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(document: WorkflowEditorDocument<TNodeData, TEdgeData>, connection: WorkflowEditorConnectionInput, options?: WorkflowEditorTypeValidationOptions): WorkflowEditorConnectionValidity;
@@ -2299,6 +2101,7 @@ export type WorkflowWorkbenchChromeRenderer<TNodeData extends Record<string, unk
 
 // @public (undocumented)
 export type WorkflowWorkbenchController<TNodeData extends Record<string, unknown> = Record<string, unknown>, TEdgeData extends Record<string, unknown> = Record<string, unknown>, TTemplateData = TNodeData> = {
+    graph: GraphWorkbenchController<TNodeData, TEdgeData, WorkflowEditorPortType>;
     document: WorkflowEditorDocument<TNodeData, TEdgeData>;
     readOnly: boolean;
     selection: WorkflowEditorSelectionState;
@@ -2308,6 +2111,12 @@ export type WorkflowWorkbenchController<TNodeData extends Record<string, unknown
     selectedGroups: Array<WorkflowEditorGroup>;
     selectedNode?: WorkflowEditorNode<TNodeData>;
     selectedNodes: Array<WorkflowEditorNode<TNodeData>>;
+    workflow: {
+        typeDefinitions?: readonly WorkflowEditorTypeDefinition[];
+        documentReferences?: WorkflowEditorDocumentReferenceOption[];
+        openSelectedNodeWorkflow?: () => void;
+        createSelectedNodeWorkflow?: () => void;
+    };
     palette: {
         groups: Array<WorkflowWorkbenchPaletteCategoryGroup<TTemplateData>>;
         items: ReadonlyArray<WorkflowWorkbenchPaletteItem<TTemplateData>>;
@@ -2480,8 +2289,8 @@ export function wouldCreateWorkflowEditorCycle<TNodeData = Record<string, unknow
 // Warnings were encountered during analysis:
 //
 // dist/editor.d.ts:31:5 - (ae-forgotten-export) The symbol "ChromeController" needs to be exported by the entry point index.d.ts
-// dist/editor.d.ts:224:13 - (ae-forgotten-export) The symbol "WorkflowWorkbenchPaletteCategoryGroup" needs to be exported by the entry point index.d.ts
-// dist/editor.d.ts:229:13 - (ae-forgotten-export) The symbol "WorkflowWorkbenchOverlayPosition" needs to be exported by the entry point index.d.ts
+// dist/react.d.ts:117:9 - (ae-forgotten-export) The symbol "WorkflowWorkbenchPaletteCategoryGroup" needs to be exported by the entry point index.d.ts
+// dist/react.d.ts:122:9 - (ae-forgotten-export) The symbol "WorkflowWorkbenchOverlayPosition" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

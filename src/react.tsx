@@ -41,6 +41,27 @@ import {
 } from "@moritzbrantner/ui";
 import { createPortal } from "react-dom";
 import {
+  getGraphWorkbenchCommandFromKeyboardEvent,
+  isGraphWorkbenchEditableTarget,
+  type GraphWorkbenchAction,
+  type GraphWorkbenchCommandId,
+  type GraphWorkbenchController,
+} from "@moritzbrantner/graph-editor/react";
+import {
+  applyGraphEditorOperation,
+  createGraphEditorRuntime,
+  redoGraphEditorRuntime,
+  resetGraphEditorRuntime,
+  setGraphEditorRuntimeSelection,
+  undoGraphEditorRuntime,
+  type GraphEditorRuntimeState,
+} from "@moritzbrantner/graph-editor/runtime";
+import {
+  createGraphEditorAddNodeOperation,
+  createGraphEditorUpdateViewportOperation,
+  type GraphEditorOperation,
+} from "@moritzbrantner/graph-editor/operations";
+import {
   WorkflowBuilder,
   type WorkflowBuilderConnectionValidity,
   type WorkflowBuilderSelection,
@@ -100,6 +121,7 @@ import {
   type WorkflowEditorNode,
   type WorkflowEditorSelection,
   type WorkflowEditorSelectionState,
+  type WorkflowEditorPortType,
   type WorkflowEditorTypeDefinition,
   type WorkflowEditorViewport,
 } from "./core";
@@ -216,6 +238,7 @@ export type WorkflowWorkbenchController<
   TEdgeData extends Record<string, unknown> = Record<string, unknown>,
   TTemplateData = TNodeData,
 > = {
+  graph: GraphWorkbenchController<TNodeData, TEdgeData, WorkflowEditorPortType>;
   document: WorkflowEditorDocument<TNodeData, TEdgeData>;
   readOnly: boolean;
   selection: WorkflowEditorSelectionState;
@@ -225,6 +248,12 @@ export type WorkflowWorkbenchController<
   selectedGroups: Array<WorkflowEditorGroup>;
   selectedNode?: WorkflowEditorNode<TNodeData>;
   selectedNodes: Array<WorkflowEditorNode<TNodeData>>;
+  workflow: {
+    typeDefinitions?: readonly WorkflowEditorTypeDefinition[];
+    documentReferences?: WorkflowEditorDocumentReferenceOption[];
+    openSelectedNodeWorkflow?: () => void;
+    createSelectedNodeWorkflow?: () => void;
+  };
   palette: {
     groups: Array<WorkflowWorkbenchPaletteCategoryGroup<TTemplateData>>;
     items: ReadonlyArray<WorkflowWorkbenchPaletteItem<TTemplateData>>;
@@ -413,6 +442,43 @@ function getWorkflowWorkbenchConnectionKey(connection: WorkflowWorkbenchConnecti
   return `${connection.sourceNodeId}:${connection.sourcePortId}->${connection.targetNodeId}:${connection.targetPortId}`;
 }
 
+function createWorkflowWorkbenchDocumentOperation<
+  TNodeData extends Record<string, unknown>,
+  TEdgeData extends Record<string, unknown>,
+>(
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>,
+  selectionAfter?: WorkflowEditorSelectionState | null,
+  history = true,
+): GraphEditorOperation<TNodeData, TEdgeData, WorkflowEditorPortType> {
+  const normalizedDocument = normalizeWorkflowEditorDocument(document, { mode: "repair" });
+
+  return {
+    id: "graph.replace-document",
+    label: "Update workflow document",
+    apply: () => normalizedDocument,
+    selectionAfter: selectionAfter ?? undefined,
+    metadata: {
+      graphEditor: {
+        history,
+      },
+    },
+  };
+}
+
+function areWorkflowWorkbenchDocumentsEqual(
+  first: WorkflowEditorDocument,
+  second: WorkflowEditorDocument,
+) {
+  return JSON.stringify(first) === JSON.stringify(second);
+}
+
+function areWorkflowWorkbenchSelectionsEqual(
+  first: WorkflowEditorSelectionState,
+  second: WorkflowEditorSelectionState,
+) {
+  return JSON.stringify(first) === JSON.stringify(second);
+}
+
 export function WorkflowWorkbench<
   TNodeData extends Record<string, unknown> = Record<string, unknown>,
   TEdgeData extends Record<string, unknown> = Record<string, unknown>,
@@ -564,6 +630,20 @@ export function WorkflowWorkbench<
     () => normalizeWorkflowEditorSelection(document, rawSelection),
     [document, rawSelection],
   );
+  const normalizedRuntimeDocument = useMemo(
+    () => normalizeWorkflowEditorDocument(document, { mode: "repair" }),
+    [document],
+  );
+  const [graphRuntime, setGraphRuntime] = useState<
+    GraphEditorRuntimeState<TNodeData, TEdgeData, WorkflowEditorPortType>
+  >(() =>
+    createGraphEditorRuntime<TNodeData, TEdgeData, WorkflowEditorPortType>({
+      initialDocument: normalizedRuntimeDocument,
+      initialSelection: selection,
+    }),
+  );
+  const lastEmittedDocumentRef = useRef<WorkflowEditorDocument<TNodeData, TEdgeData> | null>(null);
+  const latestSelectionRef = useRef<WorkflowEditorSelectionState>(selection);
   const primarySelectedNodeId =
     selection.primary?.type === "node" ? selection.primary.id : selection.nodeIds[0];
   const primarySelectedEdgeId =
@@ -632,9 +712,90 @@ export function WorkflowWorkbench<
     [filteredNodeTemplates],
   );
 
-  const commitDocument = (nextDocument: WorkflowEditorDocument<TNodeData, TEdgeData>) => {
+  const emitGraphRuntimeSelection = (
+    nextSelection: WorkflowEditorSelectionState,
+    selectionDocument: WorkflowEditorDocument<TNodeData, TEdgeData> = document,
+    options: { syncRuntime?: boolean } = {},
+  ) => {
+    const normalizedSelection = normalizeWorkflowEditorSelection(selectionDocument, nextSelection);
+    latestSelectionRef.current = normalizedSelection;
+
+    if (!externalSelectionProvided) {
+      setInternalSelection(normalizedSelection);
+    }
+
+    if (options.syncRuntime !== false) {
+      setGraphRuntime((current) =>
+        areWorkflowWorkbenchSelectionsEqual(current.selection, normalizedSelection)
+          ? current
+          : setGraphEditorRuntimeSelection(current, normalizedSelection),
+      );
+    }
+
+    onSelectionStateChange?.(normalizedSelection);
+    onSelectionChange?.(selectionStateToSingleSelection(selectionDocument, normalizedSelection));
+  };
+
+  const emitGraphRuntimeDocument = (nextDocument: WorkflowEditorDocument<TNodeData, TEdgeData>) => {
+    lastEmittedDocumentRef.current = nextDocument;
     onDocumentChange?.(nextDocument);
   };
+
+  const dispatchGraphOperation = (
+    operation: GraphEditorOperation<TNodeData, TEdgeData, WorkflowEditorPortType>,
+    options?: { merge?: boolean; emitDocument?: boolean; emitSelection?: boolean },
+  ) => {
+    const nextRuntime = applyGraphEditorOperation(graphRuntime, operation, {
+      merge: options?.merge,
+    });
+    setGraphRuntime(nextRuntime);
+
+    const nextDocument = nextRuntime.document as WorkflowEditorDocument<TNodeData, TEdgeData>;
+    if (
+      options?.emitDocument !== false &&
+      !areWorkflowWorkbenchDocumentsEqual(nextDocument, document)
+    ) {
+      emitGraphRuntimeDocument(nextDocument);
+    }
+
+    if (options?.emitSelection !== false) {
+      emitGraphRuntimeSelection(nextRuntime.selection, nextDocument, { syncRuntime: false });
+    }
+  };
+
+  const commitDocument = (
+    nextDocument: WorkflowEditorDocument<TNodeData, TEdgeData>,
+    options: { selectionAfter?: WorkflowEditorSelectionState | null; history?: boolean } = {},
+  ) => {
+    dispatchGraphOperation(
+      createWorkflowWorkbenchDocumentOperation(
+        nextDocument,
+        options.selectionAfter,
+        options.history ?? true,
+      ),
+      { emitSelection: options.selectionAfter !== undefined },
+    );
+  };
+
+  useEffect(() => {
+    if (lastEmittedDocumentRef.current === document) {
+      lastEmittedDocumentRef.current = null;
+      return;
+    }
+
+    setGraphRuntime((current) =>
+      resetGraphEditorRuntime(current, normalizedRuntimeDocument, { selection }),
+    );
+  }, [document, normalizedRuntimeDocument]);
+
+  useEffect(() => {
+    latestSelectionRef.current = selection;
+    setGraphRuntime((current) =>
+      areWorkflowWorkbenchSelectionsEqual(current.selection, selection)
+        ? current
+        : setGraphEditorRuntimeSelection(current, selection),
+    );
+  }, [selection]);
 
   const commitWorkflowEditorConnection = (
     connectionCoordinates: WorkflowWorkbenchConnectionCoordinates,
@@ -668,7 +829,18 @@ export function WorkflowWorkbench<
 
   const commitViewportChange = (viewport: WorkflowEditorViewport) => {
     onViewportChange?.(viewport);
-    commitDocument({ ...document, viewport });
+    dispatchGraphOperation(
+      createGraphEditorUpdateViewportOperation<TNodeData, TEdgeData, WorkflowEditorPortType>(
+        viewport,
+        {
+          history: false,
+          selectionBefore: selection,
+          selectionAfter: selection,
+        },
+      ),
+      { emitDocument: false, emitSelection: false },
+    );
+    emitGraphRuntimeDocument({ ...document, viewport });
   };
 
   useEffect(() => {
@@ -846,14 +1018,7 @@ export function WorkflowWorkbench<
     nextSelection: WorkflowEditorSelectionState,
     selectionDocument: WorkflowEditorDocument<TNodeData, TEdgeData> = document,
   ) => {
-    const normalizedSelection = normalizeWorkflowEditorSelection(selectionDocument, nextSelection);
-
-    if (!externalSelectionProvided) {
-      setInternalSelection(normalizedSelection);
-    }
-
-    onSelectionStateChange?.(normalizedSelection);
-    onSelectionChange?.(selectionStateToSingleSelection(document, normalizedSelection));
+    emitGraphRuntimeSelection(nextSelection, selectionDocument);
   };
 
   const updateSelectedNode = (patch: Partial<WorkflowEditorNode<TNodeData>>) => {
@@ -1028,6 +1193,13 @@ export function WorkflowWorkbench<
       node.y = Math.round(position.y - size.height / 2);
     }
 
+    if (!Number.isFinite(node.x)) {
+      node.x = 120 + document.nodes.length * 36;
+    }
+    if (!Number.isFinite(node.y)) {
+      node.y = 120 + document.nodes.length * 28;
+    }
+
     return { id, node };
   };
 
@@ -1044,8 +1216,21 @@ export function WorkflowWorkbench<
       ...document,
       nodes: [...document.nodes, node],
     };
-    commitDocument(nextDocument);
-    emitSelectionState({ nodeIds: [id], edgeIds: [], primary: { type: "node", id } }, nextDocument);
+    const selectionAfter = {
+      nodeIds: [id],
+      edgeIds: [],
+      primary: { type: "node", id },
+    } satisfies WorkflowEditorSelectionState;
+
+    dispatchGraphOperation(
+      createGraphEditorAddNodeOperation<TNodeData, TEdgeData, WorkflowEditorPortType>({
+        node,
+        selectionBefore: selection,
+        selectionAfter,
+      }),
+      { emitDocument: false },
+    );
+    emitGraphRuntimeDocument(nextDocument);
   };
 
   const startTemplateDrag = (
@@ -1279,11 +1464,12 @@ export function WorkflowWorkbench<
   };
 
   const groupSelection = () => {
-    if (readOnly || selection.nodeIds.length < 2) {
+    const currentSelection = latestSelectionRef.current;
+    if (readOnly || currentSelection.nodeIds.length < 2) {
       return;
     }
 
-    const nextDocument = createWorkflowEditorGroup(document, selection.nodeIds);
+    const nextDocument = createWorkflowEditorGroup(document, currentSelection.nodeIds);
     if (nextDocument === document) {
       return;
     }
@@ -1354,60 +1540,137 @@ export function WorkflowWorkbench<
     commitDocument(layoutWorkflowEditorDocument(document).document);
   };
 
+  const selectAll = () => {
+    emitSelectionState({
+      nodeIds: document.nodes.map((node) => node.id),
+      edgeIds: [],
+      ...(document.nodes.at(-1)
+        ? { primary: { type: "node", id: document.nodes.at(-1)!.id } }
+        : {}),
+    });
+  };
+
+  const undoGraphRuntime = () => {
+    const nextRuntime = undoGraphEditorRuntime(graphRuntime);
+    setGraphRuntime(nextRuntime);
+    const nextDocument = nextRuntime.document as WorkflowEditorDocument<TNodeData, TEdgeData>;
+    if (!areWorkflowWorkbenchDocumentsEqual(nextDocument, document)) {
+      emitGraphRuntimeDocument(nextDocument);
+    }
+    emitGraphRuntimeSelection(nextRuntime.selection, nextDocument, { syncRuntime: false });
+  };
+
+  const redoGraphRuntime = () => {
+    const nextRuntime = redoGraphEditorRuntime(graphRuntime);
+    setGraphRuntime(nextRuntime);
+    const nextDocument = nextRuntime.document as WorkflowEditorDocument<TNodeData, TEdgeData>;
+    if (!areWorkflowWorkbenchDocumentsEqual(nextDocument, document)) {
+      emitGraphRuntimeDocument(nextDocument);
+    }
+    emitGraphRuntimeSelection(nextRuntime.selection, nextDocument, { syncRuntime: false });
+  };
+
+  const fitWorkflowWorkbenchView = () => {
+    if (document.nodes.length === 0) {
+      commitViewportChange({ x: 0, y: 0, zoom: 1 });
+      return;
+    }
+
+    const bounds = document.nodes.reduce(
+      (current, node) => ({
+        minX: Math.min(current.minX, node.x),
+        minY: Math.min(current.minY, node.y),
+        maxX: Math.max(current.maxX, node.x + 220),
+        maxY: Math.max(current.maxY, node.y + 140),
+      }),
+      {
+        minX: Number.POSITIVE_INFINITY,
+        minY: Number.POSITIVE_INFINITY,
+        maxX: Number.NEGATIVE_INFINITY,
+        maxY: Number.NEGATIVE_INFINITY,
+      },
+    );
+    const viewport = {
+      x: Math.round(96 - bounds.minX),
+      y: Math.round(96 - bounds.minY),
+      zoom: 1,
+    };
+
+    commitViewportChange(viewport);
+  };
+
+  const runGraphCommand = (commandId: GraphWorkbenchCommandId | string) => {
+    switch (commandId) {
+      case "undo":
+        undoGraphRuntime();
+        return;
+      case "redo":
+        redoGraphRuntime();
+        return;
+      case "copy":
+        copySelection();
+        return;
+      case "paste":
+        void pasteSelection();
+        return;
+      case "duplicate":
+        duplicateSelection();
+        return;
+      case "delete":
+        deleteSelection();
+        return;
+      case "select-all":
+        selectAll();
+        return;
+      case "fit-view":
+        fitWorkflowWorkbenchView();
+        return;
+      case "auto-layout":
+        arrangeAll();
+        return;
+      case "group-selection":
+        groupSelection();
+        return;
+      case "ungroup-selection":
+        ungroupSelection();
+        return;
+      default:
+        return;
+    }
+  };
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (isEditableEventTarget(event.target)) {
+      if (isGraphWorkbenchEditableTarget(event.target) || isEditableEventTarget(event.target)) {
         return;
       }
 
       const mod = event.metaKey || event.ctrlKey;
-      if (mod && event.key.toLowerCase() === "a") {
-        event.preventDefault();
-        emitSelectionState({
-          nodeIds: document.nodes.map((node) => node.id),
-          edgeIds: [],
-          ...(document.nodes[0] ? { primary: { type: "node", id: document.nodes[0].id } } : {}),
-        });
+      const commandId =
+        getGraphWorkbenchCommandFromKeyboardEvent(event) ??
+        (mod && event.key.toLowerCase() === "g"
+          ? event.shiftKey
+            ? "ungroup-selection"
+            : "group-selection"
+          : event.key === "Escape"
+            ? "clear-selection"
+            : event.key === "Delete" || event.key === "Backspace"
+              ? "delete"
+              : null);
+
+      if (!commandId) {
         return;
       }
 
-      if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (commandId === "clear-selection") {
         emitSelectionState(emptyWorkflowEditorSelection);
         return;
       }
 
-      if (event.key === "Delete" || event.key === "Backspace") {
-        event.preventDefault();
-        deleteSelection();
-        return;
-      }
-
-      if (mod && event.key.toLowerCase() === "c") {
-        event.preventDefault();
-        copySelection();
-        return;
-      }
-
-      if (mod && event.key.toLowerCase() === "v") {
-        event.preventDefault();
-        void pasteSelection();
-        return;
-      }
-
-      if (mod && event.key.toLowerCase() === "d") {
-        event.preventDefault();
-        duplicateSelection();
-        return;
-      }
-
-      if (mod && event.key.toLowerCase() === "g") {
-        event.preventDefault();
-        if (event.shiftKey) {
-          ungroupSelection();
-        } else {
-          groupSelection();
-        }
-      }
+      runGraphCommand(commandId);
     };
 
     window.addEventListener("keydown", onKeyDown);
@@ -2020,7 +2283,162 @@ export function WorkflowWorkbench<
     });
   };
 
+  const graphCommands = [
+    {
+      id: "undo",
+      label: "Undo",
+      disabled: readOnly || !graphRuntime.canUndo,
+      run: undoGraphRuntime,
+    },
+    {
+      id: "redo",
+      label: "Redo",
+      disabled: readOnly || !graphRuntime.canRedo,
+      run: redoGraphRuntime,
+    },
+    {
+      id: "copy",
+      label: "Copy",
+      disabled:
+        selection.nodeIds.length === 0 &&
+        selection.edgeIds.length === 0 &&
+        (selection.groupIds?.length ?? 0) === 0,
+      run: copySelection,
+    },
+    {
+      id: "paste",
+      label: "Paste",
+      disabled: readOnly,
+      run: pasteSelection,
+    },
+    {
+      id: "duplicate",
+      label: "Duplicate",
+      disabled:
+        readOnly ||
+        (selection.nodeIds.length === 0 &&
+          selection.edgeIds.length === 0 &&
+          (selection.groupIds?.length ?? 0) === 0),
+      run: duplicateSelection,
+    },
+    {
+      id: "delete",
+      label: "Delete",
+      destructive: true,
+      disabled:
+        readOnly ||
+        (selection.nodeIds.length === 0 &&
+          selection.edgeIds.length === 0 &&
+          (selection.groupIds?.length ?? 0) === 0),
+      run: deleteSelection,
+    },
+    { id: "select-all", label: "Select all", run: selectAll },
+    { id: "fit-view", label: "Fit view", run: fitWorkflowWorkbenchView },
+    {
+      id: "auto-layout",
+      label: "Arrange all",
+      disabled: readOnly || document.nodes.length === 0,
+      run: arrangeAll,
+    },
+    {
+      id: "group-selection",
+      label: "Group",
+      disabled: readOnly || selection.nodeIds.length < 2,
+      run: groupSelection,
+    },
+    {
+      id: "ungroup-selection",
+      label: "Ungroup",
+      disabled: readOnly || !selectedGroup,
+      run: ungroupSelection,
+    },
+    { id: "export-json", label: "Export JSON", run: () => {} },
+    { id: "import-json", label: "Import JSON", disabled: readOnly, run: () => {} },
+  ] satisfies GraphWorkbenchAction[];
+
+  const graphController = {
+    runtime: graphRuntime,
+    dispatch: dispatchGraphOperation,
+    document: graphRuntime.document,
+    readOnly,
+    selection,
+    selectedNode,
+    selectedEdge,
+    selectedGroup,
+    diagnostics: graphRuntime.diagnostics,
+    selectedDiagnostics: graphRuntime.selectedDiagnostics,
+    history: {
+      ...graphRuntime.operationHistory,
+      canUndo: graphRuntime.canUndo,
+      canRedo: graphRuntime.canRedo,
+    },
+    palette: {
+      groups: paletteGroups as unknown as Array<WorkflowWorkbenchPaletteCategoryGroup<TNodeData>>,
+      items: nodeTemplates as unknown as ReadonlyArray<WorkflowWorkbenchPaletteItem<TNodeData>>,
+      filteredItems: filteredNodeTemplates as unknown as ReadonlyArray<
+        WorkflowWorkbenchPaletteItem<TNodeData>
+      >,
+      searchValue: paletteSearchValue,
+      setSearchValue: setPaletteSearchValue,
+    },
+    view: {
+      showPalette: chrome?.palette !== "hidden",
+      showInspector: chrome?.inspector !== "hidden",
+      showMiniMap: true,
+      setShowPalette: () => {},
+      setShowInspector: () => {},
+      setShowMiniMap: () => {},
+      setZoom: (zoom: number) => {
+        commitViewportChange({
+          ...normalizeWorkflowEditorViewport(document.viewport),
+          zoom: clampWorkflowEditorZoom(zoom),
+        });
+      },
+    },
+    actions: {
+      addTemplateNode: (template, position) =>
+        addTemplateNode(
+          template as unknown as WorkflowWorkbenchPaletteItem<TTemplateData>,
+          position,
+        ),
+      appendTemplateNode: (template) => {
+        if (template) {
+          addTemplateNode(template as unknown as WorkflowWorkbenchPaletteItem<TTemplateData>);
+        }
+      },
+      deleteSelection,
+      setSelection: emitSelectionState,
+      updateDocument: (nextDocument, options) =>
+        commitDocument(nextDocument as WorkflowEditorDocument<TNodeData, TEdgeData>, {
+          history: options?.history,
+          selectionAfter: options?.selectionAfter,
+        }),
+      undo: undoGraphRuntime,
+      redo: redoGraphRuntime,
+      copySelection: async () => copySelection(),
+      pasteSelection,
+      duplicateSelection,
+      selectAll,
+      fitView: fitWorkflowWorkbenchView,
+      autoLayout: arrangeAll,
+      groupSelection,
+      ungroupSelection,
+      importJson: async (file?: File) => {
+        if (readOnly || !file) {
+          return;
+        }
+
+        const text = await file.text();
+        commitDocument(JSON.parse(text) as WorkflowEditorDocument<TNodeData, TEdgeData>);
+      },
+      exportJson: () => {},
+      runCommand: runGraphCommand,
+    },
+    commands: graphCommands,
+  } satisfies GraphWorkbenchController<TNodeData, TEdgeData, WorkflowEditorPortType>;
+
   const workbenchController = {
+    graph: graphController,
     document,
     readOnly,
     selection,
@@ -2030,6 +2448,14 @@ export function WorkflowWorkbench<
     selectedGroups,
     selectedNode,
     selectedNodes,
+    workflow: {
+      typeDefinitions,
+      documentReferences,
+      openSelectedNodeWorkflow:
+        documentReferences && onOpenWorkflowReference ? openSelectedNodeWorkflow : undefined,
+      createSelectedNodeWorkflow:
+        documentReferences && onCreateWorkflowReference ? createSelectedNodeWorkflow : undefined,
+    },
     palette: {
       groups: paletteGroups,
       items: nodeTemplates,
@@ -2777,7 +3203,11 @@ export function useWorkflowWorkbenchController<
   renderNodeTemplate,
   renderInspector,
   renderToolbarActions,
-}: WorkflowWorkbenchControllerProps<TNodeData, TEdgeData, TTemplateData>) {
+}: WorkflowWorkbenchControllerProps<
+  TNodeData,
+  TEdgeData,
+  TTemplateData
+>): WorkflowWorkbenchController<TNodeData, TEdgeData, TTemplateData> {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [internalSelection, setInternalSelection] = useState<WorkflowEditorSelectionState>(
     emptyWorkflowEditorSelection,
@@ -2852,6 +3282,38 @@ export function useWorkflowWorkbenchController<
     () => normalizeWorkflowEditorSelection(document, rawSelection),
     [document, rawSelection],
   );
+  const normalizedRuntimeDocument = useMemo(
+    () => normalizeWorkflowEditorDocument(document, { mode: "repair" }),
+    [document],
+  );
+  const [graphRuntime, setGraphRuntime] = useState<
+    GraphEditorRuntimeState<TNodeData, TEdgeData, WorkflowEditorPortType>
+  >(() =>
+    createGraphEditorRuntime<TNodeData, TEdgeData, WorkflowEditorPortType>({
+      initialDocument: normalizedRuntimeDocument,
+      initialSelection: selection,
+    }),
+  );
+  const lastEmittedDocumentRef = useRef<WorkflowEditorDocument<TNodeData, TEdgeData> | null>(null);
+  const latestSelectionRef = useRef<WorkflowEditorSelectionState>(selection);
+  useEffect(() => {
+    if (lastEmittedDocumentRef.current === document) {
+      lastEmittedDocumentRef.current = null;
+      return;
+    }
+
+    setGraphRuntime((current) =>
+      resetGraphEditorRuntime(current, normalizedRuntimeDocument, { selection }),
+    );
+  }, [document, normalizedRuntimeDocument]);
+  useEffect(() => {
+    latestSelectionRef.current = selection;
+    setGraphRuntime((current) =>
+      areWorkflowWorkbenchSelectionsEqual(current.selection, selection)
+        ? current
+        : setGraphEditorRuntimeSelection(current, selection),
+    );
+  }, [selection]);
   const documentContext = useMemo(() => createWorkflowEditorDocumentContext(document), [document]);
   const selectedNode =
     selection.primary?.type === "node"
@@ -2892,27 +3354,72 @@ export function useWorkflowWorkbenchController<
     [filteredItems],
   );
 
-  const setSelection = (nextSelection: WorkflowEditorSelectionState) => {
-    const normalizedSelection = normalizeWorkflowEditorSelection(document, nextSelection);
+  const emitGraphRuntimeDocument = (nextDocument: WorkflowEditorDocument<TNodeData, TEdgeData>) => {
+    lastEmittedDocumentRef.current = nextDocument;
+    onDocumentChange?.(nextDocument);
+  };
+
+  const dispatchGraphOperation = (
+    operation: GraphEditorOperation<TNodeData, TEdgeData, WorkflowEditorPortType>,
+    options?: { merge?: boolean; emitDocument?: boolean; emitSelection?: boolean },
+  ) => {
+    const nextRuntime = applyGraphEditorOperation(graphRuntime, operation, {
+      merge: options?.merge,
+    });
+    setGraphRuntime(nextRuntime);
+
+    const nextDocument = nextRuntime.document as WorkflowEditorDocument<TNodeData, TEdgeData>;
+    if (
+      options?.emitDocument !== false &&
+      !areWorkflowWorkbenchDocumentsEqual(nextDocument, document)
+    ) {
+      emitGraphRuntimeDocument(nextDocument);
+    }
+
+    if (options?.emitSelection !== false) {
+      const normalizedSelection = normalizeWorkflowEditorSelection(
+        nextDocument,
+        nextRuntime.selection,
+      );
+      latestSelectionRef.current = normalizedSelection;
+      if (!externalSelectionProvided) {
+        setInternalSelection(normalizedSelection);
+      }
+      onSelectionStateChange?.(normalizedSelection);
+      onSelectionChange?.(selectionStateToSingleSelection(nextDocument, normalizedSelection));
+    }
+  };
+
+  const setSelection = (
+    nextSelection: WorkflowEditorSelectionState,
+    selectionDocument: WorkflowEditorDocument<TNodeData, TEdgeData> = document,
+  ) => {
+    const normalizedSelection = normalizeWorkflowEditorSelection(selectionDocument, nextSelection);
+    latestSelectionRef.current = normalizedSelection;
     if (!externalSelectionProvided) {
       setInternalSelection(normalizedSelection);
     }
+    setGraphRuntime((current) =>
+      areWorkflowWorkbenchSelectionsEqual(current.selection, normalizedSelection)
+        ? current
+        : setGraphEditorRuntimeSelection(current, normalizedSelection),
+    );
     onSelectionStateChange?.(normalizedSelection);
-    onSelectionChange?.(selectionStateToSingleSelection(document, normalizedSelection));
+    onSelectionChange?.(selectionStateToSingleSelection(selectionDocument, normalizedSelection));
   };
   const updateDocument = (nextDocument: WorkflowEditorDocument<TNodeData, TEdgeData>) => {
     if (!readOnly) {
-      onDocumentChange?.(nextDocument);
+      dispatchGraphOperation(createWorkflowWorkbenchDocumentOperation(nextDocument));
     }
   };
   const updateSelectedNode = (patch: Partial<WorkflowEditorNode<TNodeData>>) => {
     if (!readOnly && selectedNode) {
-      onDocumentChange?.(updateWorkflowEditorNode(document, selectedNode.id, patch));
+      updateDocument(updateWorkflowEditorNode(document, selectedNode.id, patch));
     }
   };
   const updateSelectedEdge = (patch: Partial<WorkflowEditorEdge<TEdgeData>>) => {
     if (!readOnly && selectedEdge) {
-      onDocumentChange?.({
+      updateDocument({
         ...document,
         edges: document.edges.map((edge) =>
           edge.id === selectedEdge.id ? { ...edge, ...patch, id: edge.id } : edge,
@@ -2950,9 +3457,27 @@ export function useWorkflowWorkbenchController<
       workflowRef: template.workflowRef,
       composition: template.composition as WorkflowEditorNode<TNodeData>["composition"],
     };
+    if (!Number.isFinite(node.x)) {
+      node.x = 120 + document.nodes.length * 36;
+    }
+    if (!Number.isFinite(node.y)) {
+      node.y = 120 + document.nodes.length * 28;
+    }
     const nextDocument = { ...document, nodes: [...document.nodes, node] };
-    onDocumentChange?.(nextDocument);
-    setSelection({ nodeIds: [id], edgeIds: [], primary: { type: "node", id } });
+    const selectionAfter = {
+      nodeIds: [id],
+      edgeIds: [],
+      primary: { type: "node", id },
+    } satisfies WorkflowEditorSelectionState;
+    dispatchGraphOperation(
+      createGraphEditorAddNodeOperation<TNodeData, TEdgeData, WorkflowEditorPortType>({
+        node,
+        selectionBefore: selection,
+        selectionAfter,
+      }),
+      { emitDocument: false },
+    );
+    emitGraphRuntimeDocument(nextDocument);
   };
   const deleteSelection = () => {
     if (
@@ -2962,7 +3487,9 @@ export function useWorkflowWorkbenchController<
         (selection.groupIds?.length ?? 0) > 0)
     ) {
       const nextDocument = removeWorkflowEditorSelection(document, selection);
-      onDocumentChange?.(nextDocument);
+      dispatchGraphOperation(
+        createWorkflowWorkbenchDocumentOperation(nextDocument, emptyWorkflowEditorSelection),
+      );
       setSelection(emptyWorkflowEditorSelection);
     }
   };
@@ -2976,17 +3503,32 @@ export function useWorkflowWorkbenchController<
       return;
     }
     const result = duplicateWorkflowEditorSelection(document, selection);
-    onDocumentChange?.(result.document);
-    setSelection({
-      nodeIds: result.nodeIds,
-      edgeIds: result.edgeIds,
-      ...(result.groupIds?.length ? { groupIds: result.groupIds } : {}),
-      ...(result.groupIds?.[0]
-        ? { primary: { type: "group", id: result.groupIds[0] } }
-        : result.nodeIds[0]
-          ? { primary: { type: "node", id: result.nodeIds[0] } }
-          : {}),
-    });
+    dispatchGraphOperation(
+      createWorkflowWorkbenchDocumentOperation(result.document, {
+        nodeIds: result.nodeIds,
+        edgeIds: result.edgeIds,
+        ...(result.groupIds?.length ? { groupIds: result.groupIds } : {}),
+        ...(result.groupIds?.[0]
+          ? { primary: { type: "group", id: result.groupIds[0] } }
+          : result.nodeIds[0]
+            ? { primary: { type: "node", id: result.nodeIds[0] } }
+            : {}),
+      }),
+      { emitSelection: false },
+    );
+    setSelection(
+      {
+        nodeIds: result.nodeIds,
+        edgeIds: result.edgeIds,
+        ...(result.groupIds?.length ? { groupIds: result.groupIds } : {}),
+        ...(result.groupIds?.[0]
+          ? { primary: { type: "group", id: result.groupIds[0] } }
+          : result.nodeIds[0]
+            ? { primary: { type: "node", id: result.nodeIds[0] } }
+            : {}),
+      },
+      result.document,
+    );
   };
   const copySelection = () => {
     if (
@@ -3017,17 +3559,32 @@ export function useWorkflowWorkbenchController<
     }
     try {
       const result = pasteWorkflowEditorClipboardPayload(document, JSON.parse(text));
-      onDocumentChange?.(result.document);
-      setSelection({
-        nodeIds: result.nodeIds,
-        edgeIds: result.edgeIds,
-        ...(result.groupIds?.length ? { groupIds: result.groupIds } : {}),
-        ...(result.groupIds?.[0]
-          ? { primary: { type: "group", id: result.groupIds[0] } }
-          : result.nodeIds[0]
-            ? { primary: { type: "node", id: result.nodeIds[0] } }
-            : {}),
-      });
+      dispatchGraphOperation(
+        createWorkflowWorkbenchDocumentOperation(result.document, {
+          nodeIds: result.nodeIds,
+          edgeIds: result.edgeIds,
+          ...(result.groupIds?.length ? { groupIds: result.groupIds } : {}),
+          ...(result.groupIds?.[0]
+            ? { primary: { type: "group", id: result.groupIds[0] } }
+            : result.nodeIds[0]
+              ? { primary: { type: "node", id: result.nodeIds[0] } }
+              : {}),
+        }),
+        { emitSelection: false },
+      );
+      setSelection(
+        {
+          nodeIds: result.nodeIds,
+          edgeIds: result.edgeIds,
+          ...(result.groupIds?.length ? { groupIds: result.groupIds } : {}),
+          ...(result.groupIds?.[0]
+            ? { primary: { type: "group", id: result.groupIds[0] } }
+            : result.nodeIds[0]
+              ? { primary: { type: "node", id: result.nodeIds[0] } }
+              : {}),
+        },
+        result.document,
+      );
     } catch {
       return;
     }
@@ -3035,17 +3592,27 @@ export function useWorkflowWorkbenchController<
   const arrangeSelection = () => {
     const nodeIds = selectedGroup?.nodeIds ?? selection.nodeIds;
     if (!readOnly && nodeIds.length > 0) {
-      onDocumentChange?.(layoutWorkflowEditorDocument(document, { nodeIds }).document);
+      dispatchGraphOperation(
+        createWorkflowWorkbenchDocumentOperation(
+          layoutWorkflowEditorDocument(document, { nodeIds }).document,
+          selection,
+        ),
+      );
     }
   };
   const arrangeAll = () => {
     if (!readOnly && document.nodes.length > 0) {
-      onDocumentChange?.(layoutWorkflowEditorDocument(document).document);
+      dispatchGraphOperation(
+        createWorkflowWorkbenchDocumentOperation(
+          layoutWorkflowEditorDocument(document).document,
+          selection,
+        ),
+      );
     }
   };
   const updateSelectedNodeWorkflowReference = (documentId: string | null) => {
     if (!readOnly && selectedNode) {
-      onDocumentChange?.(
+      updateDocument(
         updateWorkflowEditorNodeWorkflowReference(
           document,
           selectedNode.id,
@@ -3055,23 +3622,40 @@ export function useWorkflowWorkbenchController<
     }
   };
   const groupSelection = () => {
-    if (readOnly || selection.nodeIds.length < 2) {
+    const currentSelection = latestSelectionRef.current;
+    if (readOnly || currentSelection.nodeIds.length < 2) {
       return;
     }
 
-    const nextDocument = createWorkflowEditorGroup(document, selection.nodeIds);
+    const nextDocument = createWorkflowEditorGroup(document, currentSelection.nodeIds);
     const previousGroupIds = new Set((document.groups ?? []).map((group) => group.id));
     const group = (nextDocument.groups ?? []).find(
       (candidate) => !previousGroupIds.has(candidate.id),
     );
-    onDocumentChange?.(nextDocument);
+    dispatchGraphOperation(
+      createWorkflowWorkbenchDocumentOperation(
+        nextDocument,
+        group
+          ? {
+              nodeIds: [],
+              edgeIds: [],
+              groupIds: [group.id],
+              primary: { type: "group", id: group.id },
+            }
+          : currentSelection,
+      ),
+      { emitSelection: false },
+    );
     if (group) {
-      setSelection({
-        nodeIds: [],
-        edgeIds: [],
-        groupIds: [group.id],
-        primary: { type: "group", id: group.id },
-      });
+      setSelection(
+        {
+          nodeIds: [],
+          edgeIds: [],
+          groupIds: [group.id],
+          primary: { type: "group", id: group.id },
+        },
+        nextDocument,
+      );
     }
   };
   const ungroupSelection = () => {
@@ -3079,18 +3663,35 @@ export function useWorkflowWorkbenchController<
       return;
     }
     const nextDocument = ungroupWorkflowEditorGroup(document, selectedGroup.id);
-    onDocumentChange?.(nextDocument);
-    setSelection({
-      nodeIds: selectedGroup.nodeIds,
-      edgeIds: [],
-      ...(selectedGroup.nodeIds[0]
-        ? { primary: { type: "node", id: selectedGroup.nodeIds[0] } }
-        : {}),
-    });
+    dispatchGraphOperation(
+      createWorkflowWorkbenchDocumentOperation(nextDocument, {
+        nodeIds: selectedGroup.nodeIds,
+        edgeIds: [],
+        ...(selectedGroup.nodeIds[0]
+          ? { primary: { type: "node", id: selectedGroup.nodeIds[0] } }
+          : {}),
+      }),
+      { emitSelection: false },
+    );
+    setSelection(
+      {
+        nodeIds: selectedGroup.nodeIds,
+        edgeIds: [],
+        ...(selectedGroup.nodeIds[0]
+          ? { primary: { type: "node", id: selectedGroup.nodeIds[0] } }
+          : {}),
+      },
+      nextDocument,
+    );
   };
   const updateSelectedGroup = (patch: Partial<WorkflowEditorGroup>) => {
     if (!readOnly && selectedGroup) {
-      onDocumentChange?.(updateWorkflowEditorGroup(document, selectedGroup.id, patch));
+      dispatchGraphOperation(
+        createWorkflowWorkbenchDocumentOperation(
+          updateWorkflowEditorGroup(document, selectedGroup.id, patch),
+          selection,
+        ),
+      );
     }
   };
   const renameSelectedGroup = (label: string) => {
@@ -3102,6 +3703,91 @@ export function useWorkflowWorkbenchController<
   const toggleSelectedGroupMinimized = () => {
     if (selectedGroup) {
       updateSelectedGroup({ minimized: selectedGroup.minimized !== true });
+    }
+  };
+  const selectAll = () => {
+    setSelection({
+      nodeIds: document.nodes.map((node) => node.id),
+      edgeIds: [],
+      ...(document.nodes.at(-1)
+        ? { primary: { type: "node", id: document.nodes.at(-1)!.id } }
+        : {}),
+    });
+  };
+  const fitView = () => {
+    const viewport =
+      document.nodes.length === 0
+        ? { x: 0, y: 0, zoom: 1 }
+        : {
+            x: Math.round(96 - Math.min(...document.nodes.map((node) => node.x))),
+            y: Math.round(96 - Math.min(...document.nodes.map((node) => node.y))),
+            zoom: 1,
+          };
+    onViewportChange?.(viewport);
+    dispatchGraphOperation(
+      createGraphEditorUpdateViewportOperation<TNodeData, TEdgeData, WorkflowEditorPortType>(
+        viewport,
+        { history: false, selectionBefore: selection, selectionAfter: selection },
+      ),
+      { emitDocument: false, emitSelection: false },
+    );
+    emitGraphRuntimeDocument({ ...document, viewport });
+  };
+  const undo = () => {
+    const nextRuntime = undoGraphEditorRuntime(graphRuntime);
+    setGraphRuntime(nextRuntime);
+    const nextDocument = nextRuntime.document as WorkflowEditorDocument<TNodeData, TEdgeData>;
+    if (!areWorkflowWorkbenchDocumentsEqual(nextDocument, document)) {
+      emitGraphRuntimeDocument(nextDocument);
+    }
+    setSelection(nextRuntime.selection, nextDocument);
+  };
+  const redo = () => {
+    const nextRuntime = redoGraphEditorRuntime(graphRuntime);
+    setGraphRuntime(nextRuntime);
+    const nextDocument = nextRuntime.document as WorkflowEditorDocument<TNodeData, TEdgeData>;
+    if (!areWorkflowWorkbenchDocumentsEqual(nextDocument, document)) {
+      emitGraphRuntimeDocument(nextDocument);
+    }
+    setSelection(nextRuntime.selection, nextDocument);
+  };
+  const runCommand = (commandId: GraphWorkbenchCommandId | string) => {
+    switch (commandId) {
+      case "undo":
+        undo();
+        return;
+      case "redo":
+        redo();
+        return;
+      case "copy":
+        copySelection();
+        return;
+      case "paste":
+        void pasteSelection();
+        return;
+      case "duplicate":
+        duplicateSelection();
+        return;
+      case "delete":
+        deleteSelection();
+        return;
+      case "select-all":
+        selectAll();
+        return;
+      case "fit-view":
+        fitView();
+        return;
+      case "auto-layout":
+        arrangeAll();
+        return;
+      case "group-selection":
+        groupSelection();
+        return;
+      case "ungroup-selection":
+        ungroupSelection();
+        return;
+      default:
+        return;
     }
   };
   const inspectorContext = {
@@ -3125,7 +3811,107 @@ export function useWorkflowWorkbenchController<
     updateSelectedNodeWorkflowReference,
   } satisfies WorkflowWorkbenchInspectorContext<TNodeData, TEdgeData>;
 
+  const graphCommands = [
+    { id: "undo", label: "Undo", disabled: readOnly || !graphRuntime.canUndo, run: undo },
+    { id: "redo", label: "Redo", disabled: readOnly || !graphRuntime.canRedo, run: redo },
+    { id: "copy", label: "Copy", run: copySelection },
+    { id: "paste", label: "Paste", disabled: readOnly, run: pasteSelection },
+    { id: "duplicate", label: "Duplicate", disabled: readOnly, run: duplicateSelection },
+    { id: "delete", label: "Delete", destructive: true, disabled: readOnly, run: deleteSelection },
+    { id: "select-all", label: "Select all", run: selectAll },
+    { id: "fit-view", label: "Fit view", run: fitView },
+    { id: "auto-layout", label: "Arrange all", disabled: readOnly, run: arrangeAll },
+    { id: "group-selection", label: "Group", disabled: readOnly, run: groupSelection },
+    { id: "ungroup-selection", label: "Ungroup", disabled: readOnly, run: ungroupSelection },
+    { id: "export-json", label: "Export JSON", run: () => {} },
+    { id: "import-json", label: "Import JSON", disabled: readOnly, run: () => {} },
+  ] satisfies GraphWorkbenchAction[];
+
+  const graphController = {
+    runtime: graphRuntime,
+    dispatch: dispatchGraphOperation,
+    document: graphRuntime.document,
+    readOnly,
+    selection,
+    selectedNode,
+    selectedEdge,
+    selectedGroup,
+    diagnostics: graphRuntime.diagnostics,
+    selectedDiagnostics: graphRuntime.selectedDiagnostics,
+    history: {
+      ...graphRuntime.operationHistory,
+      canUndo: graphRuntime.canUndo,
+      canRedo: graphRuntime.canRedo,
+    },
+    palette: {
+      groups: groups as unknown as Array<WorkflowWorkbenchPaletteCategoryGroup<TNodeData>>,
+      items: nodeTemplates as unknown as ReadonlyArray<WorkflowWorkbenchPaletteItem<TNodeData>>,
+      filteredItems: filteredItems as unknown as ReadonlyArray<
+        WorkflowWorkbenchPaletteItem<TNodeData>
+      >,
+      searchValue: paletteSearchValue,
+      setSearchValue: setPaletteSearchValue,
+    },
+    view: {
+      showPalette: true,
+      showInspector: true,
+      showMiniMap: true,
+      setShowPalette: () => {},
+      setShowInspector: () => {},
+      setShowMiniMap: () => {},
+      setZoom: (zoom: number) =>
+        onViewportChange?.({
+          ...normalizeWorkflowEditorViewport(document.viewport),
+          zoom: clampWorkflowEditorZoom(zoom),
+        }),
+    },
+    actions: {
+      addTemplateNode: (template, position) =>
+        addTemplateNode(
+          template as unknown as WorkflowWorkbenchPaletteItem<TTemplateData>,
+          position,
+        ),
+      appendTemplateNode: (template) => {
+        if (template) {
+          addTemplateNode(template as unknown as WorkflowWorkbenchPaletteItem<TTemplateData>);
+        }
+      },
+      deleteSelection,
+      setSelection,
+      updateDocument: (nextDocument, options) =>
+        dispatchGraphOperation(
+          createWorkflowWorkbenchDocumentOperation(
+            nextDocument as WorkflowEditorDocument<TNodeData, TEdgeData>,
+            options?.selectionAfter,
+            options?.history ?? true,
+          ),
+        ),
+      undo,
+      redo,
+      copySelection: async () => copySelection(),
+      pasteSelection,
+      duplicateSelection,
+      selectAll,
+      fitView,
+      autoLayout: arrangeAll,
+      groupSelection,
+      ungroupSelection,
+      importJson: async (file?: File) => {
+        if (!file || readOnly) {
+          return;
+        }
+        updateDocument(
+          JSON.parse(await file.text()) as WorkflowEditorDocument<TNodeData, TEdgeData>,
+        );
+      },
+      exportJson: () => {},
+      runCommand,
+    },
+    commands: graphCommands,
+  } satisfies GraphWorkbenchController<TNodeData, TEdgeData, WorkflowEditorPortType>;
+
   return {
+    graph: graphController,
     document,
     readOnly,
     selection,
@@ -3135,6 +3921,18 @@ export function useWorkflowWorkbenchController<
     selectedGroups,
     selectedNode,
     selectedNodes,
+    workflow: {
+      typeDefinitions,
+      documentReferences,
+      openSelectedNodeWorkflow:
+        documentReferences && onOpenWorkflowReference && selectedNode
+          ? () => selectedNode && onOpenWorkflowReference?.(selectedNode)
+          : undefined,
+      createSelectedNodeWorkflow:
+        documentReferences && onCreateWorkflowReference && selectedNode
+          ? () => selectedNode && onCreateWorkflowReference?.(selectedNode)
+          : undefined,
+    },
     palette: {
       groups,
       items: nodeTemplates,

@@ -51,30 +51,6 @@ const config: StorybookConfig = {
           replacement: path.resolve(rootDir, "node_modules/@moritzbrantner/ui/dist/index.js"),
         },
         {
-          find: "@moritzbrantner/graph-editor/core",
-          replacement: path.resolve(rootDir, "../graph-editor/src/core.ts"),
-        },
-        {
-          find: "@moritzbrantner/graph-editor/layout",
-          replacement: path.resolve(rootDir, "../graph-editor/src/layout.ts"),
-        },
-        {
-          find: "@moritzbrantner/graph-editor/operations",
-          replacement: path.resolve(rootDir, "../graph-editor/src/operations.ts"),
-        },
-        {
-          find: "@moritzbrantner/graph-editor/react",
-          replacement: path.resolve(rootDir, "../graph-editor/src/react.tsx"),
-        },
-        {
-          find: "@moritzbrantner/graph-editor/runtime",
-          replacement: path.resolve(rootDir, "../graph-editor/src/runtime.ts"),
-        },
-        {
-          find: "@moritzbrantner/graph-editor",
-          replacement: path.resolve(rootDir, "../graph-editor/src/index.ts"),
-        },
-        {
           find: "@moritzbrantner/workflow-editor/core",
           replacement: path.resolve(rootDir, "src/core.ts"),
         },

@@ -11,6 +11,12 @@
   `createWorkflowGraphRuntime`, `applyWorkflowGraphOperation`,
   `WorkflowGraphOperation`, `WorkflowGraphRuntimeState`, and
   `WorkflowGraphWorkbenchController`.
+- Added `WorkflowWorkbenchController.graph`, a compatibility controller assignable to npm
+  `GraphWorkbenchController`.
+- Rebuilt `WorkflowWorkbench` generic runtime, history, operation dispatch, command parsing,
+  and canvas behavior on npm `@moritzbrantner/graph-editor` primitives.
+- Kept workflow-specific chrome, panels, overlays, workflow clipboard behavior, nested workflow
+  actions, DAG validation, constructor expansion, and composed-node controls in workflow-editor.
 - Breaking migration: generic graph helpers should be imported from
   `@moritzbrantner/graph-editor`; workflow-editor keeps wrappers only where workflow
   semantics are enforced.
