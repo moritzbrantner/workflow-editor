@@ -23,7 +23,6 @@ jobs:
       install_command: bun install --frozen-lockfile
       build_command: bun run build
       benchmark_command: bun run bench
-      upload_artifacts_on: always
       artifact_paths: benchmark-results
       timeout_minutes: 30
     secrets:
