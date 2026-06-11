@@ -3,13 +3,13 @@ import { getWorkflowNodePortCenterOffset, getWorkflowNodeSize } from "./react/wo
 import {
   connectWorkflowEditorNodes,
   formatWorkflowEditorObjectConstructorExpression,
-  toUiWorkflowBuilderNodes,
   validateWorkflowEditorConnection,
   type WorkflowEditorDocument,
   type WorkflowEditorNode,
   type WorkflowEditorPortType,
   type WorkflowEditorTypeDefinition,
 } from "./core";
+import { toUiWorkflowBuilderNodes } from "./react/workflow-builder-adapters";
 import {
   getWorkflowEditorMinimizedNodeWidth,
   workflowEditorMinimizedNodeHeight,

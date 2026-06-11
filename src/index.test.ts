@@ -11,6 +11,7 @@ import {
   encodeWorkflowEditorSharePayload,
   layoutWorkflowEditorDocument,
   normalizeWorkflowEditorDocument,
+  toUiWorkflowBuilderNodes,
 } from "@moritzbrantner/workflow-editor";
 
 describe("@moritzbrantner/workflow-editor root exports", () => {
@@ -23,6 +24,7 @@ describe("@moritzbrantner/workflow-editor root exports", () => {
     expect(typeof createWorkflowEditorHistory).toBe("function");
     expect(typeof createWorkflowEditorLibrary).toBe("function");
     expect(typeof encodeWorkflowEditorSharePayload).toBe("function");
+    expect(typeof toUiWorkflowBuilderNodes).toBe("function");
   });
 
   test("keeps generic graph exports in the graph-editor package", () => {

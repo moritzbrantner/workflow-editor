@@ -1,6 +1,7 @@
-import type { toUiWorkflowBuilderNodes } from "./core";
-
-type UiWorkflowEditorNode = ReturnType<typeof toUiWorkflowBuilderNodes>[number];
+type WorkflowEditorMinimizedNodeInput = {
+  kind?: string;
+  label: string;
+};
 
 export const workflowEditorMinimizedNodeHeight = 36;
 
@@ -9,7 +10,7 @@ const workflowEditorMinimizedPrimitiveNodeWidth = 224;
 const workflowEditorMinimizedNodeChromeWidth = 112;
 const workflowEditorMinimizedNodeAverageCharacterWidth = 7.5;
 
-export function getWorkflowEditorMinimizedNodeWidth(node: UiWorkflowEditorNode) {
+export function getWorkflowEditorMinimizedNodeWidth(node: WorkflowEditorMinimizedNodeInput) {
   const labelWidth =
     workflowEditorMinimizedNodeChromeWidth +
     Math.ceil([...node.label].length * workflowEditorMinimizedNodeAverageCharacterWidth);

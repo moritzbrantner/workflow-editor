@@ -21,15 +21,15 @@ sharing, versions, settings, workflow panels, controls, and editor shell chrome.
 
 - `@moritzbrantner/graph-editor` owns the generic graph model, document validation,
   graph indexes, mutation primitives, layout, runtime operations, commands, and canvas.
-- `@moritzbrantner/workflow-editor` specializes those primitives for executable
-  directed acyclic workflows with TypeScript-like port assignability, workflow
+- `@moritzbrantner/workflow-editor` specializes those primitives for execution-ready
+  directed acyclic workflow documents with TypeScript-like port assignability, workflow
   constructor/decomposition behavior, workflow clipboard semantics, built-in templates,
   composed nodes, nested workflow references, persistence, sharing, history, settings,
   and workflow-specific panels/controls/editor shell.
 - `WorkflowWorkbench` does not delegate to npm `GraphWorkbench`; it uses graph-editor
-  runtime, operations, commands, and `GraphCanvas` primitives while keeping workflow-specific
-  chrome, overlays, DAG validation, constructor expansion, composed nodes, and nested
-  workflow behavior in workflow-editor.
+  runtime, operations, commands, and `GraphCanvas` primitives while workflow-editor keeps
+  workflow-specific chrome, overlays, DAG validation, constructor expansion, composed nodes,
+  and nested workflow behavior.
 
 Import generic graph extension points from graph-editor directly:
 
@@ -64,7 +64,10 @@ import type { GraphEditorOperation } from "@moritzbrantner/graph-editor/operatio
 - `updateWorkflowEditorNodeWorkflowReference(...)`,
   `getWorkflowEditorReferencedDocumentIds(...)`, and
   `getWorkflowEditorReferenceDiagnostics(...)` for reference-based nested workflow support.
-- `validateWorkflowEditorConnection(...)`, `detectWorkflowEditorCycles(...)`, `topologicallySortWorkflowEditorNodes(...)`, and UI adapter helpers.
+- `validateWorkflowEditorConnection(...)`, `detectWorkflowEditorCycles(...)`, and `topologicallySortWorkflowEditorNodes(...)` for headless graph checks.
+- `toUiWorkflowBuilderNodes(...)`, `fromUiWorkflowBuilderNodes(...)`,
+  `toUiWorkflowBuilderEdges(...)`, `fromUiWorkflowBuilderEdges(...)`, and
+  `toUiWorkflowBuilderViewport(...)` for React/workbench UI adapters.
 - `validateWorkflowEditorDocument(...)`, `assertWorkflowEditorDocument(...)`, and
   `WorkflowEditorDocumentValidationError` for strict document validation diagnostics.
 - `createWorkflowEditorLibrary(...)`, `createLocalStorageWorkflowEditorStorage(...)`,
@@ -210,6 +213,10 @@ For smaller changes, use slots on the existing components:
 ## Notes
 
 - The package also exposes `@moritzbrantner/workflow-editor/core` and `@moritzbrantner/workflow-editor/react` subpaths.
+- UI adapter helpers moved out of the headless core subpath. Use
+  `import { toUiWorkflowBuilderNodes } from "@moritzbrantner/workflow-editor/react"` or the
+  package root instead of
+  `import { toUiWorkflowBuilderNodes } from "@moritzbrantner/workflow-editor/core"`.
 - Persistence, history, share, and editor shell helpers are also available through
   `@moritzbrantner/workflow-editor/persistence`,
   `@moritzbrantner/workflow-editor/history`,

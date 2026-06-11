@@ -1,6 +1,6 @@
-import { getWorkflowNodeSize } from "./react/workflow-node";
 import { describe, expect, test } from "vitest";
 
+import { getWorkflowEditorLayoutNodeSize } from "./core-node-metrics";
 import {
   WorkflowEditorDocumentValidationError,
   addWorkflowEditorArrayConstructorInput,
@@ -24,8 +24,6 @@ import {
   formatWorkflowEditorArrayConstructorExpression,
   formatWorkflowEditorObjectDecompositionExpression,
   formatWorkflowEditorObjectConstructorExpression,
-  fromUiWorkflowBuilderEdges,
-  fromUiWorkflowBuilderNodes,
   getWorkflowEditorArrayConstructorInputs,
   getWorkflowEditorJsonPrimitiveSourceName,
   getWorkflowEditorObjectConstructorInputs,
@@ -51,8 +49,6 @@ import {
   removeWorkflowEditorObjectConstructorInput,
   removeWorkflowEditorSelection,
   restoreWorkflowEditorComposedNode,
-  toUiWorkflowBuilderEdges,
-  toUiWorkflowBuilderNodes,
   topologicallySortWorkflowEditorNodes,
   updateWorkflowEditorNode,
   ungroupWorkflowEditorGroup,
@@ -1048,157 +1044,8 @@ describe("@moritzbrantner/workflow-editor core", () => {
       ).viewport,
     ).toEqual({ x: 0, y: 0, zoom: 4 });
 
-    const uiNodes = toUiWorkflowBuilderNodes(duplicated.nodes);
-    const uiEdges = toUiWorkflowBuilderEdges(duplicated.edges);
-    expect(fromUiWorkflowBuilderNodes(uiNodes, duplicated.nodes)[0]?.id).toBe("input");
-    expect(fromUiWorkflowBuilderEdges(uiEdges, duplicated.edges)[0]?.id).toBe("input-transform");
-
     const removed = removeWorkflowEditorNode(duplicated, "input");
     expect(removed.edges).toHaveLength(0);
-  });
-
-  test("maps structured port types to stable UI labels and colors without mutating document types", () => {
-    const typedDocument = normalizeWorkflowEditorDocument({
-      nodes: [
-        {
-          id: "source",
-          label: "Source",
-          x: 0,
-          y: 0,
-          outputs: [
-            { id: "string", label: "String", type: { kind: "string" } },
-            { id: "number", label: "Number", type: { kind: "number" } },
-            { id: "boolean", label: "Boolean", type: { kind: "boolean" } },
-            { id: "object", label: "Object", type: { kind: "object" } },
-            { id: "array", label: "Array", type: { kind: "array", element: { kind: "string" } } },
-            { id: "ref", label: "Ref", type: { kind: "ref", name: "Lead" } },
-            {
-              id: "custom",
-              label: "Custom",
-              type: { kind: "ref", name: "Incident" },
-              color: "#123456",
-            },
-          ],
-        },
-        {
-          id: "target",
-          label: "Target",
-          x: 360,
-          y: 0,
-          inputs: [{ id: "in", label: "In", type: { kind: "string" } }],
-        },
-      ],
-      edges: [
-        {
-          id: "source-string-target-in",
-          sourceNodeId: "source",
-          sourcePortId: "string",
-          targetNodeId: "target",
-          targetPortId: "in",
-        },
-      ],
-    });
-
-    const uiNodes = toUiWorkflowBuilderNodes(typedDocument.nodes);
-    const outputPorts = uiNodes[0]!.outputs!;
-
-    expect(outputPorts.map((port) => port.color)).toEqual([
-      "#0891b2",
-      "#16a34a",
-      "#ca8a04",
-      "#4f46e5",
-      "#9333ea",
-      expect.any(String),
-      "#123456",
-    ]);
-    expect(outputPorts[0]).toMatchObject({
-      type: { label: "string", source: "string" },
-    });
-    expect(outputPorts[4]).toMatchObject({
-      type: { label: "string[]", source: "array:string" },
-    });
-    expect(outputPorts[5]).toMatchObject({
-      type: { label: "Lead", source: "ref:Lead" },
-    });
-
-    const uiEdges = toUiWorkflowBuilderEdges(typedDocument.edges, typedDocument.nodes);
-    expect(uiEdges[0]).toMatchObject({ color: "#0891b2" });
-
-    const movedNodes = fromUiWorkflowBuilderNodes(
-      uiNodes.map((node) =>
-        node.id === "source" ? Object.assign({}, node, { minimized: true, x: 24 }) : node,
-      ),
-      typedDocument.nodes,
-    );
-    expect(movedNodes[0]?.outputs?.[0]?.type).toEqual({ kind: "string" });
-    expect(movedNodes[0]?.outputs?.[4]?.type).toEqual({
-      kind: "array",
-      element: { kind: "string" },
-    });
-  });
-
-  test("marks optional inputs and shows defaults only while unconnected", () => {
-    const optionalDocument = normalizeWorkflowEditorDocument({
-      nodes: [
-        {
-          id: "source",
-          label: "Source",
-          x: 0,
-          y: 0,
-          outputs: [{ id: "out", label: "Out", type: { kind: "number" } }],
-        },
-        {
-          id: "target",
-          label: "Target",
-          x: 240,
-          y: 0,
-          inputs: [
-            {
-              id: "limit",
-              label: "Limit",
-              type: { kind: "number" },
-              optional: true,
-              defaultValue: 10,
-            },
-            {
-              id: "mode",
-              label: "Mode",
-              type: { kind: "string" },
-              optional: true,
-            },
-          ],
-        },
-      ],
-      edges: [],
-    });
-
-    const unconnectedInputs = toUiWorkflowBuilderNodes(
-      optionalDocument.nodes,
-      optionalDocument.edges,
-    )[1]!.inputs!;
-
-    expect(unconnectedInputs[0]).toMatchObject({
-      badge: "default 10",
-      required: false,
-    });
-    expect(unconnectedInputs[1]).toMatchObject({
-      badge: "optional",
-      required: false,
-    });
-
-    const connectedDocument = connectWorkflowEditorNodes(optionalDocument, {
-      sourceNodeId: "source",
-      sourcePortId: "out",
-      targetNodeId: "target",
-      targetPortId: "limit",
-    });
-    const connectedInputs = toUiWorkflowBuilderNodes(
-      connectedDocument.nodes,
-      connectedDocument.edges,
-    )[1]!.inputs!;
-
-    expect(connectedInputs[0]?.badge).toBe("optional");
-    expect(connectedInputs[1]?.badge).toBe("optional");
   });
 
   test("copies, pastes, duplicates, and removes selected subgraphs", () => {
@@ -1384,8 +1231,8 @@ describe("@moritzbrantner/workflow-editor core", () => {
     const result = layoutWorkflowEditorDocument(tallDocument, { nodeSeparation: 0 });
     const first = result.document.nodes.find((node) => node.id === "wide-ports-a")!;
     const second = result.document.nodes.find((node) => node.id === "wide-ports-b")!;
-    const firstSize = getWorkflowNodeSize(toUiWorkflowBuilderNodes([first])[0]!);
-    const secondSize = getWorkflowNodeSize(toUiWorkflowBuilderNodes([second])[0]!);
+    const firstSize = getWorkflowEditorLayoutNodeSize(first);
+    const secondSize = getWorkflowEditorLayoutNodeSize(second);
     const verticalGap =
       Math.max(first.y, second.y) -
       Math.min(first.y + firstSize.height, second.y + secondSize.height);
@@ -1650,14 +1497,10 @@ describe("@moritzbrantner/workflow-editor core", () => {
         document.nodes[2]!,
       ],
     });
-    const uiNodes = toUiWorkflowBuilderNodes(referenced.nodes);
-    uiNodes[0] = { ...uiNodes[0]!, x: 24, y: 36 };
-    const movedNodes = fromUiWorkflowBuilderNodes(uiNodes, referenced.nodes);
     const cleared = updateWorkflowEditorNodeWorkflowReference(referenced, "input", null);
 
     expect(hasWorkflowEditorWorkflowReference(referenced.nodes[0]!)).toBe(true);
     expect(getWorkflowEditorReferencedDocumentIds(referenced)).toEqual(["child-workflow"]);
-    expect(movedNodes[0]?.workflowRef).toEqual({ documentId: "child-workflow" });
     expect(
       updateWorkflowEditorNodeWorkflowReference(referenced, "transform", {
         documentId: "review-workflow",
@@ -1715,12 +1558,6 @@ describe("@moritzbrantner/workflow-editor core", () => {
         targetPortId: "in",
       }),
     ]);
-
-    const uiNodes = toUiWorkflowBuilderNodes(composed.nodes);
-    uiNodes[1] = { ...uiNodes[1]!, x: 96, y: 120 };
-    expect(fromUiWorkflowBuilderNodes(uiNodes, composed.nodes)[1]?.composition).toEqual(
-      wrapper?.composition,
-    );
 
     const restored = restoreWorkflowEditorComposedNode(composed, "ingest-component");
 

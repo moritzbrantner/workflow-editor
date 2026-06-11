@@ -6,11 +6,11 @@
 
 import { applyGraphEditorOperation } from '@moritzbrantner/graph-editor/runtime';
 import { CSSProperties } from 'react';
-import { GraphCanvasConnection } from '@moritzbrantner/graph-editor/react';
-import { GraphCanvasConnectionValidity } from '@moritzbrantner/graph-editor/react';
 import { GraphCanvasEdge } from '@moritzbrantner/graph-editor/react';
 import { GraphCanvasNodeData } from '@moritzbrantner/graph-editor/react';
 import { GraphCanvasViewport } from '@moritzbrantner/graph-editor/react';
+import { GraphEditorConnectionInput } from '@moritzbrantner/graph-editor/core';
+import { GraphEditorConnectionValidity } from '@moritzbrantner/graph-editor/core';
 import { GraphEditorDocument } from '@moritzbrantner/graph-editor/core';
 import { GraphEditorEdge } from '@moritzbrantner/graph-editor/core';
 import { GraphEditorGraphIndex } from '@moritzbrantner/graph-editor/core';
@@ -1212,10 +1212,10 @@ export type WorkflowEditorCompositionBoundary = {
 };
 
 // @public (undocumented)
-export type WorkflowEditorConnectionInput = GraphCanvasConnection;
+export type WorkflowEditorConnectionInput = GraphEditorConnectionInput;
 
 // @public (undocumented)
-export type WorkflowEditorConnectionInvalidReason = NonNullable<GraphCanvasConnectionValidity["reason"]> | "cycle" | "missing-node";
+export type WorkflowEditorConnectionInvalidReason = NonNullable<GraphEditorConnectionValidity["reason"]> | "cycle" | "missing-node";
 
 // @public (undocumented)
 export type WorkflowEditorConnectionValidity = {
@@ -2289,8 +2289,8 @@ export function wouldCreateWorkflowEditorCycle<TNodeData = Record<string, unknow
 // Warnings were encountered during analysis:
 //
 // dist/editor.d.ts:31:5 - (ae-forgotten-export) The symbol "ChromeController" needs to be exported by the entry point index.d.ts
-// dist/react.d.ts:117:9 - (ae-forgotten-export) The symbol "WorkflowWorkbenchPaletteCategoryGroup" needs to be exported by the entry point index.d.ts
-// dist/react.d.ts:122:9 - (ae-forgotten-export) The symbol "WorkflowWorkbenchOverlayPosition" needs to be exported by the entry point index.d.ts
+// dist/react.d.ts:123:9 - (ae-forgotten-export) The symbol "WorkflowWorkbenchPaletteCategoryGroup" needs to be exported by the entry point index.d.ts
+// dist/react.d.ts:128:9 - (ae-forgotten-export) The symbol "WorkflowWorkbenchOverlayPosition" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

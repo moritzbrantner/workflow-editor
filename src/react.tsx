@@ -66,6 +66,12 @@ import {
   type WorkflowBuilderConnectionValidity,
   type WorkflowBuilderSelection,
 } from "./react/workflow-builder";
+import {
+  fromUiWorkflowBuilderEdges,
+  fromUiWorkflowBuilderNodes,
+  toUiWorkflowBuilderEdges,
+  toUiWorkflowBuilderNodes,
+} from "./react/workflow-builder-adapters";
 import { WorkflowNode } from "./react/workflow-node";
 import { DefaultWorkflowInspector } from "./react/default-workflow-inspector";
 import {
@@ -95,8 +101,6 @@ import {
   duplicateWorkflowEditorNode,
   duplicateWorkflowEditorSelection,
   formatWorkflowEditorObjectConstructorExpression,
-  fromUiWorkflowBuilderEdges,
-  fromUiWorkflowBuilderNodes,
   getWorkflowEditorNodeGroupId,
   isWorkflowEditorObjectConstructorNode,
   normalizeWorkflowEditorDocument,
@@ -105,8 +109,6 @@ import {
   moveWorkflowEditorGroup,
   removeWorkflowEditorNode,
   removeWorkflowEditorSelection,
-  toUiWorkflowBuilderEdges,
-  toUiWorkflowBuilderNodes,
   ungroupWorkflowEditorGroup,
   updateWorkflowEditorGroup,
   updateWorkflowEditorNode,
@@ -169,6 +171,13 @@ export type {
   WorkflowWorkbenchPanelState,
 } from "./react/overlay-position";
 export { DefaultWorkflowInspector } from "./react/default-workflow-inspector";
+export {
+  fromUiWorkflowBuilderEdges,
+  fromUiWorkflowBuilderNodes,
+  toUiWorkflowBuilderEdges,
+  toUiWorkflowBuilderNodes,
+  toUiWorkflowBuilderViewport,
+} from "./react/workflow-builder-adapters";
 export {
   WorkflowEditorComposedNodesPanel,
   WorkflowEditorCurrentNodeTypesPanel,
@@ -325,6 +334,12 @@ export type WorkflowWorkbenchController<
     updateSelectedNodeWorkflowReference: (documentId: string | null) => void;
   };
 };
+
+export type WorkflowGraphWorkbenchController<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+  TPortType = WorkflowEditorPortType,
+> = GraphWorkbenchController<TNodeData, TEdgeData, TPortType>;
 
 export type WorkflowWorkbenchChromeRenderer<
   TNodeData extends Record<string, unknown> = Record<string, unknown>,

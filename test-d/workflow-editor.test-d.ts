@@ -16,7 +16,9 @@ import {
   layoutWorkflowEditorDocument,
   normalizeWorkflowEditorDocument,
   parseWorkflowEditorDocumentFile,
+  toUiWorkflowBuilderNodes,
   type WorkflowEditorDocument,
+  type WorkflowEditorConnectionInput,
   type WorkflowEditorNodeTemplate,
   type WorkflowEditorPortType,
   type WorkflowGraphOperation,
@@ -33,6 +35,7 @@ import {
 } from "@moritzbrantner/workflow-editor/core";
 import {
   WorkflowWorkbenchCanvas,
+  fromUiWorkflowBuilderNodes,
   useWorkflowWorkbenchController,
   type WorkflowWorkbenchController,
   type WorkflowWorkbenchProps,
@@ -110,6 +113,18 @@ const connected = connectWorkflowEditorNodes(document, {
   targetPortId: "in",
 });
 expectType<WorkflowEditorDocument<NodeData, EdgeData>>(connected);
+expectAssignable<{
+  sourceNodeId: string;
+  sourcePortId: string;
+  targetNodeId: string;
+  targetPortId: string;
+}>({} as WorkflowEditorConnectionInput);
+expectType<ReturnType<typeof toUiWorkflowBuilderNodes<NodeData>>>(
+  toUiWorkflowBuilderNodes(document.nodes),
+);
+expectType<WorkflowEditorDocument<NodeData, EdgeData>["nodes"]>(
+  fromUiWorkflowBuilderNodes(toUiWorkflowBuilderNodes(document.nodes), document.nodes),
+);
 
 const template: WorkflowEditorNodeTemplate<NodeData> = {
   id: "template",

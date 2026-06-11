@@ -1,17 +1,12 @@
 import { layoutGraphEditorDocument } from "@moritzbrantner/graph-editor/layout";
 
-import { getWorkflowNodeSize } from "./react/workflow-node";
 import {
   normalizeWorkflowEditorDocument,
-  toUiWorkflowBuilderNodes,
   type WorkflowEditorDocument,
   type WorkflowEditorNode,
   type WorkflowEditorPortType,
 } from "./core";
-import {
-  getWorkflowEditorMinimizedNodeWidth,
-  workflowEditorMinimizedNodeHeight,
-} from "./core-rendered-node-size";
+import { getWorkflowEditorLayoutNodeSize } from "./core-node-metrics";
 
 export type WorkflowEditorLayoutDirection = "right" | "down";
 
@@ -79,19 +74,4 @@ function resolveWorkflowEditorLayoutDimension<TNodeData = Record<string, unknown
   return typeof value === "function"
     ? value(node)
     : (value ?? getWorkflowEditorLayoutNodeSize(node)[dimension]);
-}
-
-function getWorkflowEditorLayoutNodeSize<TNodeData = Record<string, unknown>>(
-  node: WorkflowEditorNode<TNodeData>,
-) {
-  const uiNode = toUiWorkflowBuilderNodes([node])[0]!;
-
-  if (node.minimized === true && node.variant !== "compact") {
-    return {
-      width: getWorkflowEditorMinimizedNodeWidth(uiNode),
-      height: workflowEditorMinimizedNodeHeight,
-    };
-  }
-
-  return getWorkflowNodeSize(uiNode);
 }

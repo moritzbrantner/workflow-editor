@@ -26,8 +26,6 @@ export {
   formatWorkflowEditorArrayConstructorExpression,
   formatWorkflowEditorObjectDecompositionExpression,
   formatWorkflowEditorObjectConstructorExpression,
-  fromUiWorkflowBuilderEdges,
-  fromUiWorkflowBuilderNodes,
   getWorkflowEditorArrayConstructorInputs,
   getWorkflowEditorGroupBounds,
   getWorkflowEditorJsonPrimitiveSourceName,
@@ -60,9 +58,6 @@ export {
   removeWorkflowEditorObjectConstructorInputFromNode,
   removeWorkflowEditorSelection,
   restoreWorkflowEditorComposedNode,
-  toUiWorkflowBuilderEdges,
-  toUiWorkflowBuilderNodes,
-  toUiWorkflowBuilderViewport,
   topologicallySortWorkflowEditorNodes,
   updateWorkflowEditorNode,
   ungroupWorkflowEditorGroup,
@@ -134,7 +129,6 @@ export {
   type WorkflowEditorWorkflowReference,
   type WorkflowGraphOperation,
   type WorkflowGraphRuntimeState,
-  type WorkflowGraphWorkbenchController,
   WorkflowEditorDocumentValidationError,
 } from "./core";
 export {
@@ -151,6 +145,11 @@ export {
   WorkflowWorkbenchSelectionOverlay,
   WorkflowWorkbenchToolbar,
   defaultWorkflowWorkbenchHotkeys,
+  fromUiWorkflowBuilderEdges,
+  fromUiWorkflowBuilderNodes,
+  toUiWorkflowBuilderEdges,
+  toUiWorkflowBuilderNodes,
+  toUiWorkflowBuilderViewport,
   useWorkflowWorkbenchController,
   type WorkflowEditorPoint,
   type WorkflowWorkbenchChrome,
@@ -164,6 +163,7 @@ export {
   type WorkflowWorkbenchPaletteItem,
   type WorkflowWorkbenchProps,
   type WorkflowWorkbenchSelection,
+  type WorkflowGraphWorkbenchController,
 } from "./react";
 export {
   WorkflowEditor,

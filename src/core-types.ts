@@ -2,6 +2,8 @@ import type {
   GraphEditorDocument,
   GraphEditorEdge,
   GraphEditorGroup,
+  GraphEditorConnectionInput,
+  GraphEditorConnectionValidity,
   GraphEditorNode,
   GraphEditorNodeTemplate,
   GraphEditorPort,
@@ -9,10 +11,6 @@ import type {
   GraphEditorSelectionState,
   GraphEditorViewport,
 } from "@moritzbrantner/graph-editor/core";
-import type {
-  WorkflowBuilderConnection as UiWorkflowBuilderConnection,
-  WorkflowBuilderConnectionValidity as UiWorkflowBuilderConnectionValidity,
-} from "./react/workflow-builder";
 
 export type WorkflowEditorPortType =
   | { kind: "any" }
@@ -206,10 +204,10 @@ export type WorkflowEditorDocumentNormalizationOptions = WorkflowEditorDocumentV
   mode?: WorkflowEditorDocumentNormalizationMode;
 };
 
-export type WorkflowEditorConnectionInput = UiWorkflowBuilderConnection;
+export type WorkflowEditorConnectionInput = GraphEditorConnectionInput;
 
 export type WorkflowEditorConnectionInvalidReason =
-  | NonNullable<UiWorkflowBuilderConnectionValidity["reason"]>
+  | NonNullable<GraphEditorConnectionValidity["reason"]>
   | "cycle"
   | "missing-node";
 
