@@ -6,9 +6,14 @@ import {
   WorkflowEditor,
   WorkflowEditorAppSettingsPanel,
   WorkflowEditorBuiltInSettingsPanel,
+  WorkflowEditorDocumentPath,
   WorkflowEditorDocumentMenu,
+  WorkflowEditorHistoryControls,
+  WorkflowEditorImportExportControls,
   WorkflowEditorNodeTemplatesPanel,
+  WorkflowEditorSaveStateBadge,
   WorkflowEditorTypesPanel,
+  WorkflowEditorVersionControls,
   createWorkflowEditorEntry,
   createWorkflowEditorLibrary,
   defaultWorkflowEditorBuiltInSettings,
@@ -311,6 +316,222 @@ describe("@moritzbrantner/workflow-editor editor shell", () => {
     await waitFor(() => expect(screen.getByTestId("external-document-menu")).not.toBeNull());
     expect(screen.getByRole("button", { name: "New" })).not.toBeNull();
     expect(screen.queryByText("Path")).toBeNull();
+  });
+
+  test("modular chrome reflects save state and history availability", async () => {
+    render(
+      <EditorControllerHarness>
+        {(controller) => (
+          <>
+            <WorkflowEditorSaveStateBadge controller={controller} />
+            <WorkflowEditorHistoryControls controller={controller} />
+            <button
+              type="button"
+              onClick={() =>
+                controller.actions.updateActiveDocument({
+                  ...controller.activeDocument,
+                  nodes: [
+                    ...controller.activeDocument.nodes,
+                    {
+                      id: "new-node",
+                      label: "New node",
+                      x: 720,
+                      y: 0,
+                    },
+                  ],
+                })
+              }
+            >
+              Mutate document
+            </button>
+            <pre data-testid="chrome-document-json">
+              {JSON.stringify(controller.activeDocument)}
+            </pre>
+          </>
+        )}
+      </EditorControllerHarness>,
+    );
+
+    await waitFor(() => expect(screen.getByTestId("save-state").textContent).toBe("Saved"));
+    expect(screen.getByRole("button", { name: "Undo" })).toHaveProperty("disabled", true);
+    expect(screen.getByRole("button", { name: "Redo" })).toHaveProperty("disabled", true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Mutate document" }));
+    await waitFor(() => expect(screen.getByTestId("save-state").textContent).toBe("Saved"));
+    expect(screen.getByRole("button", { name: "Undo" })).toHaveProperty("disabled", false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    await waitFor(() =>
+      expect(screen.getByTestId("chrome-document-json").textContent).not.toContain("new-node"),
+    );
+    expect(screen.getByRole("button", { name: "Redo" })).toHaveProperty("disabled", false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Redo" }));
+    await waitFor(() =>
+      expect(screen.getByTestId("chrome-document-json").textContent).toContain("new-node"),
+    );
+  });
+
+  test("modular version controls save select and restore snapshots", async () => {
+    const initialLibrary = createWorkflowEditorLibrary({
+      activeDocumentId: "parent",
+      documents: [
+        createWorkflowEditorEntry({
+          id: "parent",
+          name: "Parent",
+          document,
+        }),
+      ],
+    });
+
+    render(
+      <WorkflowEditor
+        initialLibrary={initialLibrary}
+        storage={{
+          loadLibrary: vi.fn(async () => null),
+          saveLibrary: vi.fn(async () => {}),
+        }}
+        chrome={{
+          documentControls: (controller) => (
+            <>
+              <WorkflowEditorVersionControls controller={controller} />
+              <button
+                type="button"
+                onClick={() =>
+                  controller.actions.updateActiveDocument({
+                    ...controller.activeDocument,
+                    nodes: [
+                      ...controller.activeDocument.nodes,
+                      {
+                        id: "after-version",
+                        label: "After version",
+                        x: 720,
+                        y: 0,
+                      },
+                    ],
+                  })
+                }
+              >
+                Mutate document
+              </button>
+              <pre data-testid="version-document-json">
+                {JSON.stringify(controller.activeDocument)}
+              </pre>
+            </>
+          ),
+          documentPath: "hidden",
+          palette: "hidden",
+          inspector: "hidden",
+          workbenchToolbar: "hidden",
+        }}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Save version" })).not.toBeNull(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save version" }));
+    await waitFor(() =>
+      expect(screen.getByRole("combobox", { name: "Saved versions" }).textContent).toContain(
+        "Parent",
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Mutate document" }));
+    await waitFor(() =>
+      expect(screen.getByTestId("version-document-json").textContent).toContain("after-version"),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Restore version" }));
+    await waitFor(() =>
+      expect(screen.getByTestId("version-document-json").textContent).not.toContain(
+        "after-version",
+      ),
+    );
+  });
+
+  test("modular import export controls trigger file actions", async () => {
+    const handleExportDocument = vi.fn();
+    const handleImportDocumentFromFile = vi.fn(async () => {});
+
+    render(
+      <WorkflowEditorImportExportControls
+        controller={
+          {
+            activeEntry: {
+              id: "parent",
+              name: "Parent",
+            },
+            readOnly: false,
+            actions: {
+              exportDocument: handleExportDocument,
+              importDocumentFromFile: handleImportDocumentFromFile,
+            },
+          } as unknown as Parameters<typeof WorkflowEditorImportExportControls>[0]["controller"]
+        }
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Export JSON" })).toHaveProperty("disabled", false);
+    fireEvent.click(screen.getByRole("button", { name: "Export JSON" }));
+    expect(handleExportDocument).toHaveBeenCalledTimes(1);
+
+    const importedFile = new File(
+      [JSON.stringify({ format: "@moritzbrantner/workflow-editor/document" })],
+      "imported.json",
+      { type: "application/json" },
+    );
+
+    fireEvent.change(screen.getByLabelText("Import workflow JSON"), {
+      target: { files: [importedFile] },
+    });
+    expect(handleImportDocumentFromFile).toHaveBeenCalledWith(importedFile);
+  });
+
+  test("modular document path renders current missing and selectable entries", () => {
+    const handleSelectDocumentPathItem = vi.fn();
+
+    render(
+      <WorkflowEditorDocumentPath
+        controller={
+          {
+            documentPathEntries: [
+              {
+                documentId: "parent",
+                entry: {
+                  id: "parent",
+                  name: "Parent",
+                },
+              },
+              {
+                documentId: "missing",
+                entry: null,
+              },
+              {
+                documentId: "child",
+                entry: {
+                  id: "child",
+                  name: "Child",
+                },
+              },
+            ],
+            actions: {
+              selectDocumentPathItem: handleSelectDocumentPathItem,
+            },
+          } as unknown as Parameters<typeof WorkflowEditorDocumentPath>[0]["controller"]
+        }
+      />,
+    );
+
+    expect(screen.getByText("Path")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Parent" })).toHaveProperty("disabled", false);
+    expect(screen.getByRole("button", { name: "Missing: missing" })).toHaveProperty(
+      "disabled",
+      true,
+    );
+    expect(screen.getByRole("button", { name: "Child" })).toHaveProperty("disabled", true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Parent" }));
+    expect(handleSelectDocumentPathItem).toHaveBeenCalledWith(0);
   });
 
   test("resolves settings while keeping scalar props compatible", () => {

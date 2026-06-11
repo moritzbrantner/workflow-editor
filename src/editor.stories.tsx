@@ -8,16 +8,20 @@ import {
   WorkflowEditorOverviewPanel,
   WorkflowEditorSettingsPanel,
   WorkflowEditorTypesPanel,
+  useWorkflowEditorController,
+  defaultWorkflowEditorBuiltInSettings,
+  type WorkflowEditorSettings,
+} from "@moritzbrantner/workflow-editor/editor";
+import {
+  createWorkflowEditorLibrary,
+  type WorkflowEditorLibrary,
+  type WorkflowEditorStorageAdapter,
+} from "@moritzbrantner/workflow-editor/persistence";
+import {
   WorkflowWorkbenchCanvas,
   WorkflowWorkbenchInspector,
   WorkflowWorkbenchPalette,
-  createWorkflowEditorLibrary,
-  useWorkflowEditorController,
-  defaultWorkflowEditorBuiltInSettings,
-  type WorkflowEditorLibrary,
-  type WorkflowEditorSettings,
-  type WorkflowEditorStorageAdapter,
-} from "@moritzbrantner/workflow-editor";
+} from "@moritzbrantner/workflow-editor/react";
 
 import {
   createStoryWorkflowLibrary,

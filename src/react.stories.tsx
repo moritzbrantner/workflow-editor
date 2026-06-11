@@ -2,15 +2,17 @@ import { useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
 import {
+  normalizeWorkflowEditorDocument,
+  type WorkflowEditorSelectionState,
+} from "@moritzbrantner/workflow-editor/core";
+import {
   WorkflowWorkbench,
   WorkflowWorkbenchCanvas,
   WorkflowWorkbenchInspector,
   WorkflowWorkbenchPalette,
-  normalizeWorkflowEditorDocument,
   useWorkflowWorkbenchController,
-  type WorkflowEditorSelectionState,
   type WorkflowWorkbenchProps,
-} from "@moritzbrantner/workflow-editor";
+} from "@moritzbrantner/workflow-editor/react";
 
 import {
   emptyStoryWorkflowDocument,

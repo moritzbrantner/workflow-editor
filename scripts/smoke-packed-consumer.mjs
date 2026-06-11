@@ -31,7 +31,9 @@ try {
           "check-types": "tsc --noEmit",
         },
         dependencies: {
+          "@tailwindcss/vite": "^4.3.0",
           "@vitejs/plugin-react": "latest",
+          "@moritzbrantner/graph-editor": "^0.1.0",
           "@moritzbrantner/workflow-editor": `file:${tarballPath}`,
           "@types/react": "^19.2.2",
           "@types/react-dom": "^19.2.2",
@@ -140,11 +142,12 @@ createRoot(document.getElementById("root")!).render(<App />);
   );
   await writeFile(
     path.join(consumerDir, "vite.config.ts"),
-    `import react from "@vitejs/plugin-react";
+    `import tailwindcss from "@tailwindcss/vite";
+import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
 });
 `,
   );

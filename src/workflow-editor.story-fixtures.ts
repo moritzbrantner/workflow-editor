@@ -1,13 +1,15 @@
 import {
-  createWorkflowEditorEntry,
-  createWorkflowEditorLibrary,
   normalizeWorkflowEditorDocument,
   type WorkflowEditorDocument,
-  type WorkflowEditorLibrary,
   type WorkflowEditorNodeTemplate,
   type WorkflowEditorPortType,
   type WorkflowEditorTypeDefinition,
-} from "@moritzbrantner/workflow-editor";
+} from "@moritzbrantner/workflow-editor/core";
+import {
+  createWorkflowEditorEntry,
+  createWorkflowEditorLibrary,
+  type WorkflowEditorLibrary,
+} from "@moritzbrantner/workflow-editor/persistence";
 
 export type StoryWorkflowNodeData = Record<string, unknown>;
 export type StoryWorkflowDocument = WorkflowEditorDocument<StoryWorkflowNodeData>;
