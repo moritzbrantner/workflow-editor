@@ -11,7 +11,7 @@ workspace/
   workflow-editor/
 ```
 
-Set `GRAPH_EDITOR_SOURCE=/absolute/path/to/graph-editor` when needed. Graph Editor can independently use `EDITOR_CORE_SOURCE` for its own upstream checkout.
+Set `GRAPH_EDITOR_SOURCE=/absolute/path/to/graph-editor` when needed.
 
 ```sh
 bun run source:prepare
@@ -20,9 +20,11 @@ bun run source:smoke
 bun run verify:source
 ```
 
-`source:prepare` installs frozen dependencies, asks the graph-editor checkout to prepare its own source dependencies when that capability is present, builds graph-editor, then materializes that build into `node_modules/@moritzbrantner/graph-editor`. This makes the chain progressive: Workflow Editor can consume Graph Editor source, and Graph Editor can in turn consume Editor Core source, without publishing either package first.
+`source:prepare` installs frozen dependencies, builds the selected graph-editor checkout, then materializes that build into `node_modules/@moritzbrantner/graph-editor`. By default Graph Editor keeps using its own registry dependency on editor-core, so choosing graph source does not force every transitive dependency into source mode.
 
-The active graph-editor Git SHA is recorded under `node_modules/.editor-source-deps/`. No local path is written into `package.json` or the lockfile. `source:smoke` proves the selected graph source is active and importable; `verify:source` additionally runs Workflow Editor against that revision and may expose API migrations that still need to be made.
+To opt into the next source edge as well, set `EDITOR_CORE_SOURCE=/absolute/path/to/editor-core`. When that variable is present and the graph-editor checkout exposes `source:prepare`, Workflow Editor asks Graph Editor to prepare that upstream source before building it. This makes the chain progressive rather than all-or-nothing: workflow→graph source works independently, while workflow→graph→editor-core source can be enabled when that combination is compatible.
+
+The active graph-editor Git SHA is recorded under `node_modules/.editor-source-deps/`. No local path is written into `package.json` or the lockfile. `source:smoke` proves the selected graph source is active and its headless core entrypoint is importable; `verify:source` additionally runs Workflow Editor against that revision and may expose API migrations that still need to be made.
 
 Return to the published dependency contract with:
 
