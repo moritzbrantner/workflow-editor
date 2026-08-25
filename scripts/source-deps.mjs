@@ -6,7 +6,9 @@ import { fileURLToPath } from "node:url";
 const rootDir = fileURLToPath(new URL("../", import.meta.url));
 const dependency = {
   packageName: "@moritzbrantner/graph-editor",
+  smokeSpecifier: "@moritzbrantner/graph-editor/core",
   sourceEnv: "GRAPH_EDITOR_SOURCE",
+  upstreamSourceEnv: "EDITOR_CORE_SOURCE",
   defaultSourceDir: path.resolve(rootDir, "../graph-editor"),
   acceptedSourceNames: ["@moritzbrantner/graph-editor"],
 };
@@ -34,7 +36,7 @@ async function prepare() {
   run("bun", ["install", "--frozen-lockfile"], rootDir);
   run("bun", ["install", "--frozen-lockfile"], sourceDir);
 
-  if (sourceManifest.scripts?.["source:prepare"]) {
+  if (process.env[dependency.upstreamSourceEnv] && sourceManifest.scripts?.["source:prepare"]) {
     run("bun", ["run", "source:prepare"], sourceDir);
   }
   if (!sourceManifest.scripts?.build) {
@@ -117,7 +119,7 @@ async function smoke() {
     );
   }
 
-  await import(dependency.packageName);
+  await import(dependency.smokeSpecifier);
   process.stdout.write(
     `source dependency smoke passed: ${dependency.packageName} @ ${state.revision.slice(0, 12)}\n`,
   );
