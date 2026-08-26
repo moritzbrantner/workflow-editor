@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { access, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, lstat, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -43,7 +43,7 @@ async function prepare() {
     fail(`${dependency.packageName} source checkout has no build script: ${sourceDir}`);
   }
   run("bun", ["run", "build"], sourceDir);
-  await writeSourceFacade(sourceManifest);
+  await linkSourcePackage();
 
   const revision = run("git", ["rev-parse", "HEAD"], sourceDir, true).trim();
   await mkdir(stateDir, { recursive: true });
@@ -66,7 +66,7 @@ async function prepare() {
   );
 }
 
-async function writeSourceFacade(sourceManifest) {
+async function linkSourcePackage() {
   const sourceDistDir = path.join(sourceDir, "dist");
   try {
     await access(sourceDistDir);
@@ -75,15 +75,8 @@ async function writeSourceFacade(sourceManifest) {
   }
 
   await rm(targetDir, { force: true, recursive: true });
-  await mkdir(targetDir, { recursive: true });
-  await writeFile(
-    path.join(targetDir, "package.json"),
-    `${JSON.stringify({ ...sourceManifest, name: dependency.packageName }, null, 2)}\n`,
-  );
-  await cp(sourceDistDir, path.join(targetDir, "dist"), {
-    force: true,
-    recursive: true,
-  });
+  await mkdir(path.dirname(targetDir), { recursive: true });
+  await symlink(sourceDir, targetDir, process.platform === "win32" ? "junction" : "dir");
 }
 
 async function restore() {
@@ -95,15 +88,32 @@ async function restore() {
 
 async function status() {
   const state = await readState();
-  if (!state) {
-    process.stdout.write(`registry dependency active: ${dependency.packageName}\n`);
+  if (state) {
+    const suffix = state.revision ? ` @ ${state.revision.slice(0, 12)}` : "";
+    process.stdout.write(
+      `source dependency active: ${dependency.packageName} -> ${state.sourceDir}${suffix}\n`,
+    );
     return;
   }
 
-  const suffix = state.revision ? ` @ ${state.revision.slice(0, 12)}` : "";
-  process.stdout.write(
-    `source dependency active: ${dependency.packageName} -> ${state.sourceDir}${suffix}\n`,
-  );
+  try {
+    const targetStat = await lstat(targetDir);
+    await access(path.join(targetDir, "package.json"));
+    if (targetStat.isSymbolicLink()) {
+      fail(
+        `untracked source link is active for ${dependency.packageName}; rerun source:prepare or source:restore`,
+      );
+    }
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      fail(
+        `dependency is missing: ${dependency.packageName}; run bun install or source:prepare before checking status`,
+      );
+    }
+    throw error;
+  }
+
+  process.stdout.write(`registry dependency active: ${dependency.packageName}\n`);
 }
 
 async function smoke() {
@@ -115,7 +125,7 @@ async function smoke() {
   const manifest = JSON.parse(await readFile(path.join(targetDir, "package.json"), "utf8"));
   if (manifest.name !== dependency.packageName) {
     fail(
-      `source facade has package name ${manifest.name ?? "unknown"}, expected ${dependency.packageName}`,
+      `source package has name ${manifest.name ?? "unknown"}, expected ${dependency.packageName}`,
     );
   }
 
