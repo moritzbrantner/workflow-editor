@@ -17,6 +17,10 @@ const modules = [
     absentExports: ["toUiWorkflowBuilderNodes"],
   },
   {
+    path: "../dist/compiler.js",
+    exports: ["compileWorkflowEditorDocument", "compiledWorkflowFormat"],
+  },
+  {
     path: "../dist/react.js",
     exports: ["WorkflowWorkbench", "toUiWorkflowBuilderNodes"],
   },
@@ -72,7 +76,7 @@ await Promise.all(
 failures.push(
   ...(
     await Promise.all(
-      ["../dist/core.js", "../dist/layout.js"].map((entrypoint) =>
+      ["../dist/core.js", "../dist/compiler.js", "../dist/layout.js"].map((entrypoint) =>
         findArchitectureBoundaryFailures(entrypoint),
       ),
     )
