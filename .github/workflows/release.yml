@@ -29,7 +29,7 @@ jobs:
         run: bun run verify
 
       - name: Create release PR or publish
-        uses: changesets/action@v1
+        uses: changesets/action@v2
         with:
           version: bunx changeset version
           publish: bunx changeset publish
