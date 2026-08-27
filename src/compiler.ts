@@ -18,7 +18,9 @@ export type CompiledWorkflowPort = {
   defaultValue?: WorkflowEditorPortDefaultValue;
 };
 
-export type CompiledWorkflowNode<TData extends Record<string, unknown> = Record<string, unknown>> = {
+export type CompiledWorkflowNode<
+  TData extends Record<string, unknown> = Record<string, unknown>,
+> = {
   id: string;
   label: string;
   kind: string;
@@ -32,7 +34,9 @@ export type CompiledWorkflowEdge = Pick<
   "id" | "sourceNodeId" | "sourcePortId" | "targetNodeId" | "targetPortId"
 >;
 
-export type CompiledWorkflow<TNodeData extends Record<string, unknown> = Record<string, unknown>> = {
+export type CompiledWorkflow<
+  TNodeData extends Record<string, unknown> = Record<string, unknown>,
+> = {
   format: typeof compiledWorkflowFormat;
   version: typeof compiledWorkflowVersion;
   nodes: CompiledWorkflowNode<TNodeData>[];
@@ -76,7 +80,9 @@ function compilePort(port: WorkflowEditorPort): CompiledWorkflowPort {
   };
 }
 
-function validateExecutableNode(node: WorkflowEditorNode): WorkflowEditorCompileDiagnostic[] {
+function validateExecutableNode(
+  node: WorkflowEditorNode,
+): WorkflowEditorCompileDiagnostic[] {
   const diagnostics: WorkflowEditorCompileDiagnostic[] = [];
 
   if (!node.kind?.trim()) {
@@ -110,7 +116,9 @@ function validateExecutableNode(node: WorkflowEditorNode): WorkflowEditorCompile
 }
 
 function topologicalOrder(document: WorkflowEditorDocument): string[] {
-  const indegree = new Map<string, number>(document.nodes.map((node) => [node.id, 0]));
+  const indegree = new Map<string, number>(
+    document.nodes.map((node) => [node.id, 0]),
+  );
   const outgoing = new Map<string, WorkflowEditorEdge[]>();
 
   for (const edge of document.edges) {
