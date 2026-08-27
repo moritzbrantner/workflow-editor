@@ -14,10 +14,10 @@ jobs:
       GRAPH_EDITOR_SOURCE: ${{ github.workspace }}/.source/graph-editor
     steps:
       - name: Check out workflow-editor
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Check out graph-editor source
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: moritzbrantner/graph-editor
           path: .source/graph-editor
