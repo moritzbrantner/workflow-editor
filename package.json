@@ -106,8 +106,13 @@
     "build": "tsup src/index.ts src/core.ts src/react.tsx src/editor.tsx src/history.ts src/layout.ts src/persistence.ts src/share.ts --format esm --dts --clean --out-dir dist",
     "changeset": "changeset",
     "dev": "vite --host 127.0.0.1 --port 5173 --config examples/workbench/vite.config.ts",
+    "dev:source": "bun run source:prepare && bun run dev",
     "example": "vite --host 127.0.0.1 --port 5173 --config examples/workbench/vite.config.ts",
     "example:build": "vite build --config examples/workbench/vite.config.ts",
+    "source:prepare": "node scripts/source-deps.mjs prepare",
+    "source:status": "node scripts/source-deps.mjs status",
+    "source:smoke": "node scripts/source-deps.mjs smoke",
+    "source:restore": "node scripts/source-deps.mjs restore",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "lint": "oxlint --format=github",
@@ -127,6 +132,9 @@
     "test:playwright": "playwright test",
     "storybook": "storybook dev -p 6006 -c src/.storybook",
     "storybook:build": "storybook build -c src/.storybook -o storybook-static",
-    "verify": "bun run format:check && bun run lint && bun run check-types && bun run check-types:tests && bun run test && bun run coverage:check && bun run test:playwright && bun run storybook:build && bun run example:build && bun run build && bun run api:check && bun run types:public && bun run smoke:package && bun run smoke:packed-consumer && bun run pack:check"
+    "verify:checks": "bun run format:check && bun run lint && bun run check-types && bun run check-types:tests && bun run test && bun run coverage:check && bun run test:playwright && bun run storybook:build && bun run example:build && bun run build && bun run api:check && bun run types:public && bun run smoke:package && bun run smoke:packed-consumer && bun run pack:check",
+    "verify:source": "bun run source:prepare && bun run source:smoke && bun run format:check && bun run lint && bun run check-types && bun run check-types:tests && bun run test && bun run example:build && bun run build && bun run api:check && bun run types:public && bun run smoke:package",
+    "verify:registry": "bun run source:restore && bun run verify:checks",
+    "verify": "bun run verify:registry"
   }
 }
