@@ -71,7 +71,7 @@
     "@changesets/changelog-github": "^0.6.0",
     "@changesets/cli": "^2.29.7",
     "@microsoft/api-extractor": "^7.58.7",
-    "@playwright/test": "^1.60.0",
+    "@playwright/test": "^1.62.1",
     "@storybook/addon-docs": "10.4.1",
     "@storybook/react-vite": "10.4.1",
     "@tailwindcss/vite": "^4.3.0",
