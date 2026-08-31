@@ -34,6 +34,7 @@ try {
           "@tailwindcss/vite": "^4.3.0",
           "@vitejs/plugin-react": "latest",
           "@moritzbrantner/graph-editor": "^0.1.0",
+          "@moritzbrantner/ui": "^0.8.0",
           "@moritzbrantner/workflow-editor": `file:${tarballPath}`,
           "@types/react": "^19.2.2",
           "@types/react-dom": "^19.2.2",
