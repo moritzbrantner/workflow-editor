@@ -9,6 +9,7 @@
     "paths": {
       "@moritzbrantner/workflow-editor": ["./src/index.ts"],
       "@moritzbrantner/workflow-editor/core": ["./src/core.ts"],
+      "@moritzbrantner/workflow-editor/compiler": ["./src/compiler.ts"],
       "@moritzbrantner/workflow-editor/editor": ["./src/editor.tsx"],
       "@moritzbrantner/workflow-editor/history": ["./src/history.ts"],
       "@moritzbrantner/workflow-editor/layout": ["./src/layout.ts"],

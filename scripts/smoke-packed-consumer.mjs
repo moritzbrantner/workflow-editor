@@ -34,6 +34,7 @@ try {
           "@tailwindcss/vite": "^4.3.0",
           "@vitejs/plugin-react": "latest",
           "@moritzbrantner/graph-editor": "^0.1.0",
+          "@moritzbrantner/ui": "^0.8.0",
           "@moritzbrantner/workflow-editor": `file:${tarballPath}`,
           "@types/react": "^19.2.2",
           "@types/react-dom": "^19.2.2",
@@ -94,6 +95,7 @@ import {
   type WorkflowGraphRuntimeState,
 } from "@moritzbrantner/workflow-editor";
 import { createGraphEditorRuntime } from "@moritzbrantner/graph-editor/runtime";
+import { compileWorkflowEditorDocument } from "@moritzbrantner/workflow-editor/compiler";
 import { validateWorkflowEditorDocument } from "@moritzbrantner/workflow-editor/core";
 import { WorkflowWorkbenchToolbar } from "@moritzbrantner/workflow-editor/react";
 import { WorkflowEditorDocumentMenu } from "@moritzbrantner/workflow-editor/editor";
@@ -110,6 +112,7 @@ const workflowGraphRuntime: WorkflowGraphRuntimeState = createWorkflowGraphRunti
   initialDocument: workflowDocument,
 });
 
+compileWorkflowEditorDocument(workflowDocument);
 validateWorkflowEditorDocument(workflowDocument);
 layoutWorkflowEditorDocument(workflowDocument);
 layoutFromSubpath(workflowDocument);
