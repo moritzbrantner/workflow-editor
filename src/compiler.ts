@@ -1,4 +1,4 @@
-import { normalizeWorkflowEditorDocument } from "./core";
+import { normalizeWorkflowEditorDocument, WorkflowEditorDocumentValidationError } from "./core";
 import type {
   WorkflowEditorDocument,
   WorkflowEditorEdge,
@@ -69,6 +69,12 @@ export class WorkflowEditorCompileError extends Error {
   }
 }
 
+function compareIds(left: string, right: string) {
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
+}
+
 function compilePort(port: WorkflowEditorPort): CompiledWorkflowPort {
   return {
     id: port.id,
@@ -125,7 +131,7 @@ function topologicalOrder(document: WorkflowEditorDocument): string[] {
   const ready = document.nodes
     .filter((node) => indegree.get(node.id) === 0)
     .map((node) => node.id)
-    .sort();
+    .sort(compareIds);
   const order: string[] = [];
 
   while (ready.length > 0) {
@@ -135,15 +141,15 @@ function topologicalOrder(document: WorkflowEditorDocument): string[] {
 
     const edges = [...(outgoing.get(nodeId) ?? [])].sort((a, b) =>
       a.targetNodeId === b.targetNodeId
-        ? a.id.localeCompare(b.id)
-        : a.targetNodeId.localeCompare(b.targetNodeId),
+        ? compareIds(a.id, b.id)
+        : compareIds(a.targetNodeId, b.targetNodeId),
     );
     for (const edge of edges) {
       const next = (indegree.get(edge.targetNodeId) ?? 0) - 1;
       indegree.set(edge.targetNodeId, next);
       if (next === 0) {
         ready.push(edge.targetNodeId);
-        ready.sort();
+        ready.sort(compareIds);
       }
     }
   }
@@ -165,7 +171,25 @@ export function compileWorkflowEditorDocument<
   TNodeData extends Record<string, unknown> = Record<string, unknown>,
   TEdgeData extends Record<string, unknown> = Record<string, unknown>,
 >(document: WorkflowEditorDocument<TNodeData, TEdgeData>): CompiledWorkflow<TNodeData> {
-  const normalized = normalizeWorkflowEditorDocument(document, { mode: "strict" });
+  let normalized: WorkflowEditorDocument<TNodeData, TEdgeData>;
+  try {
+    normalized = normalizeWorkflowEditorDocument(document, { mode: "strict" });
+  } catch (error) {
+    if (
+      error instanceof WorkflowEditorDocumentValidationError &&
+      error.diagnostics.length > 0 &&
+      error.diagnostics.every((diagnostic) => diagnostic.code === "cycle")
+    ) {
+      throw new WorkflowEditorCompileError(
+        error.diagnostics.map((diagnostic) => ({
+          code: "invalid-dag",
+          message: "Workflow compilation requires a directed acyclic graph.",
+          path: diagnostic.path,
+        })),
+      );
+    }
+    throw error;
+  }
   const diagnostics = normalized.nodes.flatMap(validateExecutableNode);
   if (diagnostics.length > 0) {
     throw new WorkflowEditorCompileError(diagnostics);
@@ -197,7 +221,7 @@ export function compileWorkflowEditorDocument<
   });
 
   const edges = [...normalized.edges]
-    .sort((a, b) => a.id.localeCompare(b.id))
+    .sort((a, b) => compareIds(a.id, b.id))
     .map(({ id, sourceNodeId, sourcePortId, targetNodeId, targetPortId }) => ({
       id,
       sourceNodeId,
