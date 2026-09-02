@@ -1,0 +1,18 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["github>moritzbrantner/coding-agent-conventions"],
+  "packageRules": [
+    {
+      "groupName": "testing",
+      "matchPackageNames": ["@axe-core/*", "@playwright/*", "@testing-library/*", "@vitest/*", "jsdom", "vitest"]
+    },
+    {
+      "groupName": "build",
+      "matchPackageNames": ["@microsoft/api-extractor", "@storybook/*", "@tailwindcss/*", "storybook", "tailwindcss", "tsd", "tsup", "typescript", "vite"]
+    },
+    {
+      "groupName": "lint-format",
+      "matchPackageNames": ["oxfmt", "oxlint"]
+    }
+  ]
+}
