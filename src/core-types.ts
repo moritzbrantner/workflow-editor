@@ -37,6 +37,11 @@ export type WorkflowEditorPortDefaultValue =
   | WorkflowEditorPortDefaultValue[]
   | { [key: string]: WorkflowEditorPortDefaultValue };
 
+export type WorkflowEditorPortCardinality = {
+  min?: number;
+  max?: number | null;
+};
+
 export type WorkflowEditorObjectConstructorSchema = Extract<
   WorkflowEditorPortType,
   { kind: "object" }
@@ -125,6 +130,7 @@ export type WorkflowEditorPort = Omit<
   type: WorkflowEditorPortType;
   optional?: boolean;
   defaultValue?: WorkflowEditorPortDefaultValue;
+  cardinality?: WorkflowEditorPortCardinality;
 };
 
 export type WorkflowEditorWorkflowReference = {
@@ -209,7 +215,9 @@ export type WorkflowEditorConnectionInput = GraphEditorConnectionInput;
 export type WorkflowEditorConnectionInvalidReason =
   | NonNullable<GraphEditorConnectionValidity["reason"]>
   | "cycle"
-  | "missing-node";
+  | "missing-node"
+  | "source-cardinality"
+  | "target-cardinality";
 
 export type WorkflowEditorConnectionValidity = {
   valid: boolean;
