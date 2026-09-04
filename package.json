@@ -32,6 +32,10 @@
       "types": "./dist/compiler.d.ts",
       "import": "./dist/compiler.js"
     },
+    "./cardinality": {
+      "types": "./dist/cardinality.d.ts",
+      "import": "./dist/cardinality.js"
+    },
     "./react": {
       "types": "./dist/react.d.ts",
       "import": "./dist/react.js"
@@ -107,7 +111,7 @@
     }
   },
   "scripts": {
-    "build": "tsup src/index.ts src/core.ts src/compiler.ts src/react.tsx src/editor.tsx src/history.ts src/layout.ts src/persistence.ts src/share.ts --format esm --dts --clean --out-dir dist",
+    "build": "tsup src/index.ts src/core.ts src/compiler.ts src/cardinality.ts src/react.tsx src/editor.tsx src/history.ts src/layout.ts src/persistence.ts src/share.ts --format esm --dts --clean --out-dir dist",
     "changeset": "changeset",
     "dev": "vite --host 127.0.0.1 --port 5173 --config examples/workbench/vite.config.ts",
     "dev:source": "bun run source:prepare && bun run dev",

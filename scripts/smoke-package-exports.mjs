@@ -21,6 +21,14 @@ const modules = [
     exports: ["compileWorkflowEditorDocument", "compiledWorkflowFormat"],
   },
   {
+    path: "../dist/cardinality.js",
+    exports: [
+      "analyzeWorkflowEditorPortCardinality",
+      "connectWorkflowEditorNodesWithCardinality",
+      "validateWorkflowEditorConnectionWithCardinality",
+    ],
+  },
+  {
     path: "../dist/react.js",
     exports: ["WorkflowWorkbench", "toUiWorkflowBuilderNodes"],
   },
@@ -76,8 +84,8 @@ await Promise.all(
 failures.push(
   ...(
     await Promise.all(
-      ["../dist/core.js", "../dist/compiler.js", "../dist/layout.js"].map((entrypoint) =>
-        findArchitectureBoundaryFailures(entrypoint),
+      ["../dist/core.js", "../dist/compiler.js", "../dist/cardinality.js", "../dist/layout.js"].map(
+        (entrypoint) => findArchitectureBoundaryFailures(entrypoint),
       ),
     )
   ).flat(),
