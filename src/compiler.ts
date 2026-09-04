@@ -1,8 +1,5 @@
 import { analyzeWorkflowEditorPortCardinality } from "./cardinality";
-import type {
-  WorkflowEditorCardinalityPort,
-  WorkflowEditorPortCardinality,
-} from "./cardinality";
+import type { WorkflowEditorCardinalityPort, WorkflowEditorPortCardinality } from "./cardinality";
 import { normalizeWorkflowEditorDocument, WorkflowEditorDocumentValidationError } from "./core";
 import type {
   WorkflowEditorDocument,
