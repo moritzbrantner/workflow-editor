@@ -95,12 +95,14 @@ export function validateWorkflowEditorConnectionCardinality<
   const context = createWorkflowEditorDocumentContext(document);
   const sourceNode = context.nodeById.get(connection.sourceNodeId);
   const targetNode = context.nodeById.get(connection.targetNodeId);
-  const sourcePort = context.getOutputPort(connection.sourceNodeId, connection.sourcePortId) as
-    | WorkflowEditorCardinalityPort
-    | null;
-  const targetPort = context.getInputPort(connection.targetNodeId, connection.targetPortId) as
-    | WorkflowEditorCardinalityPort
-    | null;
+  const sourcePort = context.getOutputPort(
+    connection.sourceNodeId,
+    connection.sourcePortId,
+  ) as WorkflowEditorCardinalityPort | null;
+  const targetPort = context.getInputPort(
+    connection.targetNodeId,
+    connection.targetPortId,
+  ) as WorkflowEditorCardinalityPort | null;
 
   if (!sourceNode || !targetNode || !sourcePort || !targetPort) {
     return { valid: true };
@@ -145,39 +147,36 @@ export function validateWorkflowEditorConnectionWithCardinality<
 ): WorkflowEditorCardinalityConnectionValidity {
   const context = createWorkflowEditorDocumentContext(document);
   const targetNode = context.nodeById.get(connection.targetNodeId);
-  const targetPort = context.getInputPort(connection.targetNodeId, connection.targetPortId) as
-    | WorkflowEditorCardinalityPort
-    | null;
+  const targetPort = context.getInputPort(
+    connection.targetNodeId,
+    connection.targetPortId,
+  ) as WorkflowEditorCardinalityPort | null;
   const targetMax = targetPort
-    ? resolveMax(
-        targetPort.cardinality,
-        "input",
-        isExpandableConstructorNode(targetNode?.kind),
-      )
+    ? resolveMax(targetPort.cardinality, "input", isExpandableConstructorNode(targetNode?.kind))
     : 1;
   const allowOccupiedInputs =
     !!targetPort &&
     (isDynamicConstructorPort(targetPort) || targetMax === null || (targetMax ?? 1) > 1);
   const typeResolver = createWorkflowEditorTypeResolver(options.typeDefinitions);
 
-  const semanticValidity = validateGraphEditorConnection<TNodeData, TEdgeData, WorkflowEditorPortType>(
-    document,
-    connection,
-    {
-      allowCycles: false,
-      allowOccupiedInputs,
-      arePortsCompatible(graphSourcePort, graphTargetPort) {
-        const sourcePort = graphSourcePort as WorkflowEditorCardinalityPort;
-        const currentTargetPort = graphTargetPort as WorkflowEditorCardinalityPort;
-        const targetType = isDynamicConstructorPort(currentTargetPort)
-          ? ({ kind: "any" } as const)
-          : currentTargetPort.type;
-        return typeResolver.isAssignable(sourcePort.type, targetType)
-          ? true
-          : { valid: false, reason: "type-mismatch" };
-      },
+  const semanticValidity = validateGraphEditorConnection<
+    TNodeData,
+    TEdgeData,
+    WorkflowEditorPortType
+  >(document, connection, {
+    allowCycles: false,
+    allowOccupiedInputs,
+    arePortsCompatible(graphSourcePort, graphTargetPort) {
+      const sourcePort = graphSourcePort as WorkflowEditorCardinalityPort;
+      const currentTargetPort = graphTargetPort as WorkflowEditorCardinalityPort;
+      const targetType = isDynamicConstructorPort(currentTargetPort)
+        ? ({ kind: "any" } as const)
+        : currentTargetPort.type;
+      return typeResolver.isAssignable(sourcePort.type, targetType)
+        ? true
+        : { valid: false, reason: "type-mismatch" };
     },
-  ) as WorkflowEditorCardinalityConnectionValidity;
+  }) as WorkflowEditorCardinalityConnectionValidity;
 
   if (!semanticValidity.valid) {
     return semanticValidity;
@@ -327,5 +326,10 @@ function createCardinalityEdgeId<TNodeData, TEdgeData>(
 }
 
 function safeIdPart(value: string): string {
-  return value.trim().replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") || "port";
+  return (
+    value
+      .trim()
+      .replace(/[^a-zA-Z0-9_-]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "port"
+  );
 }
