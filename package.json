@@ -122,7 +122,7 @@
     "source:smoke": "node scripts/source-deps.mjs smoke",
     "source:restore": "node scripts/source-deps.mjs restore",
     "format": "oxfmt",
-    "format:check": "oxfmt --check",
+    "format:check": "oxfmt && git diff --exit-code",
     "lint": "oxlint --format=github",
     "prepack": "bun run build",
     "check-types": "tsc --noEmit",
