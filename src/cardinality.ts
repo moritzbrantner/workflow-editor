@@ -1,14 +1,16 @@
-import {
-  connectWorkflowEditorNodes,
-  createWorkflowEditorDocumentContext,
-  validateWorkflowEditorConnection,
-} from "./core";
+import { validateGraphEditorConnection } from "@moritzbrantner/graph-editor/core";
+
+import { addWorkflowEditorEdge, connectWorkflowEditorNodes } from "./core";
+import { createWorkflowEditorDocumentContext } from "./core-context";
+import { createWorkflowEditorTypeResolver } from "./core-type-resolver";
 import type {
   WorkflowEditorConnectionInput,
   WorkflowEditorConnectionValidity,
   WorkflowEditorDocument,
+  WorkflowEditorEdge,
   WorkflowEditorPort,
   WorkflowEditorPortCardinality,
+  WorkflowEditorPortType,
   WorkflowEditorTypeValidationOptions,
 } from "./core-types";
 
@@ -58,8 +60,12 @@ export function validateWorkflowEditorConnectionCardinality<
   const context = createWorkflowEditorDocumentContext(document);
   const sourceNode = context.nodeById.get(connection.sourceNodeId);
   const targetNode = context.nodeById.get(connection.targetNodeId);
-  const sourcePort = context.getOutputPort(connection.sourceNodeId, connection.sourcePortId);
-  const targetPort = context.getInputPort(connection.targetNodeId, connection.targetPortId);
+  const sourcePort = context.getOutputPort(connection.sourceNodeId, connection.sourcePortId) as
+    | WorkflowEditorPort
+    | null;
+  const targetPort = context.getInputPort(connection.targetNodeId, connection.targetPortId) as
+    | WorkflowEditorPort
+    | null;
 
   if (!sourceNode || !targetNode || !sourcePort || !targetPort) {
     return { valid: true };
@@ -102,7 +108,42 @@ export function validateWorkflowEditorConnectionWithCardinality<
   connection: WorkflowEditorConnectionInput,
   options: WorkflowEditorTypeValidationOptions = {},
 ): WorkflowEditorConnectionValidity {
-  const semanticValidity = validateWorkflowEditorConnection(document, connection, options);
+  const context = createWorkflowEditorDocumentContext(document);
+  const targetNode = context.nodeById.get(connection.targetNodeId);
+  const targetPort = context.getInputPort(connection.targetNodeId, connection.targetPortId) as
+    | WorkflowEditorPort
+    | null;
+  const targetMax = targetPort
+    ? resolveMax(
+        targetPort.cardinality,
+        "input",
+        isExpandableConstructorNode(targetNode?.kind),
+      )
+    : 1;
+  const allowOccupiedInputs =
+    !!targetPort &&
+    (isDynamicConstructorPort(targetPort) || targetMax === null || (targetMax ?? 1) > 1);
+  const typeResolver = createWorkflowEditorTypeResolver(options.typeDefinitions);
+
+  const semanticValidity = validateGraphEditorConnection<TNodeData, TEdgeData, WorkflowEditorPortType>(
+    document,
+    connection,
+    {
+      allowCycles: false,
+      allowOccupiedInputs,
+      arePortsCompatible(graphSourcePort, graphTargetPort) {
+        const sourcePort = graphSourcePort as WorkflowEditorPort;
+        const currentTargetPort = graphTargetPort as WorkflowEditorPort;
+        const targetType = isDynamicConstructorPort(currentTargetPort)
+          ? ({ kind: "any" } as const)
+          : currentTargetPort.type;
+        return typeResolver.isAssignable(sourcePort.type, targetType)
+          ? true
+          : { valid: false, reason: "type-mismatch" };
+      },
+    },
+  ) as WorkflowEditorConnectionValidity;
+
   if (!semanticValidity.valid) {
     return semanticValidity;
   }
@@ -118,7 +159,18 @@ export function connectWorkflowEditorNodesWithCardinality<
   options: WorkflowEditorTypeValidationOptions = {},
 ): WorkflowEditorDocument<TNodeData, TEdgeData> {
   const validity = validateWorkflowEditorConnectionWithCardinality(document, connection, options);
-  return validity.valid ? connectWorkflowEditorNodes(document, connection, options) : document;
+  if (!validity.valid) {
+    return document;
+  }
+
+  const context = createWorkflowEditorDocumentContext(document);
+  const targetNode = context.nodeById.get(connection.targetNodeId);
+  if (isExpandableConstructorNode(targetNode?.kind)) {
+    return connectWorkflowEditorNodes(document, connection, options);
+  }
+
+  const id = createCardinalityEdgeId(document, connection);
+  return addWorkflowEditorEdge(document, { id, ...connection } as WorkflowEditorEdge<TEdgeData>);
 }
 
 export function getWorkflowEditorPortConnectionCount<
@@ -215,4 +267,20 @@ function isDynamicConstructorPort(port: WorkflowEditorPort): boolean {
     port.metadata?.arrayConstructorRole === "add-item" ||
     port.metadata?.objectConstructorRole === "add-property"
   );
+}
+
+function createCardinalityEdgeId<TNodeData, TEdgeData>(
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>,
+  connection: WorkflowEditorConnectionInput,
+): string {
+  const used = new Set(document.edges.map((edge) => edge.id));
+  const base = `edge-${safeIdPart(connection.sourceNodeId)}-${safeIdPart(connection.sourcePortId)}-${safeIdPart(connection.targetNodeId)}-${safeIdPart(connection.targetPortId)}`;
+  if (!used.has(base)) return base;
+  let suffix = 2;
+  while (used.has(`${base}-${suffix}`)) suffix += 1;
+  return `${base}-${suffix}`;
+}
+
+function safeIdPart(value: string): string {
+  return value.trim().replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") || "port";
 }
