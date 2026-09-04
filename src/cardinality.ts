@@ -5,16 +5,40 @@ import { createWorkflowEditorDocumentContext } from "./core-context";
 import { createWorkflowEditorTypeResolver } from "./core-type-resolver";
 import type {
   WorkflowEditorConnectionInput,
-  WorkflowEditorConnectionValidity,
   WorkflowEditorDocument,
   WorkflowEditorEdge,
   WorkflowEditorPort,
-  WorkflowEditorPortCardinality,
   WorkflowEditorPortType,
   WorkflowEditorTypeValidationOptions,
 } from "./core-types";
 
 export type WorkflowEditorPortDirection = "input" | "output";
+
+export type WorkflowEditorPortCardinality = {
+  min?: number;
+  max?: number | null;
+};
+
+export type WorkflowEditorCardinalityPort = WorkflowEditorPort & {
+  cardinality?: WorkflowEditorPortCardinality;
+};
+
+export type WorkflowEditorCardinalityConnectionInvalidReason =
+  | "cycle"
+  | "duplicate"
+  | "input-occupied"
+  | "kind-mismatch"
+  | "missing-node"
+  | "missing-port"
+  | "self-connection"
+  | "type-mismatch"
+  | "source-cardinality"
+  | "target-cardinality";
+
+export type WorkflowEditorCardinalityConnectionValidity = {
+  valid: boolean;
+  reason?: WorkflowEditorCardinalityConnectionInvalidReason;
+};
 
 export type WorkflowEditorPortCardinalityDiagnostic = {
   code: "port-cardinality-min" | "port-cardinality-max";
@@ -37,13 +61,24 @@ export function analyzeWorkflowEditorPortCardinality<
 
   for (const node of document.nodes) {
     for (const port of node.inputs ?? []) {
-      if (isDynamicConstructorPort(port)) continue;
+      const cardinalityPort = port as WorkflowEditorCardinalityPort;
+      if (isDynamicConstructorPort(cardinalityPort)) {
+        continue;
+      }
       diagnostics.push(
-        ...diagnosePort(document, node.id, port, "input", isExpandableConstructorNode(node.kind)),
+        ...diagnosePort(
+          document,
+          node.id,
+          cardinalityPort,
+          "input",
+          isExpandableConstructorNode(node.kind),
+        ),
       );
     }
     for (const port of node.outputs ?? []) {
-      diagnostics.push(...diagnosePort(document, node.id, port, "output", false));
+      diagnostics.push(
+        ...diagnosePort(document, node.id, port as WorkflowEditorCardinalityPort, "output", false),
+      );
     }
   }
 
@@ -56,15 +91,15 @@ export function validateWorkflowEditorConnectionCardinality<
 >(
   document: WorkflowEditorDocument<TNodeData, TEdgeData>,
   connection: WorkflowEditorConnectionInput,
-): WorkflowEditorConnectionValidity {
+): WorkflowEditorCardinalityConnectionValidity {
   const context = createWorkflowEditorDocumentContext(document);
   const sourceNode = context.nodeById.get(connection.sourceNodeId);
   const targetNode = context.nodeById.get(connection.targetNodeId);
   const sourcePort = context.getOutputPort(connection.sourceNodeId, connection.sourcePortId) as
-    | WorkflowEditorPort
+    | WorkflowEditorCardinalityPort
     | null;
   const targetPort = context.getInputPort(connection.targetNodeId, connection.targetPortId) as
-    | WorkflowEditorPort
+    | WorkflowEditorCardinalityPort
     | null;
 
   if (!sourceNode || !targetNode || !sourcePort || !targetPort) {
@@ -107,11 +142,11 @@ export function validateWorkflowEditorConnectionWithCardinality<
   document: WorkflowEditorDocument<TNodeData, TEdgeData>,
   connection: WorkflowEditorConnectionInput,
   options: WorkflowEditorTypeValidationOptions = {},
-): WorkflowEditorConnectionValidity {
+): WorkflowEditorCardinalityConnectionValidity {
   const context = createWorkflowEditorDocumentContext(document);
   const targetNode = context.nodeById.get(connection.targetNodeId);
   const targetPort = context.getInputPort(connection.targetNodeId, connection.targetPortId) as
-    | WorkflowEditorPort
+    | WorkflowEditorCardinalityPort
     | null;
   const targetMax = targetPort
     ? resolveMax(
@@ -132,8 +167,8 @@ export function validateWorkflowEditorConnectionWithCardinality<
       allowCycles: false,
       allowOccupiedInputs,
       arePortsCompatible(graphSourcePort, graphTargetPort) {
-        const sourcePort = graphSourcePort as WorkflowEditorPort;
-        const currentTargetPort = graphTargetPort as WorkflowEditorPort;
+        const sourcePort = graphSourcePort as WorkflowEditorCardinalityPort;
+        const currentTargetPort = graphTargetPort as WorkflowEditorCardinalityPort;
         const targetType = isDynamicConstructorPort(currentTargetPort)
           ? ({ kind: "any" } as const)
           : currentTargetPort.type;
@@ -142,7 +177,7 @@ export function validateWorkflowEditorConnectionWithCardinality<
           : { valid: false, reason: "type-mismatch" };
       },
     },
-  ) as WorkflowEditorConnectionValidity;
+  ) as WorkflowEditorCardinalityConnectionValidity;
 
   if (!semanticValidity.valid) {
     return semanticValidity;
@@ -188,7 +223,7 @@ export function getWorkflowEditorPortConnectionCount<
 function diagnosePort<TNodeData, TEdgeData>(
   document: WorkflowEditorDocument<TNodeData, TEdgeData>,
   nodeId: string,
-  port: WorkflowEditorPort,
+  port: WorkflowEditorCardinalityPort,
   direction: WorkflowEditorPortDirection,
   expandableInput: boolean,
 ): WorkflowEditorPortCardinalityDiagnostic[] {
@@ -247,10 +282,16 @@ function resolveMax(
   direction: WorkflowEditorPortDirection,
   expandableInput: boolean,
 ): number | null {
-  if (cardinality?.max === null) return null;
+  if (cardinality?.max === null) {
+    return null;
+  }
   const explicit = normalizeBound(cardinality?.max);
-  if (explicit !== undefined) return explicit;
-  if (direction === "output" || expandableInput) return null;
+  if (explicit !== undefined) {
+    return explicit;
+  }
+  if (direction === "output" || expandableInput) {
+    return null;
+  }
   return 1;
 }
 
@@ -262,7 +303,7 @@ function isExpandableConstructorNode(kind: string | undefined): boolean {
   return kind === "json.array" || kind === "json.object";
 }
 
-function isDynamicConstructorPort(port: WorkflowEditorPort): boolean {
+function isDynamicConstructorPort(port: WorkflowEditorCardinalityPort): boolean {
   return (
     port.metadata?.arrayConstructorRole === "add-item" ||
     port.metadata?.objectConstructorRole === "add-property"
@@ -275,9 +316,13 @@ function createCardinalityEdgeId<TNodeData, TEdgeData>(
 ): string {
   const used = new Set(document.edges.map((edge) => edge.id));
   const base = `edge-${safeIdPart(connection.sourceNodeId)}-${safeIdPart(connection.sourcePortId)}-${safeIdPart(connection.targetNodeId)}-${safeIdPart(connection.targetPortId)}`;
-  if (!used.has(base)) return base;
+  if (!used.has(base)) {
+    return base;
+  }
   let suffix = 2;
-  while (used.has(`${base}-${suffix}`)) suffix += 1;
+  while (used.has(`${base}-${suffix}`)) {
+    suffix += 1;
+  }
   return `${base}-${suffix}`;
 }
 
