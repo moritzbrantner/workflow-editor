@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "profile": "repository-foundation-v1",
+  "tiers": {
+    "fast": ["format:check", "lint", "typecheck", "build", "test:unit"],
+    "full": [
+      "format:check",
+      "lint",
+      "typecheck",
+      "build",
+      "test:unit",
+      "test:e2e",
+      "package:check",
+      "benchmark:smoke"
+    ]
+  },
+  "requiredCapabilities": ["format:check", "lint", "typecheck", "build", "test:unit"],
+  "optionalCapabilities": ["test:e2e", "package:check", "benchmark:smoke"],
+  "capabilityCommands": {
+    "@moritzbrantner/workflow-editor": {
+      "test:e2e": ["bun", "run", "test:playwright"],
+      "package:check": [
+        "bash",
+        "-lc",
+        "bun run build && bun run smoke:package && bun run smoke:packed-consumer && bun run pack:check"
+      ],
+      "benchmark:smoke": ["bun", "run", "bench"]
+    }
+  }
+}
