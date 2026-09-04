@@ -1,3 +1,8 @@
+import { analyzeWorkflowEditorPortCardinality } from "./cardinality";
+import type {
+  WorkflowEditorCardinalityPort,
+  WorkflowEditorPortCardinality,
+} from "./cardinality";
 import { normalizeWorkflowEditorDocument, WorkflowEditorDocumentValidationError } from "./core";
 import type {
   WorkflowEditorDocument,
@@ -16,6 +21,7 @@ export type CompiledWorkflowPort = {
   type: WorkflowEditorPortType;
   optional?: boolean;
   defaultValue?: WorkflowEditorPortDefaultValue;
+  cardinality?: WorkflowEditorPortCardinality;
 };
 
 export type CompiledWorkflowNode<TData extends Record<string, unknown> = Record<string, unknown>> =
@@ -46,6 +52,7 @@ export type WorkflowEditorCompileDiagnosticCode =
   | "missing-node-kind"
   | "nested-workflow-not-supported"
   | "composition-not-supported"
+  | "port-cardinality"
   | "invalid-dag";
 
 export type WorkflowEditorCompileDiagnostic = {
@@ -53,6 +60,7 @@ export type WorkflowEditorCompileDiagnostic = {
   message: string;
   path: string;
   nodeId?: string;
+  portId?: string;
 };
 
 export class WorkflowEditorCompileError extends Error {
@@ -76,11 +84,13 @@ function compareIds(left: string, right: string) {
 }
 
 function compilePort(port: WorkflowEditorPort): CompiledWorkflowPort {
+  const cardinality = (port as WorkflowEditorCardinalityPort).cardinality;
   return {
     id: port.id,
     type: port.type,
     ...(port.optional === undefined ? {} : { optional: port.optional }),
     ...(port.defaultValue === undefined ? {} : { defaultValue: port.defaultValue }),
+    ...(cardinality === undefined ? {} : { cardinality }),
   };
 }
 
@@ -190,7 +200,19 @@ export function compileWorkflowEditorDocument<
     }
     throw error;
   }
-  const diagnostics = normalized.nodes.flatMap(validateExecutableNode);
+
+  const cardinalityDiagnostics: WorkflowEditorCompileDiagnostic[] =
+    analyzeWorkflowEditorPortCardinality(normalized).map((diagnostic) => ({
+      code: "port-cardinality",
+      message: diagnostic.message,
+      path: `nodes.${diagnostic.nodeId}.${diagnostic.direction === "input" ? "inputs" : "outputs"}.${diagnostic.portId}.cardinality`,
+      nodeId: diagnostic.nodeId,
+      portId: diagnostic.portId,
+    }));
+  const diagnostics = [
+    ...cardinalityDiagnostics,
+    ...normalized.nodes.flatMap(validateExecutableNode),
+  ];
   if (diagnostics.length > 0) {
     throw new WorkflowEditorCompileError(diagnostics);
   }
