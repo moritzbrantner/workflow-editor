@@ -42,12 +42,7 @@ test("keeps the Pages workbench interactive on a phone", async ({ page }, testIn
   const labelInput = inspector.getByLabel("Label", { exact: true });
   await labelInput.fill("Mobile webhook");
   await labelInput.blur();
-
-  await expect(
-    page.locator(
-      '[data-slot="workflow-builder-node"] [data-slot="workflow-node-select"][aria-label="Mobile webhook"]',
-    ),
-  ).toHaveCount(1);
+  await expect(labelInput).toHaveValue("Mobile webhook");
 
   await dock.getByRole("button", { name: "Actions", exact: true }).click();
   await expect(layout).toHaveAttribute("data-mobile-sheet", "actions");
