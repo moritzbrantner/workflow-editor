@@ -61,8 +61,7 @@
     border-radius: 0.75rem;
   }
 
-  [data-slot="workbench-layout"][data-mobile-workbench="true"]
-    > [data-slot="workbench-toolbar"] {
+  [data-slot="workbench-layout"][data-mobile-workbench="true"] > [data-slot="workbench-toolbar"] {
     display: none !important;
   }
 
