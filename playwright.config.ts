@@ -26,13 +26,22 @@ export default defineConfig({
     baseURL: "http://127.0.0.1:4174",
     trace: "on-first-retry",
   },
-  webServer: {
-    command: "node scripts/playwright-web-server.mjs",
-    cwd: rootDir,
-    url: "http://127.0.0.1:4174",
-    reuseExistingServer: !isCi,
-    timeout: 120_000,
-  },
+  webServer: [
+    {
+      command: "node scripts/playwright-web-server.mjs",
+      cwd: rootDir,
+      url: "http://127.0.0.1:4174",
+      reuseExistingServer: !isCi,
+      timeout: 120_000,
+    },
+    {
+      command: "node scripts/playwright-workbench-server.mjs",
+      cwd: rootDir,
+      url: "http://127.0.0.1:4175",
+      reuseExistingServer: !isCi,
+      timeout: 120_000,
+    },
+  ],
   projects: [
     {
       name: "chromium",
