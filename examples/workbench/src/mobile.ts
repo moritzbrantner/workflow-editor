@@ -86,9 +86,7 @@ function syncDock(layout: HTMLElement) {
     button.setAttribute("aria-pressed", String(button.dataset.mobileWorkbenchTool === sheet));
   }
 
-  const infoButton = layout.querySelector<HTMLButtonElement>(
-    '[data-mobile-workbench-tool="info"]',
-  );
+  const infoButton = layout.querySelector<HTMLButtonElement>('[data-mobile-workbench-tool="info"]');
   const infoToggle = findPanelToggle(layout, "info");
   if (infoButton) {
     infoButton.disabled = !infoToggle || infoToggle.disabled;
