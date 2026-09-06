@@ -2,3 +2,204 @@
 
 @source "./**/*.{ts,tsx}";
 @source "../../../src/**/*.{ts,tsx}";
+
+@media (max-width: 640px) {
+  html,
+  body,
+  #root {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  body {
+    overscroll-behavior: none;
+  }
+
+  #root > main {
+    height: 100dvh !important;
+    min-width: 0 !important;
+    padding: 0.25rem !important;
+    padding-top: max(0.25rem, env(safe-area-inset-top)) !important;
+    padding-bottom: max(0.25rem, env(safe-area-inset-bottom)) !important;
+  }
+
+  [data-testid="workflow-editor"] {
+    gap: 0.25rem !important;
+  }
+
+  [data-testid="workflow-editor"] > [data-slot="workbench-toolbar"] {
+    min-height: 2.75rem;
+    min-width: 0;
+    flex-wrap: nowrap !important;
+    gap: 0.25rem !important;
+    overflow: hidden;
+    padding: 0.25rem !important;
+  }
+
+  [data-testid="workflow-editor"] > [data-slot="workbench-toolbar"] > button:first-of-type {
+    min-width: 0;
+    max-width: calc(100vw - 10.75rem);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  [data-testid="workflow-editor"] > [data-slot="workbench-toolbar"] > div:last-child {
+    flex: none;
+    gap: 0.25rem !important;
+  }
+
+  [data-testid="workflow-editor"] > [data-slot="workbench-toolbar"] > div:last-child > button {
+    min-height: 2.25rem;
+    padding-inline: 0.55rem;
+  }
+
+  [data-slot="workbench-layout"][data-mobile-workbench="true"] {
+    position: relative;
+    min-height: 0 !important;
+    grid-template-rows: minmax(0, 1fr) !important;
+    border-radius: 0.75rem;
+  }
+
+  [data-slot="workbench-layout"][data-mobile-workbench="true"]
+    > [data-slot="workbench-toolbar"] {
+    display: none !important;
+  }
+
+  [data-slot="workbench-layout"][data-mobile-workbench="true"][data-mobile-sheet="actions"]
+    > [data-slot="workbench-toolbar"] {
+    position: absolute;
+    z-index: 20050;
+    right: 0.5rem;
+    bottom: calc(3.75rem + env(safe-area-inset-bottom));
+    left: 0.5rem;
+    display: flex !important;
+    max-height: min(52dvh, 24rem);
+    flex-wrap: wrap !important;
+    gap: 0.5rem !important;
+    overflow: auto;
+    border: 1px solid var(--border);
+    border-radius: 0.9rem;
+    background: var(--card);
+    padding: 0.6rem !important;
+    box-shadow: 0 16px 40px rgb(15 23 42 / 0.18);
+    overscroll-behavior: contain;
+  }
+
+  [data-slot="workbench-layout"][data-mobile-workbench="true"][data-mobile-sheet="actions"]
+    > [data-slot="workbench-toolbar"]
+    > div,
+  [data-slot="workbench-layout"][data-mobile-workbench="true"][data-mobile-sheet="actions"]
+    > [data-slot="workbench-toolbar"]
+    > div
+    > div {
+    min-width: 0 !important;
+    flex: 1 1 100%;
+    flex-wrap: wrap !important;
+    justify-content: flex-start !important;
+    white-space: normal !important;
+  }
+
+  [data-slot="workbench-layout"][data-mobile-workbench="true"][data-mobile-sheet="actions"]
+    > [data-slot="workbench-toolbar"]
+    button {
+    min-height: 2.75rem !important;
+    padding-inline: 0.75rem !important;
+    font-size: 0.8rem !important;
+  }
+
+  [data-slot="workbench-layout"][data-mobile-workbench="true"]
+    > [data-slot="workbench-canvas"]
+    > div {
+    padding: 0.25rem !important;
+    padding-bottom: 4.5rem !important;
+  }
+
+  [data-slot="workflow-builder-surface"] {
+    touch-action: none;
+    overscroll-behavior: none;
+  }
+
+  [data-slot="workbench-layout"][data-mobile-workbench="true"]
+    [data-slot="workflow-palette-overlay"],
+  [data-slot="workbench-layout"][data-mobile-workbench="true"]
+    [data-slot="workflow-inspector-overlay"] {
+    position: absolute !important;
+    z-index: 20050 !important;
+    top: auto !important;
+    right: 0.5rem !important;
+    bottom: calc(3.75rem + env(safe-area-inset-bottom)) !important;
+    left: 0.5rem !important;
+    display: none !important;
+    width: auto !important;
+    max-width: none !important;
+    max-height: min(58dvh, 30rem) !important;
+    border-radius: 0.9rem !important;
+    background: var(--card) !important;
+    padding: 0.75rem !important;
+    box-shadow: 0 16px 40px rgb(15 23 42 / 0.18) !important;
+  }
+
+  [data-slot="workbench-layout"][data-mobile-workbench="true"][data-mobile-sheet="nodes"]
+    [data-slot="workflow-palette-overlay"],
+  [data-slot="workbench-layout"][data-mobile-workbench="true"][data-mobile-sheet="info"]
+    [data-slot="workflow-inspector-overlay"] {
+    display: flex !important;
+  }
+
+  [data-slot="workbench-layout"][data-mobile-workbench="true"]
+    [data-slot="workflow-palette-header"],
+  [data-slot="workbench-layout"][data-mobile-workbench="true"]
+    [data-slot="workflow-inspector-header"] {
+    min-height: 2.75rem;
+    cursor: default !important;
+  }
+
+  [data-slot="workbench-layout"][data-mobile-workbench="true"]
+    [data-slot="workflow-palette-header"]
+    button[aria-label="Pin node palette"] {
+    display: none;
+  }
+
+  [data-mobile-workbench-dock] {
+    position: absolute;
+    z-index: 20060;
+    right: 0.5rem;
+    bottom: max(0.5rem, env(safe-area-inset-bottom));
+    left: 0.5rem;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.35rem;
+    border: 1px solid var(--border);
+    border-radius: 0.9rem;
+    background: color-mix(in srgb, var(--card) 96%, transparent);
+    padding: 0.35rem;
+    box-shadow: 0 10px 30px rgb(15 23 42 / 0.16);
+    backdrop-filter: blur(14px);
+  }
+
+  [data-mobile-workbench-dock] > button {
+    min-height: 2.75rem;
+    min-width: 0;
+    border: 0;
+    border-radius: 0.65rem;
+    background: transparent;
+    padding: 0.5rem 0.65rem;
+    color: var(--foreground);
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 650;
+  }
+
+  [data-mobile-workbench-dock] > button[aria-pressed="true"] {
+    background: var(--secondary);
+  }
+
+  [data-mobile-workbench-dock] > button:disabled {
+    opacity: 0.42;
+  }
+
+  [data-mobile-workbench-dock] > button:not(:disabled):active {
+    background: var(--accent);
+  }
+}
