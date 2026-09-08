@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -6,7 +7,7 @@ import { compileWorkflowEditorDocument } from "./compiler";
 import type { WorkflowEditorDocument } from "./core-types";
 
 const compiledV1Fixture = JSON.parse(
-  readFileSync(new URL("../fixtures/compiled-v1-simple.json", import.meta.url), "utf8"),
+  readFileSync(resolve(process.cwd(), "fixtures/compiled-v1-simple.json"), "utf8"),
 ) as unknown;
 
 const sourceDocument: WorkflowEditorDocument = {
