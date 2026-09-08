@@ -4,6 +4,40 @@ This roadmap turns the short README enhancement list into implementation-ready w
 should land behind focused tests and preserve the existing public import paths unless a future
 major version explicitly changes them.
 
+## Execution Handoff and Cross-Repository Conformance
+
+### Status
+
+The execution-neutral compiler now emits `@moritzbrantner/workflow/compiled` version 1. A canonical
+compiled-v1 fixture is shared as conformance evidence with `workflow-engine` and `workflow-runner`:
+workflow-editor must produce it exactly, the engine must version and dispatch it unchanged, and the
+runner must execute it without depending on editor internals.
+
+### Next Slices
+
+- Complete the compiler contract with canonical serialization/fingerprints, deterministic execution
+  stages, structured source maps, and stable diagnostics.
+- Decide explicit compiler behavior for nested workflow references and composed nodes rather than
+  giving them implicit runtime semantics.
+- Add an external execution-state overlay that consumes runner/engine lifecycle data without
+  mutating the editable workflow document or entering undo history.
+- Add production-shaped reference applications that compile to the same versioned runtime-neutral
+  contract and remain usable as static GitHub Pages examples.
+
+### Acceptance Tests
+
+- The canonical compiled-v1 fixture remains byte-for-semantics stable when editor-only layout or
+  chrome state changes.
+- Engine and runner conformance tests consume the same fixture shape without importing
+  workflow-editor as a runtime dependency.
+- Unsupported future compiled versions fail explicitly rather than being silently repaired.
+- Runtime execution state remains controlled host data and never becomes workflow document state.
+
+### Non-Goals
+
+- No scheduler, queue, worker, retry engine, or task executor inside workflow-editor.
+- No direct dependency from workflow-editor on workflow-engine or workflow-runner.
+
 ## Configurable Graph Validation Policies
 
 ### Problem
@@ -44,6 +78,11 @@ Existing scalar options continue to work and take precedence during a deprecatio
 Default behavior remains strict. Existing callers do not need to change.
 
 ## Port Cardinality Rules
+
+### Status
+
+The first cardinality/compiler-diagnostic slice shipped in PR #34. Keep the remaining work focused
+on any still-missing repair-mode and UI behavior rather than introducing a second cardinality model.
 
 ### Problem
 
