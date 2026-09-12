@@ -1,7 +1,10 @@
 import { validateGraphEditorConnection } from "@moritzbrantner/graph-editor/core";
 
 import { addWorkflowEditorEdge, connectWorkflowEditorNodes } from "./core";
-import { createWorkflowEditorDocumentContext } from "./core-context";
+import {
+  createWorkflowEditorDocumentContext,
+  type WorkflowEditorDocumentContext,
+} from "./core-context";
 import { createWorkflowEditorTypeResolver } from "./core-type-resolver";
 import type {
   WorkflowEditorConnectionInput,
@@ -51,6 +54,11 @@ export type WorkflowEditorPortCardinalityDiagnostic = {
   max?: number | null;
 };
 
+type WorkflowEditorPortConnectionCountIndex = {
+  inputByNodeId: Map<string, Map<string, number>>;
+  outputByNodeId: Map<string, Map<string, number>>;
+};
+
 export function analyzeWorkflowEditorPortCardinality<
   TNodeData = Record<string, unknown>,
   TEdgeData = Record<string, unknown>,
@@ -58,6 +66,7 @@ export function analyzeWorkflowEditorPortCardinality<
   document: WorkflowEditorDocument<TNodeData, TEdgeData>,
 ): WorkflowEditorPortCardinalityDiagnostic[] {
   const diagnostics: WorkflowEditorPortCardinalityDiagnostic[] = [];
+  const connectionCounts = createWorkflowEditorPortConnectionCountIndex(document);
 
   for (const node of document.nodes) {
     for (const port of node.inputs ?? []) {
@@ -67,7 +76,7 @@ export function analyzeWorkflowEditorPortCardinality<
       }
       diagnostics.push(
         ...diagnosePort(
-          document,
+          connectionCounts,
           node.id,
           cardinalityPort,
           "input",
@@ -77,7 +86,13 @@ export function analyzeWorkflowEditorPortCardinality<
     }
     for (const port of node.outputs ?? []) {
       diagnostics.push(
-        ...diagnosePort(document, node.id, port as WorkflowEditorCardinalityPort, "output", false),
+        ...diagnosePort(
+          connectionCounts,
+          node.id,
+          port as WorkflowEditorCardinalityPort,
+          "output",
+          false,
+        ),
       );
     }
   }
@@ -93,48 +108,7 @@ export function validateWorkflowEditorConnectionCardinality<
   connection: WorkflowEditorConnectionInput,
 ): WorkflowEditorCardinalityConnectionValidity {
   const context = createWorkflowEditorDocumentContext(document);
-  const sourceNode = context.nodeById.get(connection.sourceNodeId);
-  const targetNode = context.nodeById.get(connection.targetNodeId);
-  const sourcePort = context.getOutputPort(
-    connection.sourceNodeId,
-    connection.sourcePortId,
-  ) as WorkflowEditorCardinalityPort | null;
-  const targetPort = context.getInputPort(
-    connection.targetNodeId,
-    connection.targetPortId,
-  ) as WorkflowEditorCardinalityPort | null;
-
-  if (!sourceNode || !targetNode || !sourcePort || !targetPort) {
-    return { valid: true };
-  }
-
-  const sourceCount = countConnections(
-    document,
-    connection.sourceNodeId,
-    connection.sourcePortId,
-    "output",
-  );
-  const targetCount = countConnections(
-    document,
-    connection.targetNodeId,
-    connection.targetPortId,
-    "input",
-  );
-  const sourceMax = resolveMax(sourcePort.cardinality, "output", false);
-  const targetMax = resolveMax(
-    targetPort.cardinality,
-    "input",
-    isExpandableConstructorNode(targetNode.kind),
-  );
-
-  if (sourceMax !== null && sourceCount + 1 > sourceMax) {
-    return { valid: false, reason: "source-cardinality" };
-  }
-  if (!isDynamicConstructorPort(targetPort) && targetMax !== null && targetCount + 1 > targetMax) {
-    return { valid: false, reason: "target-cardinality" };
-  }
-
-  return { valid: true };
+  return validateWorkflowEditorConnectionCardinalityWithContext(context, connection);
 }
 
 export function validateWorkflowEditorConnectionWithCardinality<
@@ -181,7 +155,7 @@ export function validateWorkflowEditorConnectionWithCardinality<
   if (!semanticValidity.valid) {
     return semanticValidity;
   }
-  return validateWorkflowEditorConnectionCardinality(document, connection);
+  return validateWorkflowEditorConnectionCardinalityWithContext(context, connection);
 }
 
 export function connectWorkflowEditorNodesWithCardinality<
@@ -197,8 +171,7 @@ export function connectWorkflowEditorNodesWithCardinality<
     return document;
   }
 
-  const context = createWorkflowEditorDocumentContext(document);
-  const targetNode = context.nodeById.get(connection.targetNodeId);
+  const targetNode = document.nodes.find((node) => node.id === connection.targetNodeId);
   if (isExpandableConstructorNode(targetNode?.kind)) {
     return connectWorkflowEditorNodes(document, connection, options);
   }
@@ -219,14 +192,60 @@ export function getWorkflowEditorPortConnectionCount<
   return countConnections(document, nodeId, portId, direction);
 }
 
-function diagnosePort<TNodeData, TEdgeData>(
-  document: WorkflowEditorDocument<TNodeData, TEdgeData>,
+function validateWorkflowEditorConnectionCardinalityWithContext<TNodeData, TEdgeData>(
+  context: WorkflowEditorDocumentContext<TNodeData, TEdgeData>,
+  connection: WorkflowEditorConnectionInput,
+): WorkflowEditorCardinalityConnectionValidity {
+  const sourceNode = context.nodeById.get(connection.sourceNodeId);
+  const targetNode = context.nodeById.get(connection.targetNodeId);
+  const sourcePort = context.getOutputPort(
+    connection.sourceNodeId,
+    connection.sourcePortId,
+  ) as WorkflowEditorCardinalityPort | null;
+  const targetPort = context.getInputPort(
+    connection.targetNodeId,
+    connection.targetPortId,
+  ) as WorkflowEditorCardinalityPort | null;
+
+  if (!sourceNode || !targetNode || !sourcePort || !targetPort) {
+    return { valid: true };
+  }
+
+  const sourceCount = countConnectionsInEdges(
+    context.getOutgoingEdges(connection.sourceNodeId),
+    connection.sourcePortId,
+    "output",
+  );
+  const targetCount = countConnectionsInEdges(
+    context.getIncomingEdges(connection.targetNodeId),
+    connection.targetPortId,
+    "input",
+  );
+  const sourceMax = resolveMax(sourcePort.cardinality, "output", false);
+  const targetMax = resolveMax(
+    targetPort.cardinality,
+    "input",
+    isExpandableConstructorNode(targetNode.kind),
+  );
+
+  if (sourceMax !== null && sourceCount + 1 > sourceMax) {
+    return { valid: false, reason: "source-cardinality" };
+  }
+  if (!isDynamicConstructorPort(targetPort) && targetMax !== null && targetCount + 1 > targetMax) {
+    return { valid: false, reason: "target-cardinality" };
+  }
+
+  return { valid: true };
+}
+
+function diagnosePort(
+  connectionCounts: WorkflowEditorPortConnectionCountIndex,
   nodeId: string,
   port: WorkflowEditorCardinalityPort,
   direction: WorkflowEditorPortDirection,
   expandableInput: boolean,
 ): WorkflowEditorPortCardinalityDiagnostic[] {
-  const connectionCount = countConnections(document, nodeId, port.id, direction);
+  const connectionCount = getIndexedConnectionCount(connectionCounts, nodeId, port.id, direction);
   const min = resolveMin(port.cardinality);
   const max = resolveMax(port.cardinality, direction, expandableInput);
   const diagnostics: WorkflowEditorPortCardinalityDiagnostic[] = [];
@@ -259,17 +278,71 @@ function diagnosePort<TNodeData, TEdgeData>(
   return diagnostics;
 }
 
+function createWorkflowEditorPortConnectionCountIndex<TNodeData, TEdgeData>(
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>,
+): WorkflowEditorPortConnectionCountIndex {
+  const inputByNodeId = new Map<string, Map<string, number>>();
+  const outputByNodeId = new Map<string, Map<string, number>>();
+
+  for (const edge of document.edges) {
+    incrementIndexedConnectionCount(outputByNodeId, edge.sourceNodeId, edge.sourcePortId);
+    incrementIndexedConnectionCount(inputByNodeId, edge.targetNodeId, edge.targetPortId);
+  }
+
+  return { inputByNodeId, outputByNodeId };
+}
+
+function incrementIndexedConnectionCount(
+  countsByNodeId: Map<string, Map<string, number>>,
+  nodeId: string,
+  portId: string,
+) {
+  let countsByPortId = countsByNodeId.get(nodeId);
+  if (!countsByPortId) {
+    countsByPortId = new Map<string, number>();
+    countsByNodeId.set(nodeId, countsByPortId);
+  }
+  countsByPortId.set(portId, (countsByPortId.get(portId) ?? 0) + 1);
+}
+
+function getIndexedConnectionCount(
+  index: WorkflowEditorPortConnectionCountIndex,
+  nodeId: string,
+  portId: string,
+  direction: WorkflowEditorPortDirection,
+) {
+  const countsByNodeId = direction === "input" ? index.inputByNodeId : index.outputByNodeId;
+  return countsByNodeId.get(nodeId)?.get(portId) ?? 0;
+}
+
 function countConnections<TNodeData, TEdgeData>(
   document: WorkflowEditorDocument<TNodeData, TEdgeData>,
   nodeId: string,
   portId: string,
   direction: WorkflowEditorPortDirection,
 ): number {
-  return document.edges.filter((edge) =>
-    direction === "input"
-      ? edge.targetNodeId === nodeId && edge.targetPortId === portId
-      : edge.sourceNodeId === nodeId && edge.sourcePortId === portId,
-  ).length;
+  return countConnectionsInEdges(document.edges, portId, direction, nodeId);
+}
+
+function countConnectionsInEdges<TEdgeData>(
+  edges: ReadonlyArray<WorkflowEditorEdge<TEdgeData>>,
+  portId: string,
+  direction: WorkflowEditorPortDirection,
+  nodeId?: string,
+): number {
+  let count = 0;
+
+  for (const edge of edges) {
+    if (
+      direction === "input"
+        ? edge.targetPortId === portId && (nodeId === undefined || edge.targetNodeId === nodeId)
+        : edge.sourcePortId === portId && (nodeId === undefined || edge.sourceNodeId === nodeId)
+    ) {
+      count += 1;
+    }
+  }
+
+  return count;
 }
 
 function resolveMin(cardinality: WorkflowEditorPortCardinality | undefined): number {
