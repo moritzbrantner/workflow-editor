@@ -1,6 +1,7 @@
 import { bench, describe } from "vitest";
 
 import { analyzeWorkflowEditorPortCardinality } from "./cardinality";
+import { createWorkflowEditorDocumentContext } from "./core-context";
 import type { WorkflowEditorDocument, WorkflowEditorPort } from "./core-types";
 
 const largeDocument = createBenchmarkDocument();
@@ -8,6 +9,10 @@ const largeDocument = createBenchmarkDocument();
 describe("workflow editor cardinality", () => {
   bench("analyze 1,000 nodes and 3,996 edges", () => {
     analyzeWorkflowEditorPortCardinality(largeDocument);
+  });
+
+  bench("index 1,000 nodes and 3,996 edges", () => {
+    createWorkflowEditorDocumentContext(largeDocument);
   });
 });
 
