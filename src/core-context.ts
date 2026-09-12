@@ -57,14 +57,24 @@ export function createWorkflowEditorDocumentContext<
   const adjacencyByNodeId = graphContext.adjacencyByNodeId as Map<string, string[]>;
   const inputPortByNodeAndId = new Map<string, WorkflowEditorPort>();
   const outputPortByNodeAndId = new Map<string, WorkflowEditorPort>();
+  const inputPortByNodeId = new Map<string, Map<string, WorkflowEditorPort>>();
+  const outputPortByNodeId = new Map<string, Map<string, WorkflowEditorPort>>();
 
   for (const node of document.nodes) {
+    const inputPortById = new Map<string, WorkflowEditorPort>();
+    const outputPortById = new Map<string, WorkflowEditorPort>();
+
     for (const input of node.inputs ?? []) {
       inputPortByNodeAndId.set(portKey(node.id, input.id), input);
+      inputPortById.set(input.id, input);
     }
     for (const output of node.outputs ?? []) {
       outputPortByNodeAndId.set(portKey(node.id, output.id), output);
+      outputPortById.set(output.id, output);
     }
+
+    inputPortByNodeId.set(node.id, inputPortById);
+    outputPortByNodeId.set(node.id, outputPortById);
   }
 
   return {
@@ -77,10 +87,10 @@ export function createWorkflowEditorDocumentContext<
     outgoingEdgesByNodeId,
     adjacencyByNodeId,
     getInputPort(nodeId, portId) {
-      return inputPortByNodeAndId.get(portKey(nodeId, portId));
+      return inputPortByNodeId.get(nodeId)?.get(portId);
     },
     getOutputPort(nodeId, portId) {
-      return outputPortByNodeAndId.get(portKey(nodeId, portId));
+      return outputPortByNodeId.get(nodeId)?.get(portId);
     },
     getIncomingEdges(nodeId) {
       return incomingEdgesByNodeId.get(nodeId) ?? [];
