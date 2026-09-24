@@ -61,10 +61,7 @@ import {
   createGraphEditorUpdateViewportOperation,
   type GraphEditorOperation,
 } from "@moritzbrantner/graph-editor/operations";
-import {
-  WorkflowBuilder,
-  type WorkflowBuilderConnectionValidity,
-} from "./react/workflow-builder";
+import { WorkflowBuilder, type WorkflowBuilderConnectionValidity } from "./react/workflow-builder";
 import {
   fromUiWorkflowBuilderEdges,
   fromUiWorkflowBuilderNodes,
