@@ -1696,23 +1696,27 @@ export function WorkflowWorkbench<
       event.button !== 0 ||
       !(target instanceof Element) ||
       target.closest(
-        "[data-slot='workflow-builder-node'], [data-slot='workflow-node-port'], [data-slot='workflow-builder-edge'], [data-slot='workflow-builder-edge-hit'], [data-slot='workflow-builder-edge-handle'], button, input, textarea, select",
+        "[data-slot='workflow-builder-node'], [data-slot='workflow-node-port'], [data-slot='workflow-builder-edge'], [data-slot='workflow-builder-edge-hit'], [data-slot='workflow-builder-edge-handle'], [data-slot='workflow-group'], button, input, textarea, select",
       )
     ) {
       return;
     }
 
-    if (!event.shiftKey && !event.metaKey && !event.ctrlKey) {
-      const currentViewport = normalizeWorkflowEditorViewport(document.viewport);
-      canvasPanRef.current = {
-        pointerId: event.pointerId,
-        startClientX: event.clientX,
-        startClientY: event.clientY,
-        viewport: currentViewport,
-        panning: false,
-      };
-      event.stopPropagation();
+    if (event.shiftKey || event.metaKey || event.ctrlKey) {
+      const surface = target.closest<HTMLElement>("[data-slot='workflow-builder-surface']");
+      surface?.setPointerCapture?.(event.pointerId);
+      return;
     }
+
+    const currentViewport = normalizeWorkflowEditorViewport(document.viewport);
+    canvasPanRef.current = {
+      pointerId: event.pointerId,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      viewport: currentViewport,
+      panning: false,
+    };
+    event.stopPropagation();
   };
 
   const preserveGraphCanvasModifierSelection = (event: ReactMouseEvent<HTMLDivElement>) => {
