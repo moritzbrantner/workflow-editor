@@ -792,6 +792,7 @@ test.describe("WorkflowWorkbench desktop", () => {
     const endY = Math.min(inputBox!.y, transformBox!.y) - 16;
 
     const viewport = page.locator('[data-slot="workflow-builder-viewport"]:visible').first();
+    const viewportBeforeMarquee = (await readDocument(page)).viewport ?? { x: 0, y: 0, zoom: 1 };
     await viewport.dispatchEvent("pointerdown", {
       bubbles: true,
       button: 0,
@@ -812,6 +813,13 @@ test.describe("WorkflowWorkbench desktop", () => {
       pointerType: "mouse",
       shiftKey: true,
     });
+
+    await expect(page.locator('[data-testid="selection-marquee"]:visible')).toHaveCount(1);
+    await expect(page.locator('[data-slot="workflow-builder-marquee"]:visible')).toHaveCount(0);
+    expect((await readDocument(page)).viewport ?? { x: 0, y: 0, zoom: 1 }).toEqual(
+      viewportBeforeMarquee,
+    );
+
     await viewport.dispatchEvent("pointerup", {
       bubbles: true,
       button: 0,
@@ -823,6 +831,7 @@ test.describe("WorkflowWorkbench desktop", () => {
       shiftKey: true,
     });
 
+    await expect(page.locator('[data-testid="selection-marquee"]:visible')).toHaveCount(0);
     await expect(page.getByTestId("selection-count").filter({ visible: true }).first()).toHaveText(
       "2 selected",
     );
