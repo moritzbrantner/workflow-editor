@@ -1790,11 +1790,13 @@ export function WorkflowWorkbench<
     }
 
     const nextMarquee = {
+      pointerId: event.pointerId,
       startX: event.clientX - rect.left,
       startY: event.clientY - rect.top,
       currentX: event.clientX - rect.left,
       currentY: event.clientY - rect.top,
     };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
     marqueeRef.current = nextMarquee;
     setMarquee(nextMarquee);
   };
@@ -1828,7 +1830,7 @@ export function WorkflowWorkbench<
 
   const updateMarquee = (event: ReactPointerEvent<HTMLDivElement>) => {
     const currentMarquee = marqueeRef.current;
-    if (!currentMarquee) {
+    if (!currentMarquee || currentMarquee.pointerId !== event.pointerId) {
       return;
     }
 
@@ -2032,6 +2034,10 @@ export function WorkflowWorkbench<
       marqueeRef.current = null;
       setMarquee(null);
       return;
+    }
+
+    if (container.hasPointerCapture?.(currentMarquee.pointerId)) {
+      container.releasePointerCapture?.(currentMarquee.pointerId);
     }
 
     const marqueeRect = normalizeRect(currentMarquee);
@@ -2756,9 +2762,15 @@ export function WorkflowWorkbench<
             }}
             onPointerCancel={(event) => {
               cancelCanvasPointerInteraction(event);
-              marqueeRef.current = null;
+              const currentMarquee = marqueeRef.current;
+              if (currentMarquee?.pointerId === event.pointerId) {
+                if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+                  event.currentTarget.releasePointerCapture?.(event.pointerId);
+                }
+                marqueeRef.current = null;
+                setMarquee(null);
+              }
               pendingNodeSnapRef.current = null;
-              setMarquee(null);
             }}
             onContextMenuCapture={openPortConnectionMenu}
             onDoubleClickCapture={startNodeRenameFromDoubleClick}
@@ -4065,6 +4077,7 @@ export function WorkflowWorkbenchNodeControls() {
 export const WorkflowWorkbenchSelectionOverlay = WorkflowSelectionOverlay;
 
 type WorkflowSelectionMarquee = {
+  pointerId: number;
   startX: number;
   startY: number;
   currentX: number;
