@@ -64,7 +64,6 @@ import {
 import {
   WorkflowBuilder,
   type WorkflowBuilderConnectionValidity,
-  type WorkflowBuilderSelection,
 } from "./react/workflow-builder";
 import {
   fromUiWorkflowBuilderEdges,
