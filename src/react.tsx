@@ -1715,6 +1715,17 @@ export function WorkflowWorkbench<
     }
   };
 
+  const preserveGraphCanvasModifierSelection = (event: ReactMouseEvent<HTMLDivElement>) => {
+    if (!event.shiftKey && !event.metaKey && !event.ctrlKey) {
+      return;
+    }
+
+    const target = event.target;
+    if (target instanceof Element && target.closest("[data-slot='workflow-node-select']")) {
+      event.stopPropagation();
+    }
+  };
+
   const openPortConnectionMenu = (event: ReactMouseEvent<HTMLDivElement>) => {
     const container = containerRef.current;
     const portTarget = getWorkflowPortContextTarget(container, event);
@@ -2620,6 +2631,7 @@ export function WorkflowWorkbench<
           <div
             ref={containerRef}
             className="relative min-h-0 min-w-0"
+            onClickCapture={preserveGraphCanvasModifierSelection}
             onPointerDownCapture={startCanvasPointerInteraction}
             onPointerMoveCapture={updateCanvasPointerInteraction}
             onPointerUpCapture={(event) => {

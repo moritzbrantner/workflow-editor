@@ -774,6 +774,8 @@ test.describe("WorkflowWorkbench desktop", () => {
       .click({ position: { x: 420, y: 420 } });
     await expect(page.getByTestId("selection-count").first()).toHaveText("0 selected");
 
+    await page.evaluate(() => window.scrollTo(0, 0));
+
     const input = page
       .locator('[data-slot="workflow-builder-node"][data-node-id="input"]:visible')
       .first();
