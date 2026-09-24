@@ -794,14 +794,8 @@ test.describe("WorkflowWorkbench desktop", () => {
       Math.max(inputBox!.x + inputBox!.width, transformBox!.x + transformBox!.width) + 16;
     const startY =
       Math.max(inputBox!.y + inputBox!.height, transformBox!.y + transformBox!.height) + 16;
-    const endX = Math.max(
-      surfaceBox!.x + 4,
-      Math.min(inputBox!.x, transformBox!.x) - 8,
-    );
-    const endY = Math.max(
-      surfaceBox!.y + 4,
-      Math.min(inputBox!.y, transformBox!.y) - 8,
-    );
+    const endX = Math.max(surfaceBox!.x + 4, Math.min(inputBox!.x, transformBox!.x) - 8);
+    const endY = Math.max(surfaceBox!.y + 4, Math.min(inputBox!.y, transformBox!.y) - 8);
     expect(startX).toBeLessThan(surfaceBox!.x + surfaceBox!.width);
     expect(startY).toBeLessThan(surfaceBox!.y + surfaceBox!.height);
 
