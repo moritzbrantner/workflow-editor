@@ -129,10 +129,7 @@ import {
 } from "./core";
 import { layoutWorkflowEditorDocument } from "./core-layout";
 import type { WorkflowEditorDocumentReferenceOption } from "./persistence";
-import {
-  selectionStateToSingleSelection,
-  toggleWorkflowEditorSelectionItem,
-} from "./react-selection";
+import { selectionStateToSingleSelection } from "./react-selection";
 import {
   getWorkflowEditorObjectConstructorOutputPanelHeight,
   getWorkflowEditorObjectConstructorRenderedWidth,
@@ -533,7 +530,6 @@ export function WorkflowWorkbench<
   const connectionInProgressRef = useRef(false);
   const uiCreatedConnectionCommitKeyRef = useRef<string | null>(null);
   const ignoreSelectionClearUntilRef = useRef(0);
-  const marqueeRef = useRef<WorkflowSelectionMarquee | null>(null);
   const canvasPanRef = useRef<WorkflowCanvasPanState | null>(null);
   const paletteDragRef = useRef<WorkflowOverlayDragState | null>(null);
   const inspectorDragRef = useRef<WorkflowOverlayDragState | null>(null);
@@ -549,7 +545,6 @@ export function WorkflowWorkbench<
   const [inspectorMinimized, setInspectorMinimized] = useState(false);
   const [inspectorPosition, setInspectorPosition] = useState<WorkflowOverlayPosition>(null);
   const [narrowOverlayLayout, setNarrowOverlayLayout] = useState(false);
-  const [marquee, setMarquee] = useState<WorkflowSelectionMarquee | null>(null);
   const [paletteMinimized, setPaletteMinimized] = useState(false);
   const [paletteCorner, setPaletteCorner] = useState<WorkflowPaletteCorner>(
     overlayBehavior?.palette?.defaultPlacement ?? "top-left",
@@ -1692,43 +1687,6 @@ export function WorkflowWorkbench<
     return () => window.removeEventListener("keydown", onKeyDown);
   });
 
-  const handleBuilderSelection = (builderSelection: WorkflowBuilderSelection) => {
-    if (connectionInProgressRef.current && builderSelection?.type === "node") {
-      return;
-    }
-
-    if (!builderSelection) {
-      if (Date.now() < ignoreSelectionClearUntilRef.current) {
-        return;
-      }
-
-      if (!pointerModifierRef.current.additive && !marquee) {
-        emitSelectionState(emptyWorkflowEditorSelection);
-      }
-      return;
-    }
-
-    ignoreSelectionClearUntilRef.current = 0;
-    const item =
-      builderSelection.type === "node"
-        ? ({ type: "node", id: builderSelection.id } as const)
-        : builderSelection.type === "edge"
-          ? ({ type: "edge", id: builderSelection.id } as const)
-          : ({ type: "group", id: builderSelection.id } as const);
-
-    if (!pointerModifierRef.current.additive) {
-      emitSelectionState({
-        nodeIds: item.type === "node" ? [item.id] : [],
-        edgeIds: item.type === "edge" ? [item.id] : [],
-        ...(item.type === "group" ? { groupIds: [item.id] } : {}),
-        primary: item,
-      });
-      return;
-    }
-
-    emitSelectionState(toggleWorkflowEditorSelectionItem(selection, item));
-  };
-
   const startCanvasPointerInteraction = (event: ReactPointerEvent<HTMLDivElement>) => {
     pointerModifierRef.current = { additive: event.shiftKey || event.metaKey || event.ctrlKey };
     const target = event.target;
@@ -1757,10 +1715,8 @@ export function WorkflowWorkbench<
         viewport: currentViewport,
         panning: false,
       };
-      return;
+      event.stopPropagation();
     }
-
-    startMarquee(event);
   };
 
   const openPortConnectionMenu = (event: ReactMouseEvent<HTMLDivElement>) => {
@@ -1781,24 +1737,6 @@ export function WorkflowWorkbench<
       x: Math.round(event.clientX + 4),
       y: Math.round(event.clientY + 4),
     });
-  };
-
-  const startMarquee = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) {
-      return;
-    }
-
-    const nextMarquee = {
-      pointerId: event.pointerId,
-      startX: event.clientX - rect.left,
-      startY: event.clientY - rect.top,
-      currentX: event.clientX - rect.left,
-      currentY: event.clientY - rect.top,
-    };
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-    marqueeRef.current = nextMarquee;
-    setMarquee(nextMarquee);
   };
 
   const updateCanvasPointerInteraction = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -1824,28 +1762,6 @@ export function WorkflowWorkbench<
       });
       return;
     }
-
-    updateMarquee(event);
-  };
-
-  const updateMarquee = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const currentMarquee = marqueeRef.current;
-    if (!currentMarquee || currentMarquee.pointerId !== event.pointerId) {
-      return;
-    }
-
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) {
-      return;
-    }
-
-    const nextMarquee = {
-      ...currentMarquee,
-      currentX: event.clientX - rect.left,
-      currentY: event.clientY - rect.top,
-    };
-    marqueeRef.current = nextMarquee;
-    setMarquee(nextMarquee);
   };
 
   const completeCanvasPointerInteraction = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -2021,47 +1937,6 @@ export function WorkflowWorkbench<
     container.addEventListener("wheel", handleCanvasWheel, { capture: true, passive: false });
     return () => container.removeEventListener("wheel", handleCanvasWheel, { capture: true });
   });
-
-  const completeMarquee = () => {
-    const currentMarquee = marqueeRef.current;
-    if (!currentMarquee) {
-      return;
-    }
-
-    const container = containerRef.current;
-    const containerRect = container?.getBoundingClientRect();
-    if (!container || !containerRect) {
-      marqueeRef.current = null;
-      setMarquee(null);
-      return;
-    }
-
-    if (container.hasPointerCapture?.(currentMarquee.pointerId)) {
-      container.releasePointerCapture?.(currentMarquee.pointerId);
-    }
-
-    const marqueeRect = normalizeRect(currentMarquee);
-    const nodeIds = Array.from(
-      container.querySelectorAll<HTMLElement>("[data-slot='workflow-builder-node']"),
-    ).flatMap((element) => {
-      const nodeId = element.dataset.nodeId;
-      const nodeRect = element.getBoundingClientRect();
-      const relativeRect = {
-        left: nodeRect.left - containerRect.left,
-        top: nodeRect.top - containerRect.top,
-        right: nodeRect.right - containerRect.left,
-        bottom: nodeRect.bottom - containerRect.top,
-      };
-      return nodeId && rectsIntersect(marqueeRect, relativeRect) ? [nodeId] : [];
-    });
-    marqueeRef.current = null;
-    setMarquee(null);
-    emitSelectionState({
-      nodeIds,
-      edgeIds: [],
-      ...(nodeIds[0] ? { primary: { type: "node", id: nodeIds[0] } } : {}),
-    });
-  };
 
   const preserveOverlaySelection = () => {
     ignoreSelectionClearUntilRef.current =
@@ -2757,19 +2632,10 @@ export function WorkflowWorkbench<
               }
             }}
             onPointerUp={() => {
-              completeMarquee();
               completePendingNodeSnap();
             }}
             onPointerCancel={(event) => {
               cancelCanvasPointerInteraction(event);
-              const currentMarquee = marqueeRef.current;
-              if (currentMarquee?.pointerId === event.pointerId) {
-                if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
-                  event.currentTarget.releasePointerCapture?.(event.pointerId);
-                }
-                marqueeRef.current = null;
-                setMarquee(null);
-              }
               pendingNodeSnapRef.current = null;
             }}
             onContextMenuCapture={openPortConnectionMenu}
@@ -2790,13 +2656,14 @@ export function WorkflowWorkbench<
               selectedNodeId={primarySelectedNodeId}
               selectedEdgeId={primarySelectedEdgeId}
               selectedGroupId={primarySelectedGroupId}
+              selectedNodeIds={selection.nodeIds}
+              selectedEdgeIds={selection.edgeIds}
+              selectedGroupIds={selection.groupIds}
               hiddenNodeIds={hiddenNodeIds}
               hiddenEdgeIds={hiddenEdgeIds}
               readOnly={readOnly}
               showMiniMap
               showPortColumnHeaders={false}
-              enableMarqueeSelection={false}
-              enablePan={false}
               enableWheelZoom={false}
               measurePorts="dom"
               surfaceHeight="auto"
@@ -2878,7 +2745,9 @@ export function WorkflowWorkbench<
               onViewportChange={(viewport) => {
                 commitViewportChange(viewport);
               }}
-              onSelectionChange={handleBuilderSelection}
+              onSelectionStateChange={(nextSelection) => {
+                emitSelectionState(nextSelection);
+              }}
               onConnectionStart={() => {
                 connectionInProgressRef.current = true;
               }}
@@ -2996,7 +2865,7 @@ export function WorkflowWorkbench<
                 />
                 <WorkflowSelectionOverlay
                   document={document}
-                  marquee={marquee}
+                  marquee={null}
                   primaryNodeId={primarySelectedNodeId}
                   selection={selection}
                 />
