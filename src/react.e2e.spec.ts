@@ -791,28 +791,11 @@ test.describe("WorkflowWorkbench desktop", () => {
       Math.max(inputBox!.x + inputBox!.width, transformBox!.x + transformBox!.width) - 64;
     const endY = Math.min(inputBox!.y, transformBox!.y) - 16;
 
-    const viewport = page.locator('[data-slot="workflow-builder-viewport"]:visible').first();
     const viewportBeforeMarquee = (await readDocument(page)).viewport ?? { x: 0, y: 0, zoom: 1 };
-    await viewport.dispatchEvent("pointerdown", {
-      bubbles: true,
-      button: 0,
-      buttons: 1,
-      clientX: startX,
-      clientY: startY,
-      pointerId: 1,
-      pointerType: "mouse",
-      shiftKey: true,
-    });
-    await viewport.dispatchEvent("pointermove", {
-      bubbles: true,
-      button: 0,
-      buttons: 1,
-      clientX: endX,
-      clientY: endY,
-      pointerId: 1,
-      pointerType: "mouse",
-      shiftKey: true,
-    });
+    await page.keyboard.down("Shift");
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    await page.mouse.move(endX, endY, { steps: 4 });
 
     await expect(page.locator('[data-testid="selection-marquee"]:visible')).toHaveCount(1);
     await expect(page.locator('[data-slot="workflow-builder-marquee"]:visible')).toHaveCount(0);
@@ -820,16 +803,47 @@ test.describe("WorkflowWorkbench desktop", () => {
       viewportBeforeMarquee,
     );
 
-    await viewport.dispatchEvent("pointerup", {
-      bubbles: true,
-      button: 0,
-      buttons: 0,
-      clientX: endX,
-      clientY: endY,
-      pointerId: 1,
-      pointerType: "mouse",
-      shiftKey: true,
-    });
+    await page.mouse.up();
+    await page.keyboard.up("Shift");
+
+    await expect(page.locator('[data-testid="selection-marquee"]:visible')).toHaveCount(0);
+    await expect(page.getByTestId("selection-count").filter({ visible: true }).first()).toHaveText(
+      "2 selected",
+    );
+
+    await page
+      .locator('[data-slot="workflow-builder-surface"]:visible')
+      .first()
+      .click({ position: { x: 420, y: 420 } });
+    await expect(page.getByTestId("selection-count").filter({ visible: true }).first()).toHaveText(
+      "0 selected",
+    );
+
+    const interactionBounds = await page
+      .locator('[data-slot="workflow-builder"]:visible')
+      .first()
+      .evaluate((element) => {
+        const rect = element.parentElement?.getBoundingClientRect();
+        return rect
+          ? { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom }
+          : null;
+      });
+    expect(interactionBounds).not.toBeNull();
+    expect(interactionBounds!.left).toBeGreaterThan(4);
+    expect(interactionBounds!.top).toBeGreaterThan(4);
+
+    const outsideStartX =
+      Math.max(inputBox!.x + inputBox!.width, transformBox!.x + transformBox!.width) + 16;
+    const outsideStartY =
+      Math.max(inputBox!.y + inputBox!.height, transformBox!.y + transformBox!.height) + 16;
+
+    await page.keyboard.down("Shift");
+    await page.mouse.move(outsideStartX, outsideStartY);
+    await page.mouse.down();
+    await page.mouse.move(interactionBounds!.left - 4, interactionBounds!.top - 4, { steps: 6 });
+    await expect(page.locator('[data-testid="selection-marquee"]:visible')).toHaveCount(1);
+    await page.mouse.up();
+    await page.keyboard.up("Shift");
 
     await expect(page.locator('[data-testid="selection-marquee"]:visible')).toHaveCount(0);
     await expect(page.getByTestId("selection-count").filter({ visible: true }).first()).toHaveText(
