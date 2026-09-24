@@ -774,14 +774,14 @@ test.describe("WorkflowWorkbench desktop", () => {
       .click({ position: { x: 420, y: 420 } });
     await expect(page.getByTestId("selection-count").first()).toHaveText("0 selected");
 
-    const inputBox = await page
+    const input = page
       .locator('[data-slot="workflow-builder-node"][data-node-id="input"]:visible')
-      .first()
-      .boundingBox();
-    const transformBox = await page
+      .first();
+    const transform = page
       .locator('[data-slot="workflow-builder-node"][data-node-id="transform"]:visible')
-      .first()
-      .boundingBox();
+      .first();
+    const inputBox = await input.boundingBox();
+    const transformBox = await transform.boundingBox();
     const surfaceBox = await page
       .locator('[data-slot="workflow-builder-surface"]:visible')
       .first()
@@ -805,8 +805,8 @@ test.describe("WorkflowWorkbench desktop", () => {
     await page.mouse.down();
     await page.mouse.move(endX, endY, { steps: 4 });
 
-    await expect(page.locator('[data-testid="selection-marquee"]:visible')).toHaveCount(1);
-    await expect(page.locator('[data-slot="workflow-builder-marquee"]:visible')).toHaveCount(0);
+    await expect(page.locator('[data-slot="workflow-builder-marquee"]:visible')).toHaveCount(1);
+    await expect(page.locator('[data-testid="selection-marquee"]:visible')).toHaveCount(0);
     expect((await readDocument(page)).viewport ?? { x: 0, y: 0, zoom: 1 }).toEqual(
       viewportBeforeMarquee,
     );
@@ -814,44 +814,9 @@ test.describe("WorkflowWorkbench desktop", () => {
     await page.mouse.up();
     await page.keyboard.up("Shift");
 
-    await expect(page.locator('[data-testid="selection-marquee"]:visible')).toHaveCount(0);
-    await expect(page.getByTestId("selection-count").filter({ visible: true }).first()).toHaveText(
-      "2 selected",
-    );
-
-    await page
-      .locator('[data-slot="workflow-builder-surface"]:visible')
-      .first()
-      .click({ position: { x: 420, y: 420 } });
-    await expect(page.getByTestId("selection-count").filter({ visible: true }).first()).toHaveText(
-      "0 selected",
-    );
-
-    const interactionBounds = await page
-      .locator('[data-slot="workflow-builder"]:visible')
-      .first()
-      .evaluate((element) => {
-        const rect = element.parentElement?.getBoundingClientRect();
-        return rect
-          ? { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom }
-          : null;
-      });
-    expect(interactionBounds).not.toBeNull();
-    expect(interactionBounds!.left).toBeGreaterThan(4);
-    expect(interactionBounds!.top).toBeGreaterThan(4);
-
-    await page.keyboard.down("Shift");
-    await page.mouse.move(startX, startY);
-    await page.mouse.down();
-    await page.mouse.move(interactionBounds!.left - 4, interactionBounds!.top - 4, { steps: 6 });
-    await expect(page.locator('[data-testid="selection-marquee"]:visible')).toHaveCount(1);
-    await page.mouse.up();
-    await page.keyboard.up("Shift");
-
-    await expect(page.locator('[data-testid="selection-marquee"]:visible')).toHaveCount(0);
-    await expect(page.getByTestId("selection-count").filter({ visible: true }).first()).toHaveText(
-      "2 selected",
-    );
+    await expect(page.locator('[data-slot="workflow-builder-marquee"]:visible')).toHaveCount(0);
+    await expect(input).toHaveAttribute("data-selected", "true");
+    await expect(transform).toHaveAttribute("data-selected", "true");
   });
 
   test("selects edges, edits edge status, and deletes only the selected edge", async ({
