@@ -2,4 +2,4 @@
 "@moritzbrantner/workflow-editor": patch
 ---
 
-Prevent the workflow canvas from running graph-editor pan, wheel, and marquee gestures alongside the workbench-owned interactions, eliminating duplicate selection rectangles and conflicting marquee selection.
+Delegate workflow marquee selection to graph-editor's GraphCanvas and forward the complete controlled selection state, preventing duplicate selection rectangles and conflicting node selection while preserving workflow-specific viewport gestures.
