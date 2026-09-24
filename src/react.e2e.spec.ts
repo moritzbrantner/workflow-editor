@@ -782,14 +782,28 @@ test.describe("WorkflowWorkbench desktop", () => {
       .locator('[data-slot="workflow-builder-node"][data-node-id="transform"]:visible')
       .first()
       .boundingBox();
+    const surfaceBox = await page
+      .locator('[data-slot="workflow-builder-surface"]:visible')
+      .first()
+      .boundingBox();
     expect(inputBox).not.toBeNull();
     expect(transformBox).not.toBeNull();
-    const startX = Math.min(inputBox!.x, transformBox!.x) - 16;
+    expect(surfaceBox).not.toBeNull();
+
+    const startX =
+      Math.max(inputBox!.x + inputBox!.width, transformBox!.x + transformBox!.width) + 16;
     const startY =
       Math.max(inputBox!.y + inputBox!.height, transformBox!.y + transformBox!.height) + 16;
-    const endX =
-      Math.max(inputBox!.x + inputBox!.width, transformBox!.x + transformBox!.width) - 64;
-    const endY = Math.min(inputBox!.y, transformBox!.y) - 16;
+    const endX = Math.max(
+      surfaceBox!.x + 4,
+      Math.min(inputBox!.x, transformBox!.x) - 8,
+    );
+    const endY = Math.max(
+      surfaceBox!.y + 4,
+      Math.min(inputBox!.y, transformBox!.y) - 8,
+    );
+    expect(startX).toBeLessThan(surfaceBox!.x + surfaceBox!.width);
+    expect(startY).toBeLessThan(surfaceBox!.y + surfaceBox!.height);
 
     const viewportBeforeMarquee = (await readDocument(page)).viewport ?? { x: 0, y: 0, zoom: 1 };
     await page.keyboard.down("Shift");
@@ -832,13 +846,8 @@ test.describe("WorkflowWorkbench desktop", () => {
     expect(interactionBounds!.left).toBeGreaterThan(4);
     expect(interactionBounds!.top).toBeGreaterThan(4);
 
-    const outsideStartX =
-      Math.max(inputBox!.x + inputBox!.width, transformBox!.x + transformBox!.width) + 16;
-    const outsideStartY =
-      Math.max(inputBox!.y + inputBox!.height, transformBox!.y + transformBox!.height) + 16;
-
     await page.keyboard.down("Shift");
-    await page.mouse.move(outsideStartX, outsideStartY);
+    await page.mouse.move(startX, startY);
     await page.mouse.down();
     await page.mouse.move(interactionBounds!.left - 4, interactionBounds!.top - 4, { steps: 6 });
     await expect(page.locator('[data-testid="selection-marquee"]:visible')).toHaveCount(1);
