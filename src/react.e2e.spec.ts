@@ -774,58 +774,51 @@ test.describe("WorkflowWorkbench desktop", () => {
       .click({ position: { x: 420, y: 420 } });
     await expect(page.getByTestId("selection-count").first()).toHaveText("0 selected");
 
-    const inputBox = await page
+    await page.evaluate(() => window.scrollTo(0, 0));
+
+    const input = page
       .locator('[data-slot="workflow-builder-node"][data-node-id="input"]:visible')
-      .first()
-      .boundingBox();
-    const transformBox = await page
+      .first();
+    const transform = page
       .locator('[data-slot="workflow-builder-node"][data-node-id="transform"]:visible')
+      .first();
+    const inputBox = await input.boundingBox();
+    const transformBox = await transform.boundingBox();
+    const surfaceBox = await page
+      .locator('[data-slot="workflow-builder-surface"]:visible')
       .first()
       .boundingBox();
     expect(inputBox).not.toBeNull();
     expect(transformBox).not.toBeNull();
-    const startX = Math.min(inputBox!.x, transformBox!.x) - 16;
+    expect(surfaceBox).not.toBeNull();
+
+    const startX =
+      Math.max(inputBox!.x + inputBox!.width, transformBox!.x + transformBox!.width) + 16;
     const startY =
       Math.max(inputBox!.y + inputBox!.height, transformBox!.y + transformBox!.height) + 16;
-    const endX =
-      Math.max(inputBox!.x + inputBox!.width, transformBox!.x + transformBox!.width) - 64;
-    const endY = Math.min(inputBox!.y, transformBox!.y) - 16;
+    const endX = Math.max(surfaceBox!.x + 4, Math.min(inputBox!.x, transformBox!.x) - 8);
+    const endY = Math.max(surfaceBox!.y + 4, Math.min(inputBox!.y, transformBox!.y) - 8);
+    expect(startX).toBeLessThan(surfaceBox!.x + surfaceBox!.width);
+    expect(startY).toBeLessThan(surfaceBox!.y + surfaceBox!.height);
 
-    const viewport = page.locator('[data-slot="workflow-builder-viewport"]:visible').first();
-    await viewport.dispatchEvent("pointerdown", {
-      bubbles: true,
-      button: 0,
-      buttons: 1,
-      clientX: startX,
-      clientY: startY,
-      pointerId: 1,
-      pointerType: "mouse",
-      shiftKey: true,
-    });
-    await viewport.dispatchEvent("pointermove", {
-      bubbles: true,
-      button: 0,
-      buttons: 1,
-      clientX: endX,
-      clientY: endY,
-      pointerId: 1,
-      pointerType: "mouse",
-      shiftKey: true,
-    });
-    await viewport.dispatchEvent("pointerup", {
-      bubbles: true,
-      button: 0,
-      buttons: 0,
-      clientX: endX,
-      clientY: endY,
-      pointerId: 1,
-      pointerType: "mouse",
-      shiftKey: true,
-    });
+    const viewportBeforeMarquee = (await readDocument(page)).viewport ?? { x: 0, y: 0, zoom: 1 };
+    await page.keyboard.down("Shift");
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    await page.mouse.move(endX, endY, { steps: 4 });
 
-    await expect(page.getByTestId("selection-count").filter({ visible: true }).first()).toHaveText(
-      "2 selected",
+    await expect(page.locator('[data-slot="workflow-builder-marquee"]:visible')).toHaveCount(1);
+    await expect(page.locator('[data-testid="selection-marquee"]:visible')).toHaveCount(0);
+    expect((await readDocument(page)).viewport ?? { x: 0, y: 0, zoom: 1 }).toEqual(
+      viewportBeforeMarquee,
     );
+
+    await page.mouse.up();
+    await page.keyboard.up("Shift");
+
+    await expect(page.locator('[data-slot="workflow-builder-marquee"]:visible')).toHaveCount(0);
+    await expect(input).toHaveAttribute("data-selected", "true");
+    await expect(transform).toHaveAttribute("data-selected", "true");
   });
 
   test("selects edges, edits edge status, and deletes only the selected edge", async ({
