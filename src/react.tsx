@@ -2783,6 +2783,9 @@ export function WorkflowWorkbench<
               readOnly={readOnly}
               showMiniMap
               showPortColumnHeaders={false}
+              enableMarqueeSelection={false}
+              enablePan={false}
+              enableWheelZoom={false}
               measurePorts="dom"
               surfaceHeight="auto"
               minZoom={workflowEditorMinZoom}
