@@ -1,5 +1,12 @@
 # @moritzbrantner/workflow-editor
 
+## Unreleased
+
+### Patch Changes
+
+- Build the package in a `prepare` script so consumers can install it as a commit-pinned git dependency (`git+https://github.com/moritzbrantner/workflow-editor.git#<sha>` listed in `trustedDependencies`).
+- Retire npm publishing: remove the changesets Release workflow and its `NPM_TOKEN` use. Version 0.2.0 was never published to npm; releases are commits on `main`.
+
 ## 0.2.0
 
 ### Minor Changes
