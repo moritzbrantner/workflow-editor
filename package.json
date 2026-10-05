@@ -72,8 +72,6 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.11.3",
-    "@changesets/changelog-github": "^0.6.0",
-    "@changesets/cli": "^2.29.7",
     "@microsoft/api-extractor": "^7.58.7",
     "@playwright/test": "^1.62.1",
     "@storybook/addon-docs": "10.4.1",
@@ -97,10 +95,6 @@
     "vite": "^8.0.14",
     "vitest": "^4.1.2"
   },
-  "publishConfig": {
-    "registry": "https://registry.npmjs.org",
-    "access": "public"
-  },
   "tsd": {
     "directory": "test-d",
     "compilerOptions": {
@@ -112,7 +106,6 @@
   },
   "scripts": {
     "build": "tsup src/index.ts src/core.ts src/compiler.ts src/cardinality.ts src/react.tsx src/editor.tsx src/history.ts src/layout.ts src/persistence.ts src/share.ts --format esm --dts --clean --out-dir dist",
-    "changeset": "changeset",
     "dev": "vite --host 127.0.0.1 --port 5173 --config examples/workbench/vite.config.ts",
     "dev:source": "bun run source:prepare && bun run dev",
     "example": "vite --host 127.0.0.1 --port 5173 --config examples/workbench/vite.config.ts",
@@ -125,6 +118,8 @@
     "format:check": "oxfmt --check",
     "lint": "oxlint --format=github",
     "prepack": "bun run build",
+    "prepare": "bun ./scripts/prepare-git-install.ts",
+    "verify:git-install": "bun ./scripts/verify-git-install.ts",
     "check-types": "tsc --noEmit",
     "check-types:tests": "tsc --noEmit -p tsconfig.test.json",
     "api:extract": "bun run build && api-extractor run --local",

@@ -8,8 +8,8 @@ Use Bun `1.3.14`.
 bun install --frozen-lockfile
 ```
 
-Local development may resolve sibling package source through Vite/Vitest aliases, but published
-package dependencies must use npm semver ranges.
+Local development may resolve sibling package source through Vite/Vitest aliases, but package
+dependencies must use installable semver ranges.
 
 ## Common Commands
 
@@ -30,6 +30,7 @@ bun run types:public
 bun run smoke:package
 bun run smoke:packed-consumer
 bun run pack:check
+bun run verify:git-install
 ```
 
 Run the full local gate with:
@@ -46,16 +47,11 @@ WORKFLOW_EDITOR_TEST_WORKERS=2 bun run test
 WORKFLOW_EDITOR_PLAYWRIGHT_WORKERS=2 bun run test:playwright
 ```
 
-## Changesets
+## Changelog and Releases
 
-Add a changeset for user-visible package changes:
-
-```sh
-bun run changeset
-```
-
-Use `patch` for fixes, docs that affect package consumers, metadata, and internal refactors. Use
-`minor` for additive public API or new user-facing behavior.
+The package is not published to npm; consumers pin a commit from `main` as a git dependency, and
+the `prepare` script builds `dist` during that install. Record user-visible package changes in
+`CHANGELOG.md` under `Unreleased`.
 
 ## Generated Files
 

@@ -162,7 +162,7 @@ export default defineConfig({
   process.stdout.write("Packed consumer smoke test passed.\n");
 } catch (error) {
   process.stderr.write(
-    `Packed consumer smoke test failed. If the failure is an install error for @moritzbrantner/graph-editor, publish @moritzbrantner/editor-core and @moritzbrantner/graph-editor before publishing this package.\n`,
+    `Packed consumer smoke test failed. If the failure is an install error for @moritzbrantner/graph-editor, check that the graph-editor and editor-core ranges in package.json resolve from the registry.\n`,
   );
   throw error;
 } finally {

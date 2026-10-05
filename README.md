@@ -7,9 +7,20 @@ Typed DAG workflow document utilities and a controlled React editor shell built 
 
 ## Install
 
-```sh
-bun add @moritzbrantner/workflow-editor
+The package is not published to npm. Install it as a commit-pinned git
+dependency and trust it so its `prepare` script can build `dist`:
+
+```json
+{
+  "dependencies": {
+    "@moritzbrantner/workflow-editor": "git+https://github.com/moritzbrantner/workflow-editor.git#<commit-sha>"
+  },
+  "trustedDependencies": ["@moritzbrantner/workflow-editor"]
+}
 ```
+
+Pin a commit from `main`; bump the SHA to upgrade. `bun run verify:git-install` checks this
+install path for the current (pushed) commit.
 
 The React workbench expects `react` as a peer dependency. Generic graph primitives,
 layout, runtime operations, commands, and canvas behavior come from
@@ -290,8 +301,8 @@ cover. Root config files remain at the repository root because they configure th
 tooling.
 
 Local development may use sibling source aliases for related packages in Vite and Vitest configs,
-but published package dependencies must use npm semver ranges so packed installs work in clean
-consumer projects.
+but package dependencies must use installable semver ranges so packed and git installs work in
+clean consumer projects.
 
 Coverage gates are intentionally modest starting thresholds: 70% lines/functions/statements and
 62% branches. Raise them as focused tests land for lower-coverage UI chrome and keyboard flows.

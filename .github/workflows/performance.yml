@@ -25,5 +25,3 @@ jobs:
       benchmark_command: bun run bench
       artifact_paths: benchmark-results
       timeout_minutes: 30
-    secrets:
-      GH_PACKAGES_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN }}

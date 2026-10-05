@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-Before `1.0`, only the latest published minor version is supported for security fixes.
+Before `1.0`, only the latest commit on `main` is supported for security fixes.
 
 ## Reporting A Vulnerability
 
