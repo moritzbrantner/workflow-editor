@@ -42,11 +42,36 @@ export function propagateWorkflowEditorTypes<TNodeData, TEdgeData>(
       node.kind === "json.array" ||
       node.kind === "json.object" ||
       node.kind === "json.object.decompose";
+    const decomposition = node.kind === "json.object.decompose";
+    const connectedObject = incoming.has(JSON.stringify([id, "object"]));
+    const constructorNode = decomposition
+      ? {
+          ...node,
+          outputs: node.outputs?.map((port) => {
+            if (port.metadata?.objectDecompositionRole !== "property") {
+              return port;
+            }
+            const base = (port.metadata.workflowTypeInferenceBase ??
+              port.type) as WorkflowEditorPortType;
+            return {
+              ...port,
+              type: connectedObject ? port.type : base,
+              metadata: { ...port.metadata, workflowTypeInferenceBase: base },
+            };
+          }),
+        }
+      : node;
     const effectiveNode =
       constructor && synchronizeConstructor
         ? synchronizeConstructor({
-            ...node,
-            inputs: node.inputs?.map((port) => ({ ...port, type: inputType(port.id) })),
+            ...constructorNode,
+            inputs: node.inputs?.map((port) => ({
+              ...port,
+              type: inputType(port.id),
+              ...(decomposition
+                ? { metadata: { ...port.metadata, workflowResolvedType: inputType(port.id) } }
+                : {}),
+            })),
           })
         : node;
     const outputs = effectiveNode.outputs?.map((port) => {
@@ -64,7 +89,25 @@ export function propagateWorkflowEditorTypes<TNodeData, TEdgeData>(
             } as const);
       return { ...port, type };
     });
-    nodes.set(id, { ...effectiveNode, ...(outputs ? { outputs } : {}) });
+    nodes.set(id, {
+      ...effectiveNode,
+      ...(decomposition && node.inputs
+        ? {
+            inputs: node.inputs.map((port) => {
+              const { workflowResolvedType: _resolved, ...metadata } = port.metadata ?? {};
+              return Object.assign({}, port, {
+                metadata: {
+                  ...metadata,
+                  ...(incoming.has(JSON.stringify([id, port.id]))
+                    ? { workflowResolvedType: inputType(port.id) }
+                    : {}),
+                },
+              });
+            }),
+          }
+        : {}),
+      ...(outputs ? { outputs } : {}),
+    });
     visiting.delete(id);
     visited.add(id);
   };

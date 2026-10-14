@@ -58,6 +58,7 @@ import {
   connectWorkflowEditorNodes,
   defaultWorkflowEditorNodeTemplates,
   normalizeWorkflowEditorDocument,
+  removeWorkflowEditorEdge,
   addWorkflowEditorObjectDecompositionOutputToNode,
   validateWorkflowEditorConnection,
   validateWorkflowEditorDocument,
@@ -553,10 +554,9 @@ test.each(["Record<string, number>", "{ [key: string]: number }"])(
 );
 
 test("propagates opaque node and port identifiers without composite-key collisions", () => {
-  const sources = ["string", "number"].map((type, index) => ({
-    ...documentWithTypes(type, "unknown").nodes[0]!,
-    id: `source-${index}`,
-  }));
+  const sources = ["string", "number"].map((type, index) =>
+    Object.assign({}, documentWithTypes(type, "unknown").nodes[0]!, { id: `source-${index}` }),
+  );
   const branches = [
     ["a:b", "c"],
     ["a", "b:c"],
@@ -605,4 +605,67 @@ test("propagates opaque node and port identifiers without composite-key collisio
   expect(compiled.nodes.find((node) => node.id === "a")!.outputs![0]!.type).toEqual(
     native("number"),
   );
+});
+
+test("decomposition preserves its input contract and resets inferred outputs on disconnect", () => {
+  const template = defaultWorkflowEditorNodeTemplates.find(
+    (node) => node.kind === "json.object.decompose",
+  )!;
+  const decompose = addWorkflowEditorObjectDecompositionOutputToNode(
+    { ...template, id: "decompose", x: 100, y: 0 },
+    { portId: "id", propertyKey: "id" },
+  );
+  const original = documentWithTypes("{ id: string }", "unknown");
+  original.nodes = [original.nodes[0]!, decompose];
+  const incoming = {
+    sourceNodeId: "source",
+    sourcePortId: "out",
+    targetNodeId: "decompose",
+    targetPortId: "object",
+  };
+  const connected = connectWorkflowEditorNodes(original, incoming);
+  const node = (document: WorkflowEditorDocument) =>
+    document.nodes.find((node) => node.id === "decompose")!;
+  expect(node(connected).inputs!.find((port) => port.id === "object")!.type).toEqual({
+    kind: "object",
+  });
+  expect(node(connected).outputs!.find((port) => port.id === "id")!.type).toEqual({
+    kind: "string",
+  });
+  const reopened = restoreWorkflowEditorDocumentFile(
+    buildWorkflowEditorDocumentFile(connected),
+  ).document;
+  const detached = removeWorkflowEditorEdge(reopened, reopened.edges[0]!.id);
+  expect(node(detached).outputs!.find((port) => port.id === "id")!.type).toEqual({ kind: "any" });
+  expect(
+    compileWorkflowEditorDocument(detached)
+      .nodes.find((node) => node.id === "decompose")!
+      .outputs!.find((port) => port.id === "id")!.type,
+  ).toEqual({ kind: "any" });
+  const changed = {
+    ...detached,
+    nodes: detached.nodes.map((node) =>
+      node.id === "source"
+        ? Object.assign({}, node, {
+            outputs: [{ id: "out", label: "Out", type: native("{ id: number }") }],
+          })
+        : node,
+    ),
+  };
+  expect(validateWorkflowEditorConnection(changed, incoming).valid).toBe(true);
+  expect(
+    node(connectWorkflowEditorNodes(changed, incoming)).outputs!.find((port) => port.id === "id")!
+      .type,
+  ).toEqual({ kind: "number" });
+});
+
+test("connection diagnostics display authored types rather than synthetic checker aliases", () => {
+  const errors = createWorkflowEditorTypeResolver().compatibilityErrors(
+    native("{ id: number }"),
+    native("{ id: string }"),
+  );
+  expect(errors).not.toHaveLength(0);
+  expect(errors.join(" ")).toContain("number");
+  expect(errors.join(" ")).toContain("string");
+  expect(errors.join(" ")).not.toContain("__WorkflowCheck");
 });

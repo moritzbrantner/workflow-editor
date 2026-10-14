@@ -178,7 +178,17 @@ export function createWorkflowEditorTypeResolver(
         code += `declare const __WorkflowCheckInput_${index}_${propertyIndex}: ${alias}; const ${name} = __WorkflowCheckInput_${index}_${propertyIndex}[${JSON.stringify(propertyKey)}];\n`;
         return { propertyKey, name, start, end: code.length };
       });
-      return { key, alias, start, end, accesses, properties: request.target === undefined };
+      return {
+        key,
+        alias,
+        start,
+        end,
+        accesses,
+        source: request.source,
+        target: request.target,
+        targetAlias: `__WorkflowCheckTarget_${index}`,
+        properties: request.target === undefined,
+      };
     });
     const sourceFile = ts.createSourceFile(fileName, code, ts.ScriptTarget.Latest, true);
     const host: ts.CompilerHost = {
@@ -237,7 +247,12 @@ export function createWorkflowEditorTypeResolver(
                 diagnostic.start >= segment.start &&
                 diagnostic.start < segment.end,
             ),
-          ].map(formatDiagnostic),
+          ].map((diagnostic) => {
+            const message = formatDiagnostic(diagnostic).replaceAll(segment.alias, segment.source);
+            return segment.target === undefined
+              ? message
+              : message.replaceAll(segment.targetAlias, segment.target);
+          }),
         ),
       ];
       const alias = aliases.get(segment.alias);

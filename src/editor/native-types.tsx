@@ -134,7 +134,9 @@ function NativePortType<
 }) {
   const [draft, setDraft] = useState(workflowEditorPortTypeSource(port.type));
   const [error, setError] = useState("");
-  const inferred = Boolean(port.metadata?.workflowTypeInference);
+  const inferred = Boolean(
+    port.metadata?.workflowTypeInference || port.metadata?.workflowTypeInferenceBase,
+  );
   const commit = () => {
     const type = { kind: "typescript", source: draft } as const;
     const errors = createWorkflowEditorTypeResolver(

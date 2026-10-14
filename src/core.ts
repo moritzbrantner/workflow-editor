@@ -359,7 +359,25 @@ function synchronizeWorkflowEditorConstructorTypes<TNodeData>(
     });
   }
   if (isWorkflowEditorObjectDecompositionNode(node)) {
-    return syncWorkflowEditorObjectDecompositionNode(node, declarations, definitions);
+    const input = node.inputs?.find(isWorkflowEditorObjectDecompositionObjectInput);
+    const resolved =
+      input &&
+      createWorkflowEditorTypeResolver(definitions, declarations).findResolutionErrors(input.type)
+        .length === 0;
+    return syncWorkflowEditorObjectDecompositionNode(
+      resolved
+        ? {
+            ...node,
+            outputs: node.outputs?.map((port) => ({
+              ...port,
+              type: (port.metadata?.workflowTypeInferenceBase ??
+                port.type) as WorkflowEditorPortType,
+            })),
+          }
+        : node,
+      declarations,
+      definitions,
+    );
   }
   return node;
 }
@@ -1347,6 +1365,10 @@ export function addWorkflowEditorObjectDecompositionOutputToNode<
     propertyKey,
     type: getWorkflowEditorObjectDecompositionPropertyType(syncedNode, propertyKey) ?? options.type,
   });
+  port.metadata = {
+    ...port.metadata,
+    workflowTypeInferenceBase: options.type ?? { kind: "any" },
+  };
   const addOutput = outputs.find(isWorkflowEditorObjectDecompositionAddOutput);
   const propertyOutputs = outputs.filter(
     (output) => !isWorkflowEditorObjectDecompositionAddOutput(output),
@@ -2625,40 +2647,12 @@ function syncWorkflowEditorObjectConstructorNodes<
   });
 }
 
-function syncWorkflowEditorObjectDecompositionNodes<
-  TNodeData = Record<string, unknown>,
-  TEdgeData = Record<string, unknown>,
->(nodes: Array<WorkflowEditorNode<TNodeData>>, edges: Array<WorkflowEditorEdge<TEdgeData>>) {
-  const context = createWorkflowEditorDocumentContext({ nodes, edges });
-
-  return nodes.map((node) => {
-    if (!isWorkflowEditorObjectDecompositionNode(node)) {
-      return node;
-    }
-
-    let nextNode = syncWorkflowEditorObjectDecompositionNode(node);
-    const objectInput = nextNode.inputs?.find(isWorkflowEditorObjectDecompositionObjectInput);
-    const incomingEdge = objectInput
-      ? context.getIncomingEdgeToPort(nextNode.id, objectInput.id)
-      : undefined;
-    const sourceNode = incomingEdge ? context.nodeById.get(incomingEdge.sourceNodeId) : undefined;
-    const sourcePort = incomingEdge
-      ? context.getOutputPort(incomingEdge.sourceNodeId, incomingEdge.sourcePortId)
-      : undefined;
-
-    if (incomingEdge && sourceNode && sourcePort) {
-      nextNode = syncWorkflowEditorObjectDecompositionNode({
-        ...nextNode,
-        inputs: (nextNode.inputs ?? []).map((input) =>
-          input.id === objectInput?.id
-            ? Object.assign({}, input, { type: sourcePort.type })
-            : input,
-        ),
-      });
-    }
-
-    return nextNode;
-  });
+function syncWorkflowEditorObjectDecompositionNodes<TNodeData = Record<string, unknown>>(
+  nodes: Array<WorkflowEditorNode<TNodeData>>,
+) {
+  // Source-dependent property inference belongs to the shared projection. Persisting
+  // a source type here would overwrite the authored input contract before projection.
+  return nodes.map((node) => syncWorkflowEditorObjectDecompositionNode(node));
 }
 
 function syncWorkflowEditorArrayConstructorNode<TNodeData = Record<string, unknown>>(
@@ -3453,15 +3447,18 @@ function getWorkflowEditorObjectDecompositionPropertyType<TNodeData = Record<str
   const properties = createWorkflowEditorTypeResolver(
     typeDefinitions,
     typeDeclarations,
-  ).objectPropertiesFromType(objectInput.type, [
-    propertyKey,
-    ...getWorkflowEditorObjectDecompositionOutputs(node).map(
-      (output) =>
-        getWorkflowEditorObjectDecompositionProperty(node, output.id)?.key ??
-        output.label ??
-        output.id,
-    ),
-  ]);
+  ).objectPropertiesFromType(
+    (objectInput.metadata?.workflowResolvedType ?? objectInput.type) as WorkflowEditorPortType,
+    [
+      propertyKey,
+      ...getWorkflowEditorObjectDecompositionOutputs(node).map(
+        (output) =>
+          getWorkflowEditorObjectDecompositionProperty(node, output.id)?.key ??
+          output.label ??
+          output.id,
+      ),
+    ],
+  );
 
   return properties?.[propertyKey]?.type;
 }
