@@ -32,6 +32,10 @@ This is the repository-owned, feature-oriented source of **owner-approved produc
   Status: adopted 2026-10-14. Answers 1.4 (option C).  
   Nodes can declare **buffered** binary inputs/outputs for a complete payload (or a reference to it), and **streamed** binary inputs/outputs for incremental chunks. The port contracts visibly distinguish these modes alongside their TypeScript types and binary-format annotations (1.1, 1.3). Connections must respect both type compatibility and payload mode; converting between modes is explicit, not silent eager buffering or implicit stream consumption. Streaming execution supports bounded flow/backpressure rather than unbounded accumulation. The editor exposes and compiles these contracts; `workflow-runner` owns per-run chunk propagation and flow control, while `workflow-engine` owns dispatch/run-state and persistence boundaries. Engine run records must not start storing raw binary or live streams inside the existing JSON-safe state model. The user should be able to author and inspect either mode without needing an execution engine embedded in the editor.
 
+- **1.6** [question] **How should one streamed output feed multiple consumers?**  
+  Opened 2026-10-14.  
+  When a streaming output is connected to two or more downstream nodes, should users explicitly insert a fan-out/tee node that exposes the extra streams (A), or should ordinary multiple connections automatically broadcast the chunks with bounded backpressure for slow consumers (B)? Either way, do not silently turn an unbounded stream into a buffered value. This affects streamed DAG branching and the runner's flow-control contract.
+
 ## 2. Workflow graph and composition
 
 - **2.1 Use directed acyclic graphs for the initial execution-ready workflow model.**  
