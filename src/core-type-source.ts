@@ -23,11 +23,12 @@ export function workflowEditorPortTypeSource(type: WorkflowEditorPortType): stri
         .join("; ")} }`;
     case "union":
     case "intersection":
-      return type.types.length
-        ? type.types
-            .map((part) => `(${workflowEditorPortTypeSource(part)})`)
-            .join(type.kind === "union" ? " | " : " & ")
-        : "never";
+      if (type.types.length === 0) {
+        return type.kind === "union" ? "never" : "unknown";
+      }
+      return type.types
+        .map((part) => `(${workflowEditorPortTypeSource(part)})`)
+        .join(type.kind === "union" ? " | " : " & ");
     case "any":
     case "unknown":
     case "never":

@@ -172,6 +172,14 @@ describe("native type document contracts", () => {
       "Cannot find name 'Customer'",
     );
   });
+  test("empty legacy intersections do not become assignable never types", () => {
+    expect(
+      isWorkflowEditorPortTypeAssignable({ kind: "intersection", types: [] }, native("number")),
+    ).toBe(oracle("unknown", "number"));
+    expect(
+      isWorkflowEditorPortTypeAssignable(native("number"), { kind: "intersection", types: [] }),
+    ).toBe(oracle("number", "unknown"));
+  });
   test("user comments cannot suppress compatibility checking", () => {
     expect(
       validateWorkflowEditorConnection(
