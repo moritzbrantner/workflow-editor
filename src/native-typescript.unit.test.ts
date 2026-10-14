@@ -551,3 +551,58 @@ test.each(["Record<string, number>", "{ [key: string]: number }"])(
     ).toBeUndefined();
   },
 );
+
+test("propagates opaque node and port identifiers without composite-key collisions", () => {
+  const sources = ["string", "number"].map((type, index) => ({
+    ...documentWithTypes(type, "unknown").nodes[0]!,
+    id: `source-${index}`,
+  }));
+  const branches = [
+    ["a:b", "c"],
+    ["a", "b:c"],
+  ].map(([id, portId]) => ({
+    id: id!,
+    label: id!,
+    kind: "control.if",
+    x: 0,
+    y: 0,
+    inputs: [{ id: portId!, label: "Value", type: { kind: "any" } as const }],
+    outputs: [
+      {
+        id: "out",
+        label: "Out",
+        type: { kind: "any" } as const,
+        metadata: { workflowTypeInference: portId },
+      },
+    ],
+  }));
+  const document = normalizeWorkflowEditorDocument({
+    nodes: [...sources, ...branches, documentWithTypes("unknown", "number").nodes[1]!],
+    edges: branches.map((node, index) => ({
+      id: `edge-${index}`,
+      sourceNodeId: sources[index]!.id,
+      sourcePortId: "out",
+      targetNodeId: node.id,
+      targetPortId: node.inputs[0]!.id,
+    })),
+  });
+  expect(document.nodes.find((node) => node.id === "a:b")!.outputs![0]!.type).toEqual(
+    native("string"),
+  );
+  expect(document.nodes.find((node) => node.id === "a")!.outputs![0]!.type).toEqual(
+    native("number"),
+  );
+  expect(
+    validateWorkflowEditorConnection(document, { ...connection, sourceNodeId: "a:b" }).valid,
+  ).toBe(false);
+  expect(
+    validateWorkflowEditorConnection(document, { ...connection, sourceNodeId: "a" }).valid,
+  ).toBe(true);
+  const compiled = compileWorkflowEditorDocument(document);
+  expect(compiled.nodes.find((node) => node.id === "a:b")!.outputs![0]!.type).toEqual(
+    native("string"),
+  );
+  expect(compiled.nodes.find((node) => node.id === "a")!.outputs![0]!.type).toEqual(
+    native("number"),
+  );
+});

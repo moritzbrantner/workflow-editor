@@ -12,7 +12,7 @@ export function propagateWorkflowEditorTypes<TNodeData, TEdgeData>(
 ): WorkflowEditorDocument<TNodeData, TEdgeData> {
   const nodes = new Map(document.nodes.map((node) => [node.id, node]));
   const incoming = new Map(
-    document.edges.map((edge) => [`${edge.targetNodeId}:${edge.targetPortId}`, edge]),
+    document.edges.map((edge) => [JSON.stringify([edge.targetNodeId, edge.targetPortId]), edge]),
   );
   const visited = new Set<string>();
   const visiting = new Set<string>();
@@ -26,7 +26,7 @@ export function propagateWorkflowEditorTypes<TNodeData, TEdgeData>(
     }
     visiting.add(id);
     const inputType = (portId: string): WorkflowEditorPortType => {
-      const edge = incoming.get(`${id}:${portId}`);
+      const edge = incoming.get(JSON.stringify([id, portId]));
       if (edge) {
         visit(edge.sourceNodeId);
         const source = nodes
