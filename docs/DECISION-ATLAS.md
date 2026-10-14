@@ -25,8 +25,12 @@ This is the repository-owned, feature-oriented source of **owner-approved produc
   Workflow ports can describe structured JSON-compatible values and binary data, including audio such as WAV. Users can see the declared TypeScript type and meaningful binary format/medium annotations. Binary values should not have to be converted into JSON arrays of bytes solely to pass between nodes. The editor describes these contracts; engine/runner data transport is a separate responsibility. Streaming semantics remain open in 1.4.
 
 - **1.4** [question] **How should binary values move between executing nodes?**  
-  Opened 2026-10-14.  
+  Resolved 2026-10-14 by 1.5.  
   Should version one carry complete binary values or references to them (A), support incremental streamed chunks with backpressure (B), or expose both buffered and streamed port modes (C)? The engine currently restricts persisted run inputs/results to JSON-safe values, so annotations alone cannot implement end-to-end binary execution.
+
+- **1.5 Support both buffered and streamed binary ports.**  
+  Status: adopted 2026-10-14. Answers 1.4 (option C).  
+  Nodes can declare **buffered** binary inputs/outputs for a complete payload (or a reference to it), and **streamed** binary inputs/outputs for incremental chunks. The port contracts visibly distinguish these modes alongside their TypeScript types and binary-format annotations (1.1, 1.3). Connections must respect both type compatibility and payload mode; converting between modes is explicit, not silent eager buffering or implicit stream consumption. Streaming execution supports bounded flow/backpressure rather than unbounded accumulation. The editor exposes and compiles these contracts; `workflow-runner` owns per-run chunk propagation and flow control, while `workflow-engine` owns dispatch/run-state and persistence boundaries. Engine run records must not start storing raw binary or live streams inside the existing JSON-safe state model. The user should be able to author and inspect either mode without needing an execution engine embedded in the editor.
 
 ## 2. Workflow graph and composition
 
