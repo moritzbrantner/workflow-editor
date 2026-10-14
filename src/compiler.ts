@@ -4,6 +4,7 @@ import type { WorkflowEditorCardinalityPort, WorkflowEditorPortCardinality } fro
 import {
   analyzeWorkflowEditorPortTypes,
   normalizeWorkflowEditorDocument,
+  resolveWorkflowEditorDocumentTypes,
   WorkflowEditorDocumentValidationError,
 } from "./core";
 import type {
@@ -209,7 +210,10 @@ export function compileWorkflowEditorDocument<
 ): CompiledWorkflow<TNodeData> {
   let normalized: WorkflowEditorDocument<TNodeData, TEdgeData>;
   try {
-    normalized = normalizeWorkflowEditorDocument(document, { mode: "strict" });
+    normalized = resolveWorkflowEditorDocumentTypes(
+      normalizeWorkflowEditorDocument(document, { mode: "strict" }),
+      options,
+    );
   } catch (error) {
     if (
       error instanceof WorkflowEditorDocumentValidationError &&

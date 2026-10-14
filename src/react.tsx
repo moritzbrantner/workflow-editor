@@ -5197,7 +5197,13 @@ function WorkflowPortConnectionMenu<
   const menuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const previousFocus = globalThis.document?.activeElement;
-    menuRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+    const element = menuRef.current;
+    if (element && globalThis.window) {
+      const bounds = element.getBoundingClientRect();
+      element.style.left = `${Math.max(8, Math.min(menu.x, window.innerWidth - bounds.width - 8))}px`;
+      element.style.top = `${Math.max(8, Math.min(menu.y, window.innerHeight - bounds.height - 8))}px`;
+      element.querySelector<HTMLButtonElement>("button")?.focus();
+    }
     return () => {
       if (previousFocus instanceof HTMLElement && previousFocus.isConnected) {
         previousFocus.focus();

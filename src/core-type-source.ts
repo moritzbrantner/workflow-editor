@@ -1,3 +1,4 @@
+import { workflowStandardTypeNames } from "./core-type-libraries";
 import ts from "typescript";
 import type { WorkflowEditorPortType, WorkflowEditorTypeDefinition } from "./core-types";
 
@@ -65,6 +66,7 @@ export function workflowEditorLegacyTypeName(name: string): string {
   );
   if (
     !name.startsWith("__Workflow") &&
+    !workflowStandardTypeNames.has(name) &&
     scanner.scan() === ts.SyntaxKind.Identifier &&
     scanner.getTokenText() === name &&
     scanner.scan() === ts.SyntaxKind.EndOfFileToken

@@ -1,5 +1,5 @@
 import ts from "typescript";
-import { workflowTypeLibraries } from "./core-type-libraries";
+import { workflowTypeLibraries, workflowTypeLibraryFiles } from "./core-type-libraries";
 import type {
   WorkflowEditorPortProperty,
   WorkflowEditorPortType,
@@ -21,12 +21,7 @@ export type WorkflowEditorTypeResolver = {
 };
 
 const librarySources = workflowTypeLibraries;
-const libraryFiles = new Map(
-  [...librarySources].map(([name, source]) => [
-    name,
-    ts.createSourceFile(name, source, ts.ScriptTarget.Latest, true),
-  ]),
-);
+const libraryFiles = workflowTypeLibraryFiles;
 const compilerOptions: ts.CompilerOptions = {
   strict: true,
   exactOptionalPropertyTypes: true,

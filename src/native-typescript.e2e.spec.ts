@@ -14,6 +14,10 @@ async function openMenu(page: Page, name: string) {
   await port.focus();
   await port.press("Shift+F10");
   await expect(page.getByRole("menu", { name: /Possible inputs/ })).toBeVisible();
+  const bounds = await page.getByRole("menu", { name: /Possible inputs/ }).boundingBox();
+  const viewport = page.viewportSize()!;
+  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(viewport.width);
+  expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(viewport.height);
 }
 async function connect(page: Page, source: string, target: string) {
   await openMenu(page, source);
@@ -96,6 +100,20 @@ test("authors native types, explains rejection, propagates branches, and reopens
   await page.getByRole("button", { name: "Types", exact: true }).click();
   const panel = page.getByRole("complementary", { name: "Workflow types", exact: true });
   await expect(panel).toContainText('Possible customer · Out: (Customer) | ("anonymous")');
+  await page.getByLabel("Output Value TypeScript type", { exact: true }).fill("number");
+  await page.getByLabel("Output Value TypeScript type", { exact: true }).press("Enter");
+  await expect(panel).toContainText('Possible customer · Out: (number) | ("anonymous")');
+  await expect
+    .poll(
+      async () =>
+        (await savedDocument(page))?.nodes.find((node: { id: string }) => node.id === "branch")
+          ?.outputs[0].type.source,
+    )
+    .toBe("number");
+  await page.getByLabel("Output Value TypeScript type", { exact: true }).fill("Customer");
+  await page.getByLabel("Output Value TypeScript type", { exact: true }).press("Enter");
+  await expect(panel).toContainText('Possible customer · Out: (Customer) | ("anonymous")');
+
   await expect.poll(async () => (await savedDocument(page))?.typeDeclarations).toBe(declarations);
   await page.screenshot({
     path: testInfo.outputPath("native-typescript-workbench.png"),

@@ -1,3 +1,4 @@
+import ts from "typescript";
 // The compiler's real standard-library declarations are bundled for offline browser checking.
 import library0 from "typescript/lib/lib.decorators.d.ts?raw";
 import library1 from "typescript/lib/lib.decorators.legacy.d.ts?raw";
@@ -127,3 +128,26 @@ export const workflowTypeLibraries = new Map([
   ["/lib.scripthost.d.ts", library61],
   ["/lib.webworker.importscripts.d.ts", library62],
 ]);
+
+export const workflowTypeLibraryFiles = new Map(
+  [...workflowTypeLibraries].map(([name, source]) => [
+    name,
+    ts.createSourceFile(name, source, ts.ScriptTarget.Latest, true),
+  ]),
+);
+export const workflowStandardTypeNames = new Set(
+  [...workflowTypeLibraryFiles.values()].flatMap((file) =>
+    file.statements.flatMap((statement) => {
+      if (
+        ts.isInterfaceDeclaration(statement) ||
+        ts.isTypeAliasDeclaration(statement) ||
+        ts.isClassDeclaration(statement) ||
+        ts.isEnumDeclaration(statement) ||
+        ts.isModuleDeclaration(statement)
+      ) {
+        return statement.name && ts.isIdentifier(statement.name) ? [statement.name.text] : [];
+      }
+      return [];
+    }),
+  ),
+);
