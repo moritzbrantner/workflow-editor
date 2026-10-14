@@ -40,6 +40,10 @@ This is the repository-owned, feature-oriented source of **owner-approved produc
   Status: adopted 2026-10-14. Answers 1.6 (option B).  
   One node output may connect directly to multiple compatible input ports on downstream nodes, like using the same variable or value in several expressions. **No explicit Tee/fan-out node is required.** A buffered value is produced once and made available to each connected downstream consumer; adding a connection does not independently re-execute the producing node. For streamed binary outputs, the runner automatically broadcasts the incremental chunks to each active downstream consumer with bounded backpressure and without silently discarding chunks, implicitly converting the stream to a whole buffered payload, or requiring a separate duplication node. Stream sharing must work with ordinary DAG branches and cancellations without unlimited memory growth. This is **one-output-to-many-input fan-out**, not a decision that unrelated outputs may automatically converge onto the *same input port*; that behavior remains governed by that input's explicitly declared cardinality and type. The editor owns connection authoring and serialized contracts; the runner owns actual value propagation, stream distribution, and resource lifecycle.
 
+- **1.8** [question] **How should multiple sources connect to one input port?**  
+  Opened 2026-10-14.  
+  When two node outputs are connected to a single downstream input, should the receiving node explicitly declare whether its input accepts one value or a collection of values (A, matching the current cardinality contract), or should adding a second connection automatically turn an ordinary input into a multi-value collection (B)? This is distinct from approved automatic one-output-to-many-consumer fan-out (1.7). The answer determines whether an input's TypeScript type remains fixed by its node definition or changes based on how many edges are connected.
+
 ## 2. Workflow graph and composition
 
 - **2.1 Use directed acyclic graphs for the initial execution-ready workflow model.**  
