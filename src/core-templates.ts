@@ -20,8 +20,18 @@ export const workflowEditorControlFlowNodeTemplates = [
       { id: "condition", label: "Condition", type: { kind: "boolean" } },
     ],
     outputs: [
-      { id: "true", label: "True", type: { kind: "any" } },
-      { id: "false", label: "False", type: { kind: "any" } },
+      {
+        id: "true",
+        label: "True",
+        type: { kind: "any" },
+        metadata: { workflowTypeInference: "value" },
+      },
+      {
+        id: "false",
+        label: "False",
+        type: { kind: "any" },
+        metadata: { workflowTypeInference: "value" },
+      },
     ],
   },
   {
@@ -35,8 +45,18 @@ export const workflowEditorControlFlowNodeTemplates = [
       { id: "case", label: "Case", type: { kind: "any" } },
     ],
     outputs: [
-      { id: "match", label: "Match", type: { kind: "any" } },
-      { id: "default", label: "Default", type: { kind: "any" } },
+      {
+        id: "match",
+        label: "Match",
+        type: { kind: "any" },
+        metadata: { workflowTypeInference: "value" },
+      },
+      {
+        id: "default",
+        label: "Default",
+        type: { kind: "any" },
+        metadata: { workflowTypeInference: "value" },
+      },
     ],
   },
   {
@@ -49,7 +69,14 @@ export const workflowEditorControlFlowNodeTemplates = [
       { id: "a", label: "A", type: { kind: "any" } },
       { id: "b", label: "B", type: { kind: "any" } },
     ],
-    outputs: [{ id: "out", label: "Out", type: { kind: "any" } }],
+    outputs: [
+      {
+        id: "out",
+        label: "Out",
+        type: { kind: "any" },
+        metadata: { workflowTypeInference: "a,b" },
+      },
+    ],
   },
   {
     id: "control-flow-end",
@@ -173,6 +200,7 @@ export const workflowEditorCollectionNodeTemplates = [
       {
         id: "items",
         label: "Filtered",
+        metadata: { workflowTypeInference: "items" },
         type: { kind: "array", element: { kind: "any" } },
       },
     ],
@@ -189,7 +217,14 @@ export const workflowEditorCollectionNodeTemplates = [
       { id: "initial", label: "Initial", type: { kind: "any" } },
       { id: "accumulator", label: "Accumulator", type: { kind: "any" } },
     ],
-    outputs: [{ id: "value", label: "Value", type: { kind: "any" } }],
+    outputs: [
+      {
+        id: "value",
+        label: "Value",
+        type: { kind: "any" },
+        metadata: { workflowTypeInference: "initial,accumulator" },
+      },
+    ],
     data: { reducer: "" },
   },
   {

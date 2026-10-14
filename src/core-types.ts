@@ -13,6 +13,7 @@ import type {
 } from "@moritzbrantner/graph-editor/core";
 
 export type WorkflowEditorPortType =
+  | { kind: "typescript"; source: string }
   | { kind: "any" }
   | { kind: "unknown" }
   | { kind: "never" }
@@ -106,6 +107,7 @@ export type WorkflowEditorTypeDefinition = {
 
 export type WorkflowEditorTypeValidationOptions = {
   typeDefinitions?: readonly WorkflowEditorTypeDefinition[];
+  typeDeclarations?: string;
 };
 
 export type WorkflowEditorTypeDiagnostic = {
@@ -166,11 +168,14 @@ export type WorkflowEditorDocument<
 > = Omit<GraphEditorDocument<TNodeData, TEdgeData, WorkflowEditorPortType>, "edges" | "nodes"> & {
   nodes: Array<WorkflowEditorNode<TNodeData>>;
   edges: Array<WorkflowEditorEdge<TEdgeData>>;
+  typeDeclarations?: string;
 };
 
 export type WorkflowEditorDocumentNormalizationMode = "strict" | "repair";
 
 export type WorkflowEditorDocumentDiagnosticCode =
+  | "invalid-port-type"
+  | "invalid-type-declarations"
   | "invalid-document"
   | "invalid-node"
   | "invalid-edge"
@@ -214,6 +219,7 @@ export type WorkflowEditorConnectionInvalidReason =
 export type WorkflowEditorConnectionValidity = {
   valid: boolean;
   reason?: WorkflowEditorConnectionInvalidReason;
+  message?: string;
 };
 
 export type WorkflowEditorSelection<

@@ -1,379 +1,202 @@
+import ts from "typescript";
+import { workflowTypeLibraries } from "./core-type-libraries";
 import type {
   WorkflowEditorPortProperty,
   WorkflowEditorPortType,
   WorkflowEditorTypeDefinition,
-} from "./core";
-
-type WorkflowEditorPortTypeAssignabilityState = {
-  definitions: Map<string, WorkflowEditorTypeDefinition>;
-  resolving: Set<string>;
-};
+} from "./core-types";
+import {
+  workflowEditorPortTypeSource,
+  workflowEditorTypeDefinitionsSource,
+} from "./core-type-source";
 
 export type WorkflowEditorTypeResolver = {
   isAssignable(source: WorkflowEditorPortType, target: WorkflowEditorPortType): boolean;
+  compatibilityErrors(source: WorkflowEditorPortType, target: WorkflowEditorPortType): string[];
   findResolutionErrors(type: WorkflowEditorPortType): string[];
   objectPropertiesFromType(
     type: WorkflowEditorPortType,
   ): Record<string, WorkflowEditorPortProperty> | null;
 };
 
+const librarySources = workflowTypeLibraries;
+const libraryFiles = new Map(
+  [...librarySources].map(([name, source]) => [
+    name,
+    ts.createSourceFile(name, source, ts.ScriptTarget.Latest, true),
+  ]),
+);
+const compilerOptions: ts.CompilerOptions = {
+  strict: true,
+  exactOptionalPropertyTypes: true,
+  noUncheckedIndexedAccess: true,
+  noEmit: true,
+  target: ts.ScriptTarget.ES2022,
+  types: [],
+  skipLibCheck: true,
+};
+type CheckedType = {
+  errors: string[];
+  properties: Record<string, WorkflowEditorPortProperty> | null;
+};
+const fileName = "/workflow.ts";
+
+// Bounded immutable-environment cache. Declaration edits change the key; no stale checker
+// can survive a changed catalog or document. Repeated pointer validation reuses results.
+const resolvers = new Map<string, WorkflowEditorTypeResolver>();
+
 export function createWorkflowEditorTypeResolver(
   typeDefinitions: readonly WorkflowEditorTypeDefinition[] = [],
+  typeDeclarations = "",
 ): WorkflowEditorTypeResolver {
-  const definitions = new Map(typeDefinitions.map((definition) => [definition.name, definition]));
+  const key = JSON.stringify([typeDefinitions, typeDeclarations]);
+  const existing = resolvers.get(key);
+  if (existing) {
+    return existing;
+  }
+  const declarations =
+    workflowEditorTypeDefinitionsSource(typeDefinitions) + "\n" + typeDeclarations;
+  const results = new Map<string, CheckedType>();
 
-  return {
-    isAssignable(source, target) {
-      return isWorkflowEditorPortTypeAssignableWithState(
-        source,
-        target,
-        {
-          definitions,
-          resolving: new Set(),
-        },
-        0,
+  function check(source: string, target?: string): CheckedType {
+    const resultKey = JSON.stringify([source, target]);
+    const cached = results.get(resultKey);
+    if (cached) {
+      return cached;
+    }
+    const code = `${declarations}\ntype __WorkflowSource = (${source});\n${target === undefined ? "" : `type __WorkflowTarget = (${target}); declare const __workflowValue: __WorkflowSource; const __workflowResult: __WorkflowTarget = __workflowValue;`}`;
+    const sourceFile = ts.createSourceFile(fileName, code, ts.ScriptTarget.Latest, true);
+    const declarationFile = ts.createSourceFile(
+      "/declarations.ts",
+      declarations,
+      ts.ScriptTarget.Latest,
+      true,
+    );
+    const invalidDeclaration = declarationFile.statements.some(
+      (statement) =>
+        (!ts.isTypeAliasDeclaration(statement) && !ts.isInterfaceDeclaration(statement)) ||
+        ("name" in statement &&
+          ts.isIdentifier(statement.name as ts.Node) &&
+          (statement.name as ts.Identifier).text.startsWith("__Workflow")),
+    );
+    const validExpression = (expression: string) => {
+      const parsed = ts.createSourceFile(
+        "/expression.ts",
+        `type __WorkflowCheck = (${expression});`,
+        ts.ScriptTarget.Latest,
+        true,
       );
-    },
-
-    findResolutionErrors(type) {
-      const errors: string[] = [];
-      collectWorkflowEditorPortTypeResolutionErrors(type, definitions, [], errors);
-      return errors;
-    },
-
-    objectPropertiesFromType(type) {
-      return workflowEditorObjectPropertiesFromType(
-        type,
-        {
-          definitions,
-          resolving: new Set(),
-        },
-        0,
+      return (
+        parsed.statements.length === 1 &&
+        ts.isTypeAliasDeclaration(parsed.statements[0]!) &&
+        parsed.statements[0]!.name.text === "__WorkflowCheck"
       );
-    },
-  };
-}
-
-export function workflowEditorObjectPropertiesFromType(
-  type: WorkflowEditorPortType,
-  state: WorkflowEditorPortTypeAssignabilityState,
-  depth: number,
-): Record<string, WorkflowEditorPortProperty> | null {
-  if (depth > 100) {
-    return null;
-  }
-
-  const resolvedType = resolveWorkflowEditorPortType(type, state);
-
-  if (!resolvedType) {
-    return null;
-  }
-
-  if (resolvedType !== type) {
-    return workflowEditorObjectPropertiesFromType(resolvedType, state, depth + 1);
-  }
-
-  if (type.kind === "object") {
-    return type.properties ?? {};
-  }
-
-  if (type.kind !== "intersection") {
-    return null;
-  }
-
-  let merged: Record<string, WorkflowEditorPortProperty> | null = null;
-
-  for (const intersectionType of type.types) {
-    const properties = workflowEditorObjectPropertiesFromType(intersectionType, state, depth + 1);
-
-    if (!properties) {
-      continue;
-    }
-
-    merged ??= {};
-
-    for (const [propertyName, property] of Object.entries(properties)) {
-      const existing = merged[propertyName];
-
-      merged[propertyName] = existing
-        ? {
-            optional: existing.optional && property.optional,
-            type: { kind: "intersection", types: [existing.type, property.type] },
-          }
-        : property;
-    }
-  }
-
-  return merged;
-}
-
-function isWorkflowEditorPortTypeAssignableWithState(
-  source: WorkflowEditorPortType,
-  target: WorkflowEditorPortType,
-  state: WorkflowEditorPortTypeAssignabilityState,
-  depth: number,
-): boolean {
-  if (depth > 100) {
-    return false;
-  }
-
-  const resolvedSource = resolveWorkflowEditorPortType(source, state);
-  const resolvedTarget = resolveWorkflowEditorPortType(target, state);
-
-  if (!resolvedSource || !resolvedTarget) {
-    return false;
-  }
-
-  if (resolvedSource !== source) {
-    return isWorkflowEditorPortTypeAssignableWithState(resolvedSource, target, state, depth + 1);
-  }
-
-  if (resolvedTarget !== target) {
-    return isWorkflowEditorPortTypeAssignableWithState(source, resolvedTarget, state, depth + 1);
-  }
-
-  if (source.kind === "any" || target.kind === "any") {
-    return true;
-  }
-
-  if (target.kind === "unknown" || source.kind === "never") {
-    return true;
-  }
-
-  if (source.kind === "unknown") {
-    return false;
-  }
-
-  if (target.kind === "never") {
-    return false;
-  }
-
-  if (target.kind === "union") {
-    return target.types.some((type) =>
-      isWorkflowEditorPortTypeAssignableWithState(source, type, state, depth + 1),
-    );
-  }
-
-  if (source.kind === "union") {
-    return source.types.every((type) =>
-      isWorkflowEditorPortTypeAssignableWithState(type, target, state, depth + 1),
-    );
-  }
-
-  if (target.kind === "intersection") {
-    return target.types.every((type) =>
-      isWorkflowEditorPortTypeAssignableWithState(source, type, state, depth + 1),
-    );
-  }
-
-  if (source.kind === "intersection" && target.kind !== "object") {
-    return source.types.some((type) =>
-      isWorkflowEditorPortTypeAssignableWithState(type, target, state, depth + 1),
-    );
-  }
-
-  if (source.kind === "literal") {
-    if (target.kind === "literal") {
-      return source.value === target.value;
-    }
-
-    return target.kind === workflowEditorPrimitiveKindForLiteral(source.value);
-  }
-
-  if (target.kind === "literal") {
-    return false;
-  }
-
-  if (isWorkflowEditorPrimitivePortTypeKind(source.kind)) {
-    return source.kind === target.kind;
-  }
-
-  if (source.kind === "array" && target.kind === "array") {
-    return isWorkflowEditorPortTypeAssignableWithState(
-      source.element,
-      target.element,
-      state,
-      depth + 1,
-    );
-  }
-
-  if (target.kind === "object") {
-    return isWorkflowEditorObjectPortTypeAssignable(source, target, state, depth + 1);
-  }
-
-  return false;
-}
-
-function resolveWorkflowEditorPortType(
-  type: WorkflowEditorPortType,
-  state: WorkflowEditorPortTypeAssignabilityState,
-): WorkflowEditorPortType | null {
-  if (type.kind !== "ref") {
-    return type;
-  }
-
-  if (state.resolving.has(type.name)) {
-    return null;
-  }
-
-  const definition = state.definitions.get(type.name);
-
-  if (!definition) {
-    return null;
-  }
-
-  state.resolving.add(type.name);
-
-  const parentTypes: WorkflowEditorPortType[] = [];
-
-  for (const parentName of definition.extends ?? []) {
-    const parentType = resolveWorkflowEditorPortType({ kind: "ref", name: parentName }, state);
-
-    if (!parentType) {
-      state.resolving.delete(type.name);
-      return null;
-    }
-
-    parentTypes.push(parentType);
-  }
-
-  state.resolving.delete(type.name);
-
-  if (parentTypes.length === 0) {
-    return definition.type;
-  }
-
-  return {
-    kind: "intersection",
-    types: [...parentTypes, definition.type],
-  };
-}
-
-function isWorkflowEditorObjectPortTypeAssignable(
-  source: WorkflowEditorPortType,
-  target: WorkflowEditorPortType,
-  state: WorkflowEditorPortTypeAssignabilityState,
-  depth: number,
-) {
-  const sourceProperties = workflowEditorObjectPropertiesFromType(source, state, depth);
-  const targetProperties = workflowEditorObjectPropertiesFromType(target, state, depth);
-
-  if (!sourceProperties || !targetProperties) {
-    return false;
-  }
-
-  for (const [propertyName, targetProperty] of Object.entries(targetProperties)) {
-    const sourceProperty = sourceProperties[propertyName];
-
-    if (!sourceProperty) {
-      if (targetProperty.optional) {
-        continue;
-      }
-
-      return false;
-    }
-
-    if (sourceProperty.optional && !targetProperty.optional) {
-      return false;
-    }
-
+    };
     if (
-      !isWorkflowEditorPortTypeAssignableWithState(
-        sourceProperty.type,
-        targetProperty.type,
-        state,
-        depth + 1,
-      )
+      invalidDeclaration ||
+      !validExpression(source) ||
+      (target !== undefined && !validExpression(target))
     ) {
-      return false;
+      return {
+        errors: [
+          "Workflow types accept only type/interface declarations and single TypeScript type expressions; imports and executable statements are not supported.",
+        ],
+        properties: null,
+      };
     }
+    const host: ts.CompilerHost = {
+      getSourceFile: (name) => (name === fileName ? sourceFile : libraryFiles.get(name)),
+      getDefaultLibFileName: () => "/lib.es2022.full.d.ts",
+      writeFile: () => {},
+      getCurrentDirectory: () => "/",
+      getDirectories: () => [],
+      fileExists: (name) => name === fileName || libraryFiles.has(name),
+      readFile: (name) => (name === fileName ? code : librarySources.get(name)),
+      getCanonicalFileName: (name) => name,
+      useCaseSensitiveFileNames: () => true,
+      getNewLine: () => "\n",
+    };
+    const program = ts.createProgram([fileName], compilerOptions, host);
+    const diagnostics = [
+      ...program.getSyntacticDiagnostics(sourceFile),
+      ...program.getSemanticDiagnostics(sourceFile),
+    ];
+    const errors = [
+      ...new Set(
+        diagnostics.map(
+          (diagnostic) =>
+            `TS${diagnostic.code}: ${ts.flattenDiagnosticMessageText(diagnostic.messageText, " ")}`,
+        ),
+      ),
+    ];
+    const checker = program.getTypeChecker();
+    const alias = sourceFile.statements.find(
+      (statement): statement is ts.TypeAliasDeclaration =>
+        ts.isTypeAliasDeclaration(statement) && statement.name.text === "__WorkflowSource",
+    );
+    const type = alias ? checker.getTypeFromTypeNode(alias.type) : undefined;
+    const properties =
+      errors.length ||
+      !type ||
+      !(type.flags & (ts.TypeFlags.Object | ts.TypeFlags.Intersection | ts.TypeFlags.Union))
+        ? null
+        : Object.fromEntries(
+            checker.getPropertiesOfType(type).map((symbol) => {
+              const declaration = symbol.valueDeclaration ?? symbol.declarations?.[0];
+              const propertyType = declaration
+                ? checker.getTypeOfSymbolAtLocation(symbol, declaration)
+                : checker.getDeclaredTypeOfSymbol(symbol);
+              return [
+                symbol.name,
+                {
+                  optional: Boolean(symbol.flags & ts.SymbolFlags.Optional),
+                  type: portTypeFromChecker(checker, propertyType),
+                },
+              ];
+            }),
+          );
+    const result = { errors, properties };
+    if (results.size >= 128) {
+      results.delete(results.keys().next().value!);
+    }
+    results.set(resultKey, result);
+    return result;
   }
-
-  return true;
+  const resolver: WorkflowEditorTypeResolver = {
+    isAssignable(source, target) {
+      return this.compatibilityErrors(source, target).length === 0;
+    },
+    compatibilityErrors(source, target) {
+      return check(workflowEditorPortTypeSource(source), workflowEditorPortTypeSource(target))
+        .errors;
+    },
+    findResolutionErrors(type) {
+      return check(workflowEditorPortTypeSource(type)).errors;
+    },
+    objectPropertiesFromType(type) {
+      return check(workflowEditorPortTypeSource(type)).properties;
+    },
+  };
+  if (resolvers.size >= 8) {
+    resolvers.delete(resolvers.keys().next().value!);
+  }
+  resolvers.set(key, resolver);
+  return resolver;
 }
 
-function collectWorkflowEditorPortTypeResolutionErrors(
-  type: WorkflowEditorPortType,
-  definitions: Map<string, WorkflowEditorTypeDefinition>,
-  stack: string[],
-  errors: string[],
-) {
-  switch (type.kind) {
-    case "array":
-      collectWorkflowEditorPortTypeResolutionErrors(type.element, definitions, stack, errors);
-      return;
-    case "object":
-      for (const property of Object.values(type.properties ?? {})) {
-        collectWorkflowEditorPortTypeResolutionErrors(property.type, definitions, stack, errors);
-      }
-      return;
-    case "union":
-    case "intersection":
-      for (const childType of type.types) {
-        collectWorkflowEditorPortTypeResolutionErrors(childType, definitions, stack, errors);
-      }
-      return;
-    case "ref": {
-      if (stack.includes(type.name)) {
-        errors.push(`Cyclic workflow port type reference: ${[...stack, type.name].join(" -> ")}`);
-        return;
-      }
-
-      const definition = definitions.get(type.name);
-
-      if (!definition) {
-        errors.push(`Missing workflow port type definition: ${type.name}`);
-        return;
-      }
-
-      const nextStack = [...stack, type.name];
-
-      for (const parentName of definition.extends ?? []) {
-        collectWorkflowEditorPortTypeResolutionErrors(
-          { kind: "ref", name: parentName },
-          definitions,
-          nextStack,
-          errors,
-        );
-      }
-
-      collectWorkflowEditorPortTypeResolutionErrors(
-        definition.type,
-        definitions,
-        nextStack,
-        errors,
-      );
-      return;
-    }
+function portTypeFromChecker(checker: ts.TypeChecker, type: ts.Type): WorkflowEditorPortType {
+  const source = checker.typeToString(type, undefined, ts.TypeFormatFlags.NoTruncation);
+  switch (source) {
+    case "any":
+    case "unknown":
+    case "never":
+    case "string":
+    case "number":
+    case "boolean":
+    case "null":
+    case "undefined":
+      return { kind: source };
     default:
-      return;
+      return { kind: "typescript", source };
   }
-}
-
-function isWorkflowEditorPrimitivePortTypeKind(kind: WorkflowEditorPortType["kind"]) {
-  return (
-    kind === "string" ||
-    kind === "number" ||
-    kind === "boolean" ||
-    kind === "null" ||
-    kind === "undefined"
-  );
-}
-
-function workflowEditorPrimitiveKindForLiteral(
-  value: string | number | boolean | null,
-): "string" | "number" | "boolean" | "null" {
-  if (value === null) {
-    return "null";
-  }
-
-  if (typeof value === "string") {
-    return "string";
-  }
-
-  if (typeof value === "number") {
-    return "number";
-  }
-
-  return "boolean";
 }

@@ -66,3 +66,8 @@ Do not commit generated build or test output:
 
 The API report in `etc/workflow-editor.api.md` is intentionally committed and must be updated when
 public declarations change.
+
+Restricted local containers may provide a compatible Chromium executable with
+`WORKFLOW_EDITOR_CHROMIUM_EXECUTABLE_PATH`. If the container cannot create Chromium's
+process sockets, set `WORKFLOW_EDITOR_CHROMIUM_SINGLE_PROCESS=1`. CI continues to use
+the Playwright-managed browser and normal multi-process launch.

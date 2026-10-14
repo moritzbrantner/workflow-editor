@@ -402,7 +402,7 @@ describe("workflow editor type-aware connections", () => {
         },
         { typeDefinitions },
       ),
-    ).toEqual({ valid: false, reason: "type-mismatch" });
+    ).toEqual(expect.objectContaining({ valid: false, reason: "type-mismatch" }));
     expect(
       validateWorkflowEditorConnection(document, {
         sourceNodeId: "admin-source",
@@ -410,7 +410,7 @@ describe("workflow editor type-aware connections", () => {
         targetNodeId: "user-target",
         targetPortId: "in",
       }),
-    ).toEqual({ valid: false, reason: "type-mismatch" });
+    ).toEqual(expect.objectContaining({ valid: false, reason: "type-mismatch" }));
   });
 
   test("connects only type-compatible ports and keeps incompatible documents unchanged", () => {
@@ -484,7 +484,8 @@ describe("workflow editor port type diagnostics", () => {
         sourcePortId: "out",
         targetNodeId: "target",
         targetPortId: "in",
-        message: "Output port source.out is not assignable to input port target.in",
+        message:
+          "Output port source.out is not assignable to input port target.in: TS2322: Type 'string' is not assignable to type 'number'.",
       },
     ]);
   });
@@ -513,7 +514,7 @@ describe("workflow editor port type diagnostics", () => {
       expect.objectContaining({
         type: "missing-type-definition",
         edgeId: "source-target",
-        message: "Missing workflow port type definition: Missing",
+        message: "TS2304: Cannot find name 'Missing'.",
       }),
     ]);
   });
@@ -539,11 +540,11 @@ describe("workflow editor port type diagnostics", () => {
       expect.arrayContaining([
         expect.objectContaining({
           type: "missing-type-definition",
-          message: "Cyclic workflow port type reference: A -> B -> A",
+          message: "TS2456: Type alias 'A' circularly references itself.",
         }),
         expect.objectContaining({
           type: "missing-type-definition",
-          message: "Cyclic workflow port type reference: Child -> Parent -> Child",
+          message: "TS2456: Type alias 'Child' circularly references itself.",
         }),
       ]),
     );

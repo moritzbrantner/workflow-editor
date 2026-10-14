@@ -25,6 +25,14 @@ export default defineConfig({
   use: {
     baseURL: "http://127.0.0.1:4174",
     trace: "on-first-retry",
+    launchOptions: {
+      ...(process.env.WORKFLOW_EDITOR_CHROMIUM_EXECUTABLE_PATH
+        ? { executablePath: process.env.WORKFLOW_EDITOR_CHROMIUM_EXECUTABLE_PATH }
+        : {}),
+      ...(process.env.WORKFLOW_EDITOR_CHROMIUM_SINGLE_PROCESS === "1"
+        ? { args: ["--single-process", "--no-zygote", "--disable-gpu"] }
+        : {}),
+    },
   },
   webServer: [
     {

@@ -1,5 +1,9 @@
 "use client";
 
+import { createWorkflowEditorTypeResolver } from "./core-type-resolver";
+import { NativeWorkflowTypes } from "./editor/native-types";
+import { workflowEditorPortTypeSource } from "./core-type-source";
+
 import { type ChangeEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -552,6 +556,7 @@ export function WorkflowEditor<
   renderCompactMenuActions,
   renderChrome,
 }: WorkflowEditorProps<TNodeData, TEdgeData, TTemplateData, TAppSettings>) {
+  const [showTypes, setShowTypes] = useState(false);
   const resolvedSettings = resolveWorkflowEditorSettings<TAppSettings>({
     compactControls: compactControlsProp,
     enableNestedWorkflows: enableNestedWorkflowsProp,
@@ -1524,34 +1529,67 @@ export function WorkflowEditor<
         </WorkbenchToolbar>
       ) : null}
 
-      <WorkflowWorkbench
-        document={activeDocument}
-        selectedNodeId={selectedNodeId}
-        selectedEdgeId={selectedEdgeId}
-        selectedNodeIds={normalizedSelection.nodeIds}
-        selectedEdgeIds={normalizedSelection.edgeIds}
-        selectedGroupIds={normalizedSelection.groupIds}
-        readOnly={readOnly}
-        nodeTemplates={nodeTemplates}
-        typeDefinitions={typeDefinitions}
-        documentReferences={documentReferenceOptions}
-        chrome={{
-          ...(chrome?.workbenchToolbar ? { toolbar: chrome.workbenchToolbar } : {}),
-          ...(chrome?.palette ? { palette: chrome.palette } : {}),
-          ...(chrome?.inspector ? { inspector: chrome.inspector } : {}),
-        }}
-        layout={layout}
-        onOpenWorkflowReference={canOpenNestedWorkflow ? openWorkflowReference : undefined}
-        onCreateWorkflowReference={canOpenNestedWorkflow ? createWorkflowReference : undefined}
-        onDocumentChange={updateDocument}
-        onSelectionChange={onSelectionChange}
-        onSelectionStateChange={(nextSelection) => setSelection(nextSelection)}
-        renderNodeTemplate={renderNodeTemplate}
-        renderInspector={renderInspector}
-        renderToolbarActions={renderToolbarActions}
-        showGraphStats={showWorkbenchStats}
-        showShortcutHint={!compactControls}
-      />
+      <div className="relative grid min-h-0 min-w-0">
+        <WorkflowWorkbench
+          document={activeDocument}
+          selectedNodeId={selectedNodeId}
+          selectedEdgeId={selectedEdgeId}
+          selectedNodeIds={normalizedSelection.nodeIds}
+          selectedEdgeIds={normalizedSelection.edgeIds}
+          selectedGroupIds={normalizedSelection.groupIds}
+          readOnly={readOnly}
+          nodeTemplates={nodeTemplates}
+          typeDefinitions={typeDefinitions}
+          documentReferences={documentReferenceOptions}
+          chrome={{
+            ...(chrome?.workbenchToolbar ? { toolbar: chrome.workbenchToolbar } : {}),
+            ...(chrome?.palette ? { palette: chrome.palette } : {}),
+            ...(chrome?.inspector ? { inspector: chrome.inspector } : {}),
+          }}
+          layout={layout}
+          onOpenWorkflowReference={canOpenNestedWorkflow ? openWorkflowReference : undefined}
+          onCreateWorkflowReference={canOpenNestedWorkflow ? createWorkflowReference : undefined}
+          onDocumentChange={updateDocument}
+          onSelectionChange={onSelectionChange}
+          onSelectionStateChange={(nextSelection) => setSelection(nextSelection)}
+          renderNodeTemplate={renderNodeTemplate}
+          renderInspector={renderInspector}
+          renderToolbarActions={(context) => (
+            <>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                aria-expanded={showTypes}
+                onClick={() => setShowTypes(!showTypes)}
+              >
+                Types
+              </Button>
+              {renderToolbarActions?.(context)}
+            </>
+          )}
+          showGraphStats={showWorkbenchStats}
+          showShortcutHint={!compactControls}
+        />
+        {showTypes ? (
+          <aside
+            aria-label="Workflow types"
+            className="absolute bottom-0 right-0 top-10 z-[21000] grid w-80 max-w-full content-start gap-3 overflow-auto rounded-md border border-border bg-card p-3 shadow-md"
+          >
+            <Button type="button" size="sm" variant="outline" onClick={() => setShowTypes(false)}>
+              Close types
+            </Button>
+            <NativeWorkflowTypes
+              key={`${activeEntry?.id}:${activeDocument.typeDeclarations ?? ""}`}
+              document={activeDocument}
+              definitions={typeDefinitions ?? []}
+              selectedNodeId={normalizedSelection.nodeIds[0]}
+              readOnly={readOnly}
+              onChange={updateDocument}
+            />
+          </aside>
+        ) : null}
+      </div>
     </section>
   );
 }
@@ -2302,6 +2340,14 @@ export function WorkflowEditorTypesPanel<
           Create
         </Button>
       </div>
+      <NativeWorkflowTypes
+        key={controller.activeEntry?.id}
+        document={controller.activeDocument}
+        definitions={controller.catalog.typeDefinitions}
+        selectedNodeId={controller.selection.nodeIds[0]}
+        readOnly={controller.readOnly}
+        onChange={controller.actions.updateActiveDocument}
+      />
       <SearchField
         value={search}
         onValueChange={setSearch}
@@ -2542,19 +2588,14 @@ function WorkflowEditorTypeDefinitionForm<
 }) {
   const [name, setName] = useState(definition.name);
   const [extendsDraft, setExtendsDraft] = useState((definition.extends ?? []).join(", "));
-  const [typeDraft, setTypeDraft] = useState(formatWorkflowEditorJsonDraft(definition.type));
+  const [typeDraft, setTypeDraft] = useState(workflowEditorPortTypeSource(definition.type));
   const [error, setError] = useState("");
   const disabled = !controller.catalog.writable.typeDefinitions;
 
   const commit = () => {
-    const parsed = parseWorkflowEditorJsonDraft(typeDraft, "type");
-    if (!parsed.ok) {
-      setError(parsed.message);
-      return;
-    }
     const next: WorkflowEditorTypeDefinition = {
       name: name.trim(),
-      type: parsed.value as WorkflowEditorTypeDefinition["type"],
+      type: { kind: "typescript", source: typeDraft },
       ...(extendsDraft.trim()
         ? {
             extends: extendsDraft
@@ -2593,7 +2634,7 @@ function WorkflowEditorTypeDefinitionForm<
         onChange={(event) => setExtendsDraft(event.target.value)}
       />
       <Textarea
-        aria-label="Type JSON"
+        aria-label="TypeScript type"
         className="min-h-32 font-mono text-xs"
         value={typeDraft}
         disabled={disabled}
@@ -2973,7 +3014,10 @@ function validateWorkflowEditorTypeDefinitionDraft(
     }
   }
 
-  return "";
+  const errors = createWorkflowEditorTypeResolver(
+    definitions.map((definition) => (definition.name === originalName ? next : definition)),
+  ).findResolutionErrors({ kind: "any" });
+  return errors[0] ?? "";
 }
 
 function validateWorkflowEditorNodeTemplateDraft<TTemplateData>(

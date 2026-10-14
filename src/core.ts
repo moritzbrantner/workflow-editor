@@ -1,3 +1,4 @@
+import { propagateWorkflowEditorTypes } from "./core-type-propagation";
 import {
   addGraphEditorEdge,
   addGraphEditorNode,
@@ -148,6 +149,7 @@ export type {
   WorkflowEditorViewport,
   WorkflowEditorWorkflowReference,
 } from "./core-types";
+export { workflowEditorPortTypeSource } from "./core-type-source";
 export {
   defaultWorkflowEditorNodeTemplates,
   workflowEditorCollectionNodeTemplates,
@@ -229,6 +231,10 @@ export function normalizeWorkflowEditorDocument<
   document: WorkflowEditorDocument<TNodeData, TEdgeData>,
   options: WorkflowEditorDocumentNormalizationOptions = {},
 ): WorkflowEditorDocument<TNodeData, TEdgeData> {
+  const typeShapeDiagnostics = workflowEditorTypeShapeDiagnostics(document);
+  if (typeShapeDiagnostics.length) {
+    throw new WorkflowEditorDocumentValidationError(typeShapeDiagnostics);
+  }
   const mode = options.mode ?? "strict";
   const graphNormalized = normalizeWorkflowEditorGraphDocument(document, {
     ...options,
@@ -259,29 +265,38 @@ export function normalizeWorkflowEditorDocument<
   );
   const { groups: _groups, ...documentWithoutGroups } = graphNormalized;
 
-  return {
-    ...documentWithoutGroups,
-    nodes,
-    edges,
-    ...(groups.length > 0 ? { groups } : {}),
-    viewport: document.viewport
-      ? {
-          x: Number.isFinite(document.viewport.x) ? document.viewport.x : 0,
-          y: Number.isFinite(document.viewport.y) ? document.viewport.y : 0,
-          zoom: clampZoom(document.viewport.zoom),
-        }
-      : undefined,
-  };
+  return propagateWorkflowEditorTypes(
+    {
+      ...documentWithoutGroups,
+      ...(document.typeDeclarations === undefined
+        ? {}
+        : { typeDeclarations: document.typeDeclarations }),
+      nodes,
+      edges,
+      ...(groups.length > 0 ? { groups } : {}),
+      viewport: document.viewport
+        ? {
+            x: Number.isFinite(document.viewport.x) ? document.viewport.x : 0,
+            y: Number.isFinite(document.viewport.y) ? document.viewport.y : 0,
+            zoom: clampZoom(document.viewport.zoom),
+          }
+        : undefined,
+    },
+    (node) => synchronizeWorkflowEditorConstructorTypes(node, document.typeDeclarations),
+  );
 }
 
 export function validateWorkflowEditorDocument(
   value: unknown,
   options: WorkflowEditorDocumentValidationOptions = {},
 ): WorkflowEditorDocumentDiagnostic[] {
-  return validateGraphEditorDocument(value, {
-    ...options,
-    allowCycles: options.allowCycles ?? false,
-  }) as WorkflowEditorDocumentDiagnostic[];
+  return [
+    ...validateGraphEditorDocument(value, {
+      ...options,
+      allowCycles: options.allowCycles ?? false,
+    }),
+    ...workflowEditorTypeShapeDiagnostics(value),
+  ] as WorkflowEditorDocumentDiagnostic[];
 }
 
 export function assertWorkflowEditorDocument<
@@ -296,6 +311,75 @@ export function assertWorkflowEditorDocument<
   if (diagnostics.length > 0) {
     throw new WorkflowEditorDocumentValidationError(diagnostics);
   }
+}
+
+function synchronizeWorkflowEditorConstructorTypes<TNodeData>(
+  node: WorkflowEditorNode<TNodeData>,
+  declarations?: string,
+): WorkflowEditorNode<TNodeData> {
+  if (isWorkflowEditorArrayConstructorNode(node)) {
+    return syncWorkflowEditorArrayConstructorNode(node);
+  }
+  if (isWorkflowEditorObjectConstructorNode(node)) {
+    const properties = readWorkflowEditorObjectConstructorProperties(node.data);
+    return syncWorkflowEditorObjectConstructorNode({
+      ...node,
+      data: {
+        ...(isRecord(node.data) ? node.data : {}),
+        schema: createWorkflowEditorObjectConstructorSchemaFromInputs(
+          node.inputs ?? [],
+          properties,
+          getWorkflowEditorObjectConstructorSchema(node),
+          properties,
+        ),
+      } as TNodeData,
+    });
+  }
+  if (isWorkflowEditorObjectDecompositionNode(node)) {
+    return syncWorkflowEditorObjectDecompositionNode(node, declarations);
+  }
+  return node;
+}
+
+function workflowEditorTypeShapeDiagnostics(value: unknown): WorkflowEditorDocumentDiagnostic[] {
+  if (!isRecord(value)) {
+    return [];
+  }
+  const diagnostics: WorkflowEditorDocumentDiagnostic[] = [];
+  if (value.typeDeclarations !== undefined && typeof value.typeDeclarations !== "string") {
+    diagnostics.push({
+      code: "invalid-type-declarations",
+      path: "typeDeclarations",
+      message: "Workflow TypeScript declarations must be a string.",
+    });
+  }
+  if (!Array.isArray(value.nodes)) {
+    return diagnostics;
+  }
+  for (const node of value.nodes) {
+    if (!isRecord(node)) {
+      continue;
+    }
+    for (const direction of ["inputs", "outputs"] as const) {
+      const ports = node[direction];
+      if (!Array.isArray(ports)) {
+        continue;
+      }
+      for (const port of ports) {
+        if (isRecord(port) && !isWorkflowEditorPortTypeLike(port.type)) {
+          diagnostics.push({
+            code: "invalid-port-type",
+            path: `nodes.${String(node.id)}.${direction}.${String(port.id)}.type`,
+            message: `Unsupported workflow port type at ${String(node.id)}.${String(port.id)}. Use a supported legacy record or { kind: "typescript", source: "..." }.`,
+          });
+        }
+      }
+    }
+    if (node.composition) {
+      diagnostics.push(...workflowEditorTypeShapeDiagnostics(node.composition));
+    }
+  }
+  return diagnostics;
 }
 
 export function createWorkflowEditorGraphIndex<
@@ -1744,12 +1828,21 @@ export function validateWorkflowEditorConnection<
   connection: WorkflowEditorConnectionInput,
   options: WorkflowEditorTypeValidationOptions = {},
 ): WorkflowEditorConnectionValidity {
+  document = propagateWorkflowEditorTypes(document, (node) =>
+    synchronizeWorkflowEditorConstructorTypes(
+      node,
+      options.typeDeclarations ?? document.typeDeclarations,
+    ),
+  );
   const context = createWorkflowEditorDocumentContext(document);
   const targetNode = context.nodeById.get(connection.targetNodeId);
   const targetPort = targetNode
     ? context.getInputPort(connection.targetNodeId, connection.targetPortId)
     : undefined;
-  const typeResolver = createWorkflowEditorTypeResolver(options.typeDefinitions);
+  const typeResolver = createWorkflowEditorTypeResolver(
+    options.typeDefinitions,
+    options.typeDeclarations ?? document.typeDeclarations,
+  );
   const expandsToNewTargetPort =
     !!targetNode &&
     !!targetPort &&
@@ -1773,7 +1866,11 @@ export function validateWorkflowEditorConnection<
           : (targetPort.type as WorkflowEditorPortType);
         return typeResolver.isAssignable(sourceType, targetType)
           ? true
-          : { valid: false, reason: "type-mismatch" };
+          : {
+              valid: false,
+              reason: "type-mismatch",
+              message: typeResolver.compatibilityErrors(sourceType, targetType).join(" "),
+            };
       },
     },
   );
@@ -1814,9 +1911,30 @@ export function analyzeWorkflowEditorPortTypes<
   document: WorkflowEditorDocument<TNodeData, TEdgeData>,
   options: WorkflowEditorTypeValidationOptions = {},
 ): WorkflowEditorTypeDiagnostic[] {
+  document = propagateWorkflowEditorTypes(document, (node) =>
+    synchronizeWorkflowEditorConstructorTypes(
+      node,
+      options.typeDeclarations ?? document.typeDeclarations,
+    ),
+  );
   const diagnostics: WorkflowEditorTypeDiagnostic[] = [];
   const context = createWorkflowEditorDocumentContext(document);
-  const typeResolver = createWorkflowEditorTypeResolver(options.typeDefinitions);
+  const typeResolver = createWorkflowEditorTypeResolver(
+    options.typeDefinitions,
+    options.typeDeclarations ?? document.typeDeclarations,
+  );
+
+  const declarationErrors = typeResolver.findResolutionErrors({ kind: "any" });
+  if (declarationErrors.length) {
+    return declarationErrors.map((message) => ({
+      type: "missing-type-definition",
+      sourceNodeId: "",
+      sourcePortId: "",
+      targetNodeId: "",
+      targetPortId: "",
+      message,
+    }));
+  }
 
   for (const edge of document.edges) {
     const sourceNode = context.nodeById.get(edge.sourceNodeId);
@@ -1857,11 +1975,35 @@ export function analyzeWorkflowEditorPortTypes<
         sourcePortId: edge.sourcePortId,
         targetNodeId: edge.targetNodeId,
         targetPortId: edge.targetPortId,
-        message: `Output port ${edge.sourceNodeId}.${edge.sourcePortId} is not assignable to input port ${edge.targetNodeId}.${edge.targetPortId}`,
+        message: `Output port ${edge.sourceNodeId}.${edge.sourcePortId} is not assignable to input port ${edge.targetNodeId}.${edge.targetPortId}: ${typeResolver.compatibilityErrors(sourcePort.type, targetPort.type).join(" ")}`,
       });
     }
   }
 
+  for (const node of document.nodes) {
+    for (const direction of ["inputs", "outputs"] as const) {
+      for (const port of node[direction] ?? []) {
+        const connected = document.edges.some((edge) =>
+          direction === "inputs"
+            ? edge.targetNodeId === node.id && edge.targetPortId === port.id
+            : edge.sourceNodeId === node.id && edge.sourcePortId === port.id,
+        );
+        if (connected) {
+          continue;
+        }
+        for (const message of typeResolver.findResolutionErrors(port.type)) {
+          diagnostics.push({
+            type: "missing-type-definition",
+            sourceNodeId: node.id,
+            sourcePortId: port.id,
+            targetNodeId: node.id,
+            targetPortId: port.id,
+            message,
+          });
+        }
+      }
+    }
+  }
   return diagnostics;
 }
 
@@ -2693,6 +2835,8 @@ function getWorkflowEditorPortTypeSignature(type: WorkflowEditorPortType): strin
       return `union:${type.types.map(getWorkflowEditorPortTypeSignature).join("|")}`;
     case "intersection":
       return `intersection:${type.types.map(getWorkflowEditorPortTypeSignature).join("&")}`;
+    case "typescript":
+      return `typescript:${type.source}`;
     case "ref":
       return `ref:${type.name}`;
     default:
@@ -3105,6 +3249,7 @@ function createWorkflowEditorObjectConstructorSource<TNodeData = Record<string, 
 
 function syncWorkflowEditorObjectDecompositionNode<TNodeData = Record<string, unknown>>(
   node: WorkflowEditorNode<TNodeData>,
+  typeDeclarations?: string,
 ): WorkflowEditorNode<TNodeData> {
   if (!isWorkflowEditorObjectDecompositionNode(node)) {
     return node;
@@ -3143,7 +3288,11 @@ function syncWorkflowEditorObjectDecompositionNode<TNodeData = Record<string, un
     return Object.assign({}, output, {
       label: propertyKey,
       badge: `object${formatWorkflowEditorObjectPropertyAccess(propertyKey)}`,
-      type: getWorkflowEditorObjectDecompositionPropertyType({ ...node, inputs }, propertyKey) ??
+      type: getWorkflowEditorObjectDecompositionPropertyType(
+        { ...node, inputs },
+        propertyKey,
+        typeDeclarations,
+      ) ??
         output.type ?? { kind: "any" },
       metadata: {
         ...(output.metadata ?? {}),
@@ -3262,6 +3411,7 @@ function readWorkflowEditorObjectDecompositionProperties(
 function getWorkflowEditorObjectDecompositionPropertyType<TNodeData = Record<string, unknown>>(
   node: WorkflowEditorNode<TNodeData>,
   propertyKey: string,
+  typeDeclarations?: string,
 ) {
   const objectInput = node.inputs?.find(isWorkflowEditorObjectDecompositionObjectInput);
 
@@ -3269,7 +3419,10 @@ function getWorkflowEditorObjectDecompositionPropertyType<TNodeData = Record<str
     return undefined;
   }
 
-  const properties = createWorkflowEditorTypeResolver().objectPropertiesFromType(objectInput.type);
+  const properties = createWorkflowEditorTypeResolver(
+    [],
+    typeDeclarations,
+  ).objectPropertiesFromType(objectInput.type);
 
   return properties?.[propertyKey]?.type;
 }
@@ -3610,6 +3763,8 @@ function isWorkflowEditorPortTypeLike(value: unknown, depth = 0): value is Workf
         Array.isArray(value.types) &&
         value.types.every((type) => isWorkflowEditorPortTypeLike(type, depth + 1))
       );
+    case "typescript":
+      return typeof value.source === "string" && value.source.trim() !== "";
     case "ref":
       return typeof value.name === "string" && value.name.trim() !== "";
     default:

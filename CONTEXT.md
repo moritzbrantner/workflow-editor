@@ -23,7 +23,7 @@ and Port Type compatibility allow them.
 _Avoid_: Link
 
 **Port Type**:
-A TypeScript-like compatibility contract assigned to ports. Port Types constrain valid Connections
+A TypeScript type contract assigned to ports, checked by the native compiler. Port Types constrain valid Connections
 but are not a runtime executor model or JSON Schema.
 _Avoid_: Runtime type, JSON schema
 
