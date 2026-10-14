@@ -318,6 +318,14 @@ export function resolveWorkflowEditorDocumentTypes<TNodeData, TEdgeData>(
   document: WorkflowEditorDocument<TNodeData, TEdgeData>,
   options: WorkflowEditorTypeValidationOptions = {},
 ): WorkflowEditorDocument<TNodeData, TEdgeData> {
+  createWorkflowEditorTypeResolver(
+    options.typeDefinitions,
+    options.typeDeclarations ?? document.typeDeclarations,
+  ).prepareChecks(
+    document.nodes.flatMap((node) =>
+      [...(node.inputs ?? []), ...(node.outputs ?? [])].map((port) => ({ source: port.type })),
+    ),
+  );
   return propagateWorkflowEditorTypes(document, (node) =>
     synchronizeWorkflowEditorConstructorTypes(
       node,
@@ -1934,6 +1942,15 @@ export function analyzeWorkflowEditorPortTypes<
     options.typeDefinitions,
     options.typeDeclarations ?? document.typeDeclarations,
   );
+
+  typeResolver.prepareChecks([
+    { source: { kind: "any" } },
+    ...document.edges.flatMap((edge) => {
+      const source = context.getOutputPort(edge.sourceNodeId, edge.sourcePortId);
+      const target = context.getInputPort(edge.targetNodeId, edge.targetPortId);
+      return source && target ? [{ source: source.type, target: target.type }] : [];
+    }),
+  ]);
 
   const declarationErrors = typeResolver.findResolutionErrors({ kind: "any" });
   if (declarationErrors.length) {

@@ -461,3 +461,25 @@ describe("native type document contracts", () => {
     expect(connectWorkflowEditorNodes(document, connection)).toBe(document);
   });
 });
+
+import { createWorkflowEditorTypeResolver } from "./core-type-resolver";
+
+test("batches a candidate matrix into one compiler build and reuses its results", () => {
+  const resolver = createWorkflowEditorTypeResolver([], "type BatchCustomer = { id: number };");
+  const checks = Array.from({ length: 40 }, (_, index) => ({
+    source: native("BatchCustomer"),
+    target: native(`{ id: number; field${index}?: string }`),
+  }));
+  const before = resolver.programBuildCount;
+  resolver.prepareChecks(checks);
+  expect(resolver.programBuildCount - before).toBe(1);
+  for (const check of checks) {
+    expect(resolver.isAssignable(check.source, check.target)).toBe(true);
+  }
+  resolver.prepareChecks(checks);
+  expect(resolver.programBuildCount - before).toBe(1);
+  expect(resolver.findResolutionErrors(native("typeof __WorkflowCheckValue_0"))).not.toHaveLength(
+    0,
+  );
+  expect(resolver.findResolutionErrors(native("__WorkflowCheckSource_0"))).not.toHaveLength(0);
+});

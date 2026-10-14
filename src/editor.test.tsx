@@ -1,3 +1,10 @@
+import { NativeWorkflowTypes } from "./editor/native-types";
+import {
+  connectWorkflowEditorNodes,
+  addWorkflowEditorObjectDecompositionOutputToNode,
+  defaultWorkflowEditorNodeTemplates,
+} from "./core";
+import { createWorkflowEditorHistory, commitWorkflowEditorHistory } from "./history";
 import { type ReactNode, useState } from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
@@ -628,6 +635,76 @@ describe("@moritzbrantner/workflow-editor editor shell", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     expect(handleTypeDefinitionsChange).toHaveBeenCalled();
+  });
+
+  test("port edits retain property types from the host catalog through history", () => {
+    const definitions: WorkflowEditorTypeDefinition[] = [
+      { name: "TextCustomer", type: { kind: "typescript", source: "{ id: string }" } },
+      { name: "NumberCustomer", type: { kind: "typescript", source: "{ id: number }" } },
+    ];
+    const decompose = addWorkflowEditorObjectDecompositionOutputToNode(
+      {
+        ...defaultWorkflowEditorNodeTemplates.find(
+          (template) => template.kind === "json.object.decompose",
+        )!,
+        id: "decompose",
+        x: 100,
+        y: 0,
+      },
+      { portId: "id", propertyKey: "id" },
+    );
+    const initial = connectWorkflowEditorNodes(
+      {
+        nodes: [
+          {
+            id: "source",
+            label: "Source",
+            x: 0,
+            y: 0,
+            outputs: [
+              { id: "out", label: "Out", type: { kind: "typescript", source: "TextCustomer" } },
+            ],
+          },
+          decompose,
+        ],
+        edges: [],
+      },
+      {
+        sourceNodeId: "source",
+        sourcePortId: "out",
+        targetNodeId: "decompose",
+        targetPortId: "object",
+      },
+      { typeDefinitions: definitions },
+    );
+    function Host() {
+      const [history, setHistory] = useState(() => createWorkflowEditorHistory(initial));
+      return (
+        <>
+          <NativeWorkflowTypes
+            document={history.present}
+            definitions={definitions}
+            selectedNodeId="source"
+            readOnly={false}
+            onChange={(next) => setHistory(commitWorkflowEditorHistory(history, next))}
+          />
+          <output data-testid="property-type">
+            {JSON.stringify(
+              history.present.nodes
+                .find((node) => node.id === "decompose")
+                ?.outputs?.find((port) => port.id === "id")?.type,
+            )}
+          </output>
+        </>
+      );
+    }
+    render(<Host />);
+    expect(screen.getByTestId("property-type").textContent).toBe('{"kind":"string"}');
+    fireEvent.change(screen.getByLabelText("Output Out TypeScript type"), {
+      target: { value: "NumberCustomer" },
+    });
+    fireEvent.keyDown(screen.getByLabelText("Output Out TypeScript type"), { key: "Enter" });
+    expect(screen.getByTestId("property-type").textContent).toBe('{"kind":"number"}');
   });
 
   test("types panel follows declaration undo redo and saved-version restoration", async () => {

@@ -1,5 +1,7 @@
 "use client";
 
+import { createWorkflowEditorTypeResolver } from "./core-type-resolver";
+
 import {
   type DragEvent as ReactDragEvent,
   type Dispatch,
@@ -105,6 +107,7 @@ import {
   moveWorkflowEditorGroup,
   removeWorkflowEditorNode,
   removeWorkflowEditorSelection,
+  resolveWorkflowEditorDocumentTypes,
   ungroupWorkflowEditorGroup,
   updateWorkflowEditorGroup,
   updateWorkflowEditorNode,
@@ -5325,7 +5328,29 @@ function getWorkflowPortConnectionMenuOptions<
   menu: WorkflowWorkbenchPortConnectionMenuState,
   typeDefinitions?: readonly WorkflowEditorTypeDefinition[],
 ): WorkflowWorkbenchPortConnectionMenuOption[] {
+  document = resolveWorkflowEditorDocumentTypes(document, { typeDefinitions });
   const options: WorkflowWorkbenchPortConnectionMenuOption[] = [];
+  const context = createWorkflowEditorDocumentContext(document);
+  const selectedPort =
+    menu.direction === "output"
+      ? context.getOutputPort(menu.nodeId, menu.portId)
+      : context.getInputPort(menu.nodeId, menu.portId);
+  if (selectedPort) {
+    createWorkflowEditorTypeResolver(typeDefinitions, document.typeDeclarations).prepareChecks(
+      document.nodes.flatMap((node) =>
+        (menu.direction === "output" ? (node.inputs ?? []) : (node.outputs ?? [])).flatMap(
+          (port) => {
+            const source = menu.direction === "output" ? selectedPort.type : port.type;
+            const target = menu.direction === "output" ? port.type : selectedPort.type;
+            return [
+              { source, target },
+              { source, target: { kind: "any" } as const },
+            ];
+          },
+        ),
+      ),
+    );
+  }
 
   for (const node of document.nodes) {
     const ports = menu.direction === "output" ? (node.inputs ?? []) : (node.outputs ?? []);

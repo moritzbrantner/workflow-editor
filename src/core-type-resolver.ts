@@ -11,7 +11,13 @@ import {
   workflowEditorLegacyTypeName,
 } from "./core-type-source";
 
+export type WorkflowEditorTypeCheck = {
+  source: WorkflowEditorPortType;
+  target?: WorkflowEditorPortType;
+};
 export type WorkflowEditorTypeResolver = {
+  readonly programBuildCount: number;
+  prepareChecks(checks: readonly WorkflowEditorTypeCheck[]): void;
   isAssignable(source: WorkflowEditorPortType, target: WorkflowEditorPortType): boolean;
   compatibilityErrors(source: WorkflowEditorPortType, target: WorkflowEditorPortType): string[];
   findResolutionErrors(type: WorkflowEditorPortType): string[];
@@ -54,60 +60,115 @@ export function createWorkflowEditorTypeResolver(
     workflowEditorTypeDefinitionsSource(typeDefinitions) + "\n" + typeDeclarations;
   const results = new Map<string, CheckedType>();
 
-  function check(source: string, target?: string): CheckedType {
-    const resultKey = JSON.stringify([source, target]);
-    const cached = results.get(resultKey);
-    if (cached) {
-      return cached;
+  let previousProgram: ts.Program | undefined;
+  let programBuildCount = 0;
+  const declarationFile = ts.createSourceFile(
+    "/declarations.ts",
+    typeDeclarations,
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  const invalidDeclaration = declarationFile.statements.some(
+    (statement) =>
+      (!ts.isTypeAliasDeclaration(statement) && !ts.isInterfaceDeclaration(statement)) ||
+      ("name" in statement &&
+        ts.isIdentifier(statement.name as ts.Node) &&
+        (statement.name as ts.Identifier).text.startsWith("__Workflow")),
+  );
+  const formatDiagnostic = (diagnostic: ts.Diagnostic) => {
+    let message = `TS${diagnostic.code}: ${ts.flattenDiagnosticMessageText(diagnostic.messageText, " ")}`;
+    for (const definition of typeDefinitions) {
+      const encoded = workflowEditorLegacyTypeName(definition.name);
+      if (encoded !== definition.name) {
+        message = message.replaceAll(encoded, definition.name);
+      }
     }
-    const code = `${declarations}\ntype __WorkflowSource = (${source});\n${target === undefined ? "" : `type __WorkflowTarget = (${target}); declare const __workflowValue: __WorkflowSource; const __workflowResult: __WorkflowTarget = __workflowValue;`}`;
-    if (hasTypeScriptSuppression(code)) {
-      return {
-        errors: [
-          "TypeScript suppression comments (@ts-nocheck, @ts-ignore, @ts-expect-error) are not supported in workflow types.",
-        ],
-        properties: null,
-      };
-    }
-    const sourceFile = ts.createSourceFile(fileName, code, ts.ScriptTarget.Latest, true);
-    const declarationFile = ts.createSourceFile(
-      "/declarations.ts",
-      typeDeclarations,
+    return message;
+  };
+  const expressionErrors = (expression: string): string[] => {
+    const parsed = ts.createSourceFile(
+      "/expression.ts",
+      `type __WorkflowCheck = (${expression});`,
       ts.ScriptTarget.Latest,
       true,
     );
-    const invalidDeclaration = declarationFile.statements.some(
-      (statement) =>
-        (!ts.isTypeAliasDeclaration(statement) && !ts.isInterfaceDeclaration(statement)) ||
-        ("name" in statement &&
-          ts.isIdentifier(statement.name as ts.Node) &&
-          (statement.name as ts.Identifier).text.startsWith("__Workflow")),
-    );
-    const validExpression = (expression: string) => {
-      const parsed = ts.createSourceFile(
-        "/expression.ts",
-        `type __WorkflowCheck = (${expression});`,
-        ts.ScriptTarget.Latest,
-        true,
-      );
-      return (
-        parsed.statements.length === 1 &&
-        ts.isTypeAliasDeclaration(parsed.statements[0]!) &&
-        parsed.statements[0]!.name.text === "__WorkflowCheck"
-      );
-    };
-    if (
-      invalidDeclaration ||
-      !validExpression(source) ||
-      (target !== undefined && !validExpression(target))
-    ) {
-      return {
-        errors: [
-          "Workflow types accept only type/interface declarations and single TypeScript type expressions; imports and executable statements are not supported.",
-        ],
-        properties: null,
-      };
+    // Parser diagnostics belong to TypeScript. Reading them avoids constructing a second
+    // semantic program merely to isolate malformed fragments from a valid batch.
+    const syntax = (parsed as ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] })
+      .parseDiagnostics;
+    if (syntax.length) {
+      return syntax.map(formatDiagnostic);
     }
+    if (parsed.statements.length !== 1 || !ts.isTypeAliasDeclaration(parsed.statements[0]!)) {
+      return ["Workflow ports accept a single TypeScript type expression."];
+    }
+    let internalReference = false;
+    const visit = (node: ts.Node) => {
+      const name = ts.isTypeReferenceNode(node)
+        ? node.typeName
+        : ts.isTypeQueryNode(node)
+          ? node.exprName
+          : undefined;
+      if (name && ts.isIdentifier(name) && name.text.startsWith("__WorkflowCheck")) {
+        internalReference = true;
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(parsed.statements[0]!);
+    return internalReference
+      ? ["Internal checker aliases are not workflow type declarations."]
+      : [];
+  };
+  const remember = (key: string, result: CheckedType) => {
+    if (results.size >= 4096 && !results.has(key)) {
+      results.delete(results.keys().next().value!);
+    }
+    results.set(key, result);
+  };
+  function prepareChecks(checks: readonly WorkflowEditorTypeCheck[]) {
+    const pending = new Map<string, { source: string; target?: string }>();
+    for (const request of checks) {
+      const source = workflowEditorPortTypeSource(request.source);
+      const target =
+        request.target === undefined ? undefined : workflowEditorPortTypeSource(request.target);
+      const key = JSON.stringify([source, target]);
+      if (results.has(key) || pending.has(key)) {
+        continue;
+      }
+      let errors = [
+        ...expressionErrors(source),
+        ...(target === undefined ? [] : expressionErrors(target)),
+      ];
+      if (invalidDeclaration) {
+        errors.push(
+          "Workflow types accept only type/interface declarations; imports and executable statements are not supported.",
+        );
+      }
+      if (hasTypeScriptSuppression([declarations, source, target ?? ""].join("\n"))) {
+        errors.push(
+          "TypeScript suppression comments (@ts-nocheck, @ts-ignore, @ts-expect-error) are not supported in workflow types.",
+        );
+      }
+      if (errors.length) {
+        remember(key, { errors: [...new Set(errors)], properties: null });
+        continue;
+      }
+      pending.set(key, { source, ...(target === undefined ? {} : { target }) });
+    }
+    if (!pending.size) {
+      return;
+    }
+    let code = declarations + "\n";
+    const segments = [...pending].map(([key, request], index) => {
+      const start = code.length;
+      const alias = `__WorkflowCheckSource_${index}`;
+      code += `type ${alias} = (${request.source});\n`;
+      if (request.target !== undefined) {
+        code += `type __WorkflowCheckTarget_${index} = (${request.target}); declare const __WorkflowCheckValue_${index}: ${alias}; const __WorkflowCheckResult_${index}: __WorkflowCheckTarget_${index} = __WorkflowCheckValue_${index};\n`;
+      }
+      return { key, alias, start, end: code.length, properties: request.target === undefined };
+    });
+    const sourceFile = ts.createSourceFile(fileName, code, ts.ScriptTarget.Latest, true);
     const host: ts.CompilerHost = {
       getSourceFile: (name) => (name === fileName ? sourceFile : libraryFiles.get(name)),
       getDefaultLibFileName: () => "/lib.es2022.full.d.ts",
@@ -120,73 +181,92 @@ export function createWorkflowEditorTypeResolver(
       useCaseSensitiveFileNames: () => true,
       getNewLine: () => "\n",
     };
-    const program = ts.createProgram([fileName], compilerOptions, host);
+    const program = ts.createProgram({
+      rootNames: [fileName],
+      options: compilerOptions,
+      host,
+      ...(previousProgram ? { oldProgram: previousProgram } : {}),
+    });
+    programBuildCount++;
+    previousProgram = program;
     const diagnostics = [
+      ...program.getGlobalDiagnostics(),
       ...program.getSyntacticDiagnostics(sourceFile),
       ...program.getSemanticDiagnostics(sourceFile),
     ];
-    const errors = [
-      ...new Set(
-        diagnostics.map(
-          (diagnostic) =>
-            `TS${diagnostic.code}: ${ts.flattenDiagnosticMessageText(diagnostic.messageText, " ")}`,
-        ),
-      ),
-    ];
-    for (let i = 0; i < errors.length; i++) {
-      for (const definition of typeDefinitions) {
-        const encoded = workflowEditorLegacyTypeName(definition.name);
-        if (encoded !== definition.name) {
-          errors[i] = errors[i]!.replaceAll(encoded, definition.name);
-        }
-      }
-    }
-    const checker = program.getTypeChecker();
-    const alias = sourceFile.statements.find(
-      (statement): statement is ts.TypeAliasDeclaration =>
-        ts.isTypeAliasDeclaration(statement) && statement.name.text === "__WorkflowSource",
+    const globalErrors = diagnostics.filter(
+      (diagnostic) => diagnostic.start === undefined || diagnostic.start < segments[0]!.start,
     );
-    const type = alias ? checker.getTypeFromTypeNode(alias.type) : undefined;
-    const properties =
-      errors.length ||
-      !type ||
-      !(type.flags & (ts.TypeFlags.Object | ts.TypeFlags.Intersection | ts.TypeFlags.Union))
-        ? null
-        : Object.fromEntries(
-            checker.getPropertiesOfType(type).map((symbol) => {
-              const declaration = symbol.valueDeclaration ?? symbol.declarations?.[0];
-              const propertyType = declaration
-                ? checker.getTypeOfSymbolAtLocation(symbol, declaration)
-                : checker.getDeclaredTypeOfSymbol(symbol);
-              return [
-                symbol.name,
-                {
-                  optional: Boolean(symbol.flags & ts.SymbolFlags.Optional),
-                  type: portTypeFromChecker(checker, propertyType),
-                },
-              ];
-            }),
-          );
-    const result = { errors, properties };
-    if (results.size >= 128) {
-      results.delete(results.keys().next().value!);
+    const checker = program.getTypeChecker();
+    const aliases = new Map(
+      sourceFile.statements.flatMap((statement) =>
+        ts.isTypeAliasDeclaration(statement) ? [[statement.name.text, statement] as const] : [],
+      ),
+    );
+    for (const segment of segments) {
+      const errors = [
+        ...new Set(
+          [
+            ...globalErrors,
+            ...diagnostics.filter(
+              (diagnostic) =>
+                diagnostic.start !== undefined &&
+                diagnostic.start >= segment.start &&
+                diagnostic.start < segment.end,
+            ),
+          ].map(formatDiagnostic),
+        ),
+      ];
+      const alias = aliases.get(segment.alias);
+      const type = alias ? checker.getTypeFromTypeNode(alias.type) : undefined;
+      const properties =
+        !segment.properties ||
+        errors.length ||
+        !type ||
+        !(type.flags & (ts.TypeFlags.Object | ts.TypeFlags.Intersection | ts.TypeFlags.Union))
+          ? null
+          : Object.fromEntries(
+              checker.getPropertiesOfType(type).map((symbol) => {
+                const declaration = symbol.valueDeclaration ?? symbol.declarations?.[0];
+                const propertyType = declaration
+                  ? checker.getTypeOfSymbolAtLocation(symbol, declaration)
+                  : checker.getDeclaredTypeOfSymbol(symbol);
+                return [
+                  symbol.name,
+                  {
+                    optional: Boolean(symbol.flags & ts.SymbolFlags.Optional),
+                    type: portTypeFromChecker(checker, propertyType),
+                  },
+                ];
+              }),
+            );
+      remember(segment.key, { errors, properties });
     }
-    results.set(resultKey, result);
-    return result;
+  }
+  function check(source: WorkflowEditorPortType, target?: WorkflowEditorPortType): CheckedType {
+    const key = JSON.stringify([
+      workflowEditorPortTypeSource(source),
+      target === undefined ? undefined : workflowEditorPortTypeSource(target),
+    ]);
+    prepareChecks([{ source, ...(target === undefined ? {} : { target }) }]);
+    return results.get(key)!;
   }
   const resolver: WorkflowEditorTypeResolver = {
+    get programBuildCount() {
+      return programBuildCount;
+    },
+    prepareChecks,
     isAssignable(source, target) {
       return this.compatibilityErrors(source, target).length === 0;
     },
     compatibilityErrors(source, target) {
-      return check(workflowEditorPortTypeSource(source), workflowEditorPortTypeSource(target))
-        .errors;
+      return check(source, target).errors;
     },
     findResolutionErrors(type) {
-      return check(workflowEditorPortTypeSource(type)).errors;
+      return check(type).errors;
     },
     objectPropertiesFromType(type) {
-      return check(workflowEditorPortTypeSource(type)).properties;
+      return check(type).properties;
     },
   };
   if (resolvers.size >= 8) {

@@ -1,3 +1,4 @@
+import { resolveWorkflowEditorDocumentTypes } from "../core";
 import { useState } from "react";
 import { Button, Textarea, Input } from "@moritzbrantner/ui";
 import type {
@@ -29,6 +30,11 @@ export function NativeWorkflowTypes<
   const [error, setError] = useState("");
   const selected = document.nodes.find((node) => node.id === selectedNodeId);
   const resolver = createWorkflowEditorTypeResolver(definitions, document.typeDeclarations);
+  const update = (next: WorkflowEditorDocument<TNodeData, TEdgeData>) =>
+    onChange(resolveWorkflowEditorDocumentTypes(next, { typeDefinitions: definitions }));
+  resolver.prepareChecks(
+    document.nodes.flatMap((node) => (node.outputs ?? []).map((port) => ({ source: port.type }))),
+  );
   const save = () => {
     const errors = createWorkflowEditorTypeResolver(definitions, draft).findResolutionErrors({
       kind: "any",
@@ -38,7 +44,7 @@ export function NativeWorkflowTypes<
       return;
     }
     setError("");
-    onChange({ ...document, typeDeclarations: draft });
+    update({ ...document, typeDeclarations: draft });
   };
   return (
     <section className="grid gap-3" aria-label="Workflow TypeScript">
@@ -74,7 +80,7 @@ export function NativeWorkflowTypes<
                 document={document}
                 definitions={definitions}
                 readOnly={readOnly}
-                onChange={onChange}
+                onChange={update}
               />
             )),
           )}
