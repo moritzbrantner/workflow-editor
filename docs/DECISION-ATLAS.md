@@ -67,8 +67,16 @@ This is the repository-owned, feature-oriented source of **owner-approved produc
   Is composition a local wrapper in one workflow (A), a published reusable node across workflows (B), or both, with an explicit choice when composing (C)? This affects catalog identity, versioning, and updates to existing instances.
 
 - **2.5** [question] **Does the initial acyclic rule also prohibit recursive workflow references?**  
-  Opened 2026-10-14.  
+  Answered 2026-10-14 by Decision 2.6 (option C); retained for historical traceability.  
   Should all referenced workflows form one acyclic call graph (A), should each document alone be acyclic while references may recur (B), or should recursive references be allowed only with explicit bounded recursion (C)? Existing reference navigation can be recursive even though ordinary graph edges are acyclic.
+
+- **2.6 Allow bounded recursive workflows and iterative approximation.**  
+  Status: owner-approved 2026-10-14. Answers 2.5 (option C).  
+  Workflow Documents may intentionally **re-enter a referenced workflow or repeat a calculation** to improve an approximation, with optional early exit when a declared stopping/convergence condition is met. **Every recursive or iterative path must have a finite, explicit bound** (such as maximum iterations or invocation depth), validated before execution and enforced by the runner even when its stopping condition never becomes true; execution also remains subject to cancellation and finite time limits so a non-returning operation cannot evade the overall bound. An unbounded reference cycle or repeat is not an executable workflow. An enforced stop does **not** prove the algorithm converged or met its desired accuracy; results and diagnostics must distinguish normal convergence from a limit being reached. Preserve Decision 2.1's acyclic **ordinary node connections within each workflow body**; repeated execution and feedback are explicitly scoped control-flow/recursive-reference constructs, not unrestricted arbitrary cyclic graph edges. Preserve typed input/output contracts at iteration boundaries. The editor authors and validates bounded loops/references and compiles their contracts; the runner owns actual iteration, guard enforcement, timeouts and cancellation; the engine retains registration/dispatch/run-state ownership. Evolve the shared compiled contract explicitly and maintain old-version conformance rather than silently interpreting new recursion using compiled-v1 DAG semantics. The behavior of an available best-so-far approximation when a limit is reached remains open (Question 2.7).
+
+- **2.7** [question] **What result should a bounded iterative workflow expose when its limit is reached before convergence?**  
+  Opened 2026-10-14.  
+  If a calculation has produced a candidate approximation but has not met its stopping criterion by the enforced limit, should it return that candidate as a clearly marked **partial/non-converged** output (A), or stop with an explicit **limit-exhausted** failure without a normal output (B)? Both must terminate within configured bounds; neither may claim the requested precision was reached. This choice does not affect successful early convergence or cancellation before any candidate exists.
 
 ## 3. Type-visible editing
 
