@@ -630,6 +630,46 @@ describe("@moritzbrantner/workflow-editor editor shell", () => {
     expect(handleTypeDefinitionsChange).toHaveBeenCalled();
   });
 
+  test("types panel follows declaration undo redo and saved-version restoration", async () => {
+    render(
+      <EditorControllerHarness>
+        {(controller) => (
+          <>
+            <WorkflowEditorSaveStateBadge controller={controller} />
+            <WorkflowEditorHistoryControls controller={controller} />
+            <WorkflowEditorVersionControls controller={controller} />
+            <WorkflowEditorTypesPanel controller={controller} />
+          </>
+        )}
+      </EditorControllerHarness>,
+    );
+    await waitFor(() => expect(screen.getByTestId("save-state").textContent).toBe("Saved"));
+    const first = "type Customer = string;";
+    const second = "type Customer = number;";
+    fireEvent.change(screen.getByLabelText("TypeScript declarations"), {
+      target: { value: first },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Apply declarations" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save version", exact: true }));
+    fireEvent.change(screen.getByLabelText("TypeScript declarations"), {
+      target: { value: second },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Apply declarations" }));
+    fireEvent.click(screen.getByRole("button", { name: "Undo", exact: true }));
+    expect((screen.getByLabelText("TypeScript declarations") as HTMLTextAreaElement).value).toBe(
+      first,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Redo", exact: true }));
+    expect((screen.getByLabelText("TypeScript declarations") as HTMLTextAreaElement).value).toBe(
+      second,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Restore version", exact: true }));
+    expect((screen.getByLabelText("TypeScript declarations") as HTMLTextAreaElement).value).toBe(
+      first,
+    );
+    await waitFor(() => expect(screen.getByTestId("save-state").textContent).toBe("Saved"));
+  });
+
   test("node template panel creates updates deletes and reports invalid JSON", () => {
     const handleNodeTemplatesChange = vi.fn();
 

@@ -2341,7 +2341,7 @@ export function WorkflowEditorTypesPanel<
         </Button>
       </div>
       <NativeWorkflowTypes
-        key={controller.activeEntry?.id}
+        key={`${controller.activeEntry?.id}:${controller.activeDocument.typeDeclarations ?? ""}`}
         document={controller.activeDocument}
         definitions={controller.catalog.typeDefinitions}
         selectedNodeId={controller.selection.nodeIds[0]}
