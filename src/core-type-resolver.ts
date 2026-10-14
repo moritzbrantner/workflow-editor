@@ -65,6 +65,14 @@ export function createWorkflowEditorTypeResolver(
       return cached;
     }
     const code = `${declarations}\ntype __WorkflowSource = (${source});\n${target === undefined ? "" : `type __WorkflowTarget = (${target}); declare const __workflowValue: __WorkflowSource; const __workflowResult: __WorkflowTarget = __workflowValue;`}`;
+    if (hasTypeScriptSuppression(code)) {
+      return {
+        errors: [
+          "TypeScript suppression comments (@ts-nocheck, @ts-ignore, @ts-expect-error) are not supported in workflow types.",
+        ],
+        properties: null,
+      };
+    }
     const sourceFile = ts.createSourceFile(fileName, code, ts.ScriptTarget.Latest, true);
     const declarationFile = ts.createSourceFile(
       "/declarations.ts",
@@ -199,4 +207,23 @@ function portTypeFromChecker(checker: ts.TypeChecker, type: ts.Type): WorkflowEd
     default:
       return { kind: "typescript", source };
   }
+}
+
+function hasTypeScriptSuppression(source: string): boolean {
+  const scanner = ts.createScanner(
+    ts.ScriptTarget.Latest,
+    false,
+    ts.LanguageVariant.Standard,
+    source,
+  );
+  for (let token = scanner.scan(); token !== ts.SyntaxKind.EndOfFileToken; token = scanner.scan()) {
+    if (
+      (token === ts.SyntaxKind.SingleLineCommentTrivia ||
+        token === ts.SyntaxKind.MultiLineCommentTrivia) &&
+      /@ts-(?:nocheck|ignore|expect-error)\b/.test(scanner.getTokenText())
+    ) {
+      return true;
+    }
+  }
+  return false;
 }

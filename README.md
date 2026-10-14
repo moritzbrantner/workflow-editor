@@ -22,7 +22,7 @@ New port records use `{ kind: "typescript", source: "Customer" }`. A document's 
 structured port records and host `typeDefinitions` are translated into compiler syntax;
 they no longer define a separate assignability algorithm. Checking uses TypeScript 6,
 strict mode, exact optional properties, and bundled ES2022/DOM libraries without network
-or filesystem access. Imports and executable declarations are unsupported and diagnosed.
+or filesystem access. Imports, executable declarations, and compiler suppression comments are unsupported and diagnosed.
 Static checking does not validate runtime payloads. Compiled version 1 preserves new port
 records and includes optional `typeDeclarations`; legacy handoffs remain unchanged.
 Pass `{ typeDefinitions }` as the compiler's second argument when a workflow uses a host

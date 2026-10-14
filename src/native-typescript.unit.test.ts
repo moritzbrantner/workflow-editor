@@ -172,6 +172,24 @@ describe("native type document contracts", () => {
       "Cannot find name 'Customer'",
     );
   });
+  test("user comments cannot suppress compatibility checking", () => {
+    expect(
+      validateWorkflowEditorConnection(
+        documentWithTypes("string", "number", "// @ts-nocheck\n"),
+        connection,
+      ).valid,
+    ).toBe(false);
+    expect(
+      validateWorkflowEditorConnection(
+        documentWithTypes("Missing", "number", "// @ts-ignore\n"),
+        connection,
+      ).valid,
+    ).toBe(false);
+    expect(
+      validateWorkflowEditorConnection(documentWithTypes('"@ts-ignore"', "string"), connection)
+        .valid,
+    ).toBe(true);
+  });
   test("diagnoses invalid declarations even when no ports reference them", () => {
     expect(() =>
       compileWorkflowEditorDocument({
