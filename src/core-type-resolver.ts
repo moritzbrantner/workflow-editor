@@ -8,6 +8,7 @@ import type {
 import {
   workflowEditorPortTypeSource,
   workflowEditorTypeDefinitionsSource,
+  workflowEditorLegacyTypeName,
 } from "./core-type-source";
 
 export type WorkflowEditorTypeResolver = {
@@ -76,7 +77,7 @@ export function createWorkflowEditorTypeResolver(
     const sourceFile = ts.createSourceFile(fileName, code, ts.ScriptTarget.Latest, true);
     const declarationFile = ts.createSourceFile(
       "/declarations.ts",
-      declarations,
+      typeDeclarations,
       ts.ScriptTarget.Latest,
       true,
     );
@@ -137,6 +138,14 @@ export function createWorkflowEditorTypeResolver(
         ),
       ),
     ];
+    for (let i = 0; i < errors.length; i++) {
+      for (const definition of typeDefinitions) {
+        const encoded = workflowEditorLegacyTypeName(definition.name);
+        if (encoded !== definition.name) {
+          errors[i] = errors[i]!.replaceAll(encoded, definition.name);
+        }
+      }
+    }
     const checker = program.getTypeChecker();
     const alias = sourceFile.statements.find(
       (statement): statement is ts.TypeAliasDeclaration =>

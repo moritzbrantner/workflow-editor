@@ -1,3 +1,4 @@
+import ts from "typescript";
 import type { WorkflowEditorPortType, WorkflowEditorTypeDefinition } from "./core-types";
 
 /** Converts persisted legacy records to syntax; TypeScript alone decides their meaning. */
@@ -6,7 +7,7 @@ export function workflowEditorPortTypeSource(type: WorkflowEditorPortType): stri
     case "typescript":
       return type.source;
     case "ref":
-      return type.name;
+      return workflowEditorLegacyTypeName(type.name);
     case "literal":
       return JSON.stringify(type.value);
     case "array":
@@ -50,7 +51,25 @@ export function workflowEditorTypeDefinitionsSource(
   return definitions
     .map(
       (definition) =>
-        `type ${definition.name} = ${[...(definition.extends ?? []), workflowEditorPortTypeSource(definition.type)].map((source) => `(${source})`).join(" & ")};`,
+        `type ${workflowEditorLegacyTypeName(definition.name)} = ${[...(definition.extends ?? []).map(workflowEditorLegacyTypeName), workflowEditorPortTypeSource(definition.type)].map((source) => `(${source})`).join(" & ")};`,
     )
     .join("\n");
+}
+
+export function workflowEditorLegacyTypeName(name: string): string {
+  const scanner = ts.createScanner(
+    ts.ScriptTarget.Latest,
+    false,
+    ts.LanguageVariant.Standard,
+    name,
+  );
+  if (
+    !name.startsWith("__Workflow") &&
+    scanner.scan() === ts.SyntaxKind.Identifier &&
+    scanner.getTokenText() === name &&
+    scanner.scan() === ts.SyntaxKind.EndOfFileToken
+  ) {
+    return name;
+  }
+  return `__WorkflowCatalog_${[...name].map((character) => character.codePointAt(0)!.toString(16)).join("_")}`;
 }

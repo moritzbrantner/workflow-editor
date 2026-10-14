@@ -1,6 +1,10 @@
 import { validateGraphEditorConnection } from "@moritzbrantner/graph-editor/core";
 
-import { addWorkflowEditorEdge, connectWorkflowEditorNodes } from "./core";
+import {
+  addWorkflowEditorEdge,
+  connectWorkflowEditorNodes,
+  resolveWorkflowEditorDocumentTypes,
+} from "./core";
 import {
   createWorkflowEditorDocumentContext,
   type WorkflowEditorDocumentContext,
@@ -119,6 +123,7 @@ export function validateWorkflowEditorConnectionWithCardinality<
   connection: WorkflowEditorConnectionInput,
   options: WorkflowEditorTypeValidationOptions = {},
 ): WorkflowEditorCardinalityConnectionValidity {
+  document = resolveWorkflowEditorDocumentTypes(document, options);
   const context = createWorkflowEditorDocumentContext(document);
   const targetNode = context.nodeById.get(connection.targetNodeId);
   const targetPort = context.getInputPort(
@@ -131,7 +136,10 @@ export function validateWorkflowEditorConnectionWithCardinality<
   const allowOccupiedInputs =
     !!targetPort &&
     (isDynamicConstructorPort(targetPort) || targetMax === null || (targetMax ?? 1) > 1);
-  const typeResolver = createWorkflowEditorTypeResolver(options.typeDefinitions);
+  const typeResolver = createWorkflowEditorTypeResolver(
+    options.typeDefinitions,
+    options.typeDeclarations ?? document.typeDeclarations,
+  );
 
   const semanticValidity = validateGraphEditorConnection<
     TNodeData,

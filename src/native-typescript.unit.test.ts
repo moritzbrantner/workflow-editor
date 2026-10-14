@@ -1,3 +1,7 @@
+import {
+  validateWorkflowEditorConnectionWithCardinality,
+  connectWorkflowEditorNodesWithCardinality,
+} from "./cardinality";
 import ts from "typescript";
 import { describe, expect, test } from "vitest";
 import { isWorkflowEditorPortTypeAssignable, type WorkflowEditorPortType } from "./core";
@@ -9,7 +13,15 @@ const native = (source: string): WorkflowEditorPortType => ({ kind: "typescript"
 function oracle(source: string, target: string) {
   const fileName = "/oracle.ts";
   const code = `declare const value: ${source}; const result: ${target} = value;`;
-  const options = { strict: true, exactOptionalPropertyTypes: true, noEmit: true };
+  const options = {
+    strict: true,
+    exactOptionalPropertyTypes: true,
+    noUncheckedIndexedAccess: true,
+    noEmit: true,
+    target: ts.ScriptTarget.ES2022,
+    types: [],
+    skipLibCheck: true,
+  };
   const host = ts.createCompilerHost(options);
   const original = host.getSourceFile.bind(host);
   host.getSourceFile = (name, languageVersion, onError, shouldCreateNewSourceFile) =>
@@ -171,6 +183,76 @@ describe("native type document contracts", () => {
     expect(() => compileWorkflowEditorDocument({ ...restored, typeDeclarations: "" })).toThrow(
       "Cannot find name 'Customer'",
     );
+  });
+  test("cardinality validation uses document and override declarations", () => {
+    const document = documentWithTypes("Customer", "Customer", "type Customer = { id: string };");
+    expect(validateWorkflowEditorConnectionWithCardinality(document, connection).valid).toBe(true);
+    expect(connectWorkflowEditorNodesWithCardinality(document, connection).edges).toHaveLength(1);
+    const branchDocument = documentWithTypes("Customer", "number", document.typeDeclarations);
+    branchDocument.nodes.push({
+      ...defaultWorkflowEditorNodeTemplates.find((template) => template.kind === "control.if")!,
+      id: "branch",
+      x: 0,
+      y: 0,
+    });
+    branchDocument.edges.push({
+      id: "to-branch",
+      sourceNodeId: "source",
+      sourcePortId: "out",
+      targetNodeId: "branch",
+      targetPortId: "value",
+    });
+    const branchedConnection = { ...connection, sourceNodeId: "branch", sourcePortId: "true" };
+    expect(validateWorkflowEditorConnection(branchDocument, branchedConnection).valid).toBe(false);
+    expect(
+      validateWorkflowEditorConnectionWithCardinality(branchDocument, branchedConnection).valid,
+    ).toBe(false);
+
+    expect(
+      validateWorkflowEditorConnectionWithCardinality(
+        documentWithTypes("Customer", "{ id: string }", "type Customer = { id: number };"),
+        connection,
+        { typeDeclarations: "type Customer = { id: string };" },
+      ).valid,
+    ).toBe(true);
+  });
+  test("opaque legacy catalog names and inheritance retain their meaning", () => {
+    const definitions = [
+      {
+        name: "order-item",
+        type: { kind: "object", properties: { id: { type: { kind: "string" } } } },
+      },
+      {
+        name: "class",
+        extends: ["order-item"],
+        type: { kind: "object", properties: { active: { type: { kind: "boolean" } } } },
+      },
+    ] as const;
+    const typeDefinitions = definitions.map((definition) =>
+      Object.assign(
+        {},
+        definition,
+        "extends" in definition ? { extends: [...definition.extends] } : {},
+      ),
+    );
+    expect(
+      isWorkflowEditorPortTypeAssignable(
+        { kind: "ref", name: "class" },
+        { kind: "ref", name: "order-item" },
+        typeDefinitions,
+      ),
+    ).toBe(true);
+    const document = documentWithTypes("unknown", "{ id: string }");
+    document.nodes[0]!.outputs![0]!.type = { kind: "ref", name: "order-item" };
+    expect(validateWorkflowEditorConnection(document, connection, { typeDefinitions }).valid).toBe(
+      true,
+    );
+    const compiled = compileWorkflowEditorDocument(
+      connectWorkflowEditorNodes(document, connection, { typeDefinitions }),
+      { typeDefinitions },
+    );
+    expect(compiled.nodes[0]?.outputs?.[0]?.type).toEqual({ kind: "ref", name: "order-item" });
+    expect(compiled.typeDeclarations).toContain("__WorkflowCatalog_");
   });
   test("empty legacy intersections do not become assignable never types", () => {
     expect(

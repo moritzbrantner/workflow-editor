@@ -20,7 +20,8 @@ outputs in the Types panel. Export/import and saved versions retain declarations
 New port records use `{ kind: "typescript", source: "Customer" }`. A document's optional
 `typeDeclarations` contains type aliases and interfaces, including generics. Existing
 structured port records and host `typeDefinitions` are translated into compiler syntax;
-they no longer define a separate assignability algorithm. Checking uses TypeScript 6,
+they no longer define a separate assignability algorithm. Opaque legacy catalog names
+(such as `order-item`) are encoded consistently for checking; saved reference names stay intact. Checking uses TypeScript 6,
 strict mode, exact optional properties, and bundled ES2022/DOM libraries without network
 or filesystem access. Imports, executable declarations, and compiler suppression comments are unsupported and diagnosed.
 Static checking does not validate runtime payloads. Compiled version 1 preserves new port
