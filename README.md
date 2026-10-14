@@ -5,6 +5,9 @@ Typed DAG workflow document utilities and a controlled React editor shell built 
 
 [Open the example workbench](https://moritzbrantner.github.io/workflow-editor/)
 
+[Product decisions and open questions](./docs/DECISION-ATLAS.md) describe the intended
+experience; implementation status remains in code and GitHub issues.
+
 ## Install
 
 The package is not published to npm. Install it as a commit-pinned git
