@@ -46,7 +46,7 @@ test("authors native types, explains rejection, propagates branches, and reopens
   }
   await page.getByRole("button", { name: "Types", exact: true }).click();
   const declarations =
-    "type Customer = { id: string; nickname?: string };\ntype Box<T> = { value: T };";
+    "interface Customer { id: string; nickname?: string };\ntype Box<T> = { value: T };";
   await page.getByLabel("TypeScript declarations", { exact: true }).fill(declarations);
   await page.getByRole("button", { name: "Apply declarations", exact: true }).focus();
   await page.keyboard.press("Enter");

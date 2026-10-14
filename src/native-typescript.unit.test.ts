@@ -10,9 +10,9 @@ const native = (source: string): WorkflowEditorPortType => ({ kind: "typescript"
 
 // Independent oracle: the installed compiler loads its own real filesystem libraries and
 // reports diagnostics for an ordinary assignment, without the editor adapter or host.
-function oracle(source: string, target: string) {
+function oracle(source: string, target: string, declarations = "") {
   const fileName = "/oracle.ts";
-  const code = `declare const value: ${source}; const result: ${target} = value;`;
+  const code = `${declarations}\ndeclare const value: ${source}; const result: ${target} = value;`;
   const options = {
     strict: true,
     exactOptionalPropertyTypes: true,
@@ -483,3 +483,71 @@ test("batches a candidate matrix into one compiler build and reuses its results"
   );
   expect(resolver.findResolutionErrors(native("__WorkflowCheckSource_0"))).not.toHaveLength(0);
 });
+
+test("accepts TypeScript empty statements after interfaces and aliases", () => {
+  const declarations = "; interface Customer { id: string }; ; type Id = string;;";
+  const document = documentWithTypes("Customer", "{ id: Id }", declarations);
+  expect(oracle("Customer", "{ id: Id }", declarations)).toBe(true);
+  expect(validateWorkflowEditorConnection(document, connection).valid).toBe(true);
+});
+
+test.each(["Record<string, number>", "{ [key: string]: number }"])(
+  "decomposes %s using the compiler's property access semantics",
+  (source) => {
+    const fileName = "/property-oracle.ts";
+    const code = `declare const value: ${source}; const result = value["foo"];`;
+    const options = {
+      strict: true,
+      noUncheckedIndexedAccess: true,
+      noEmit: true,
+      target: ts.ScriptTarget.ES2022,
+      types: [],
+      skipLibCheck: true,
+    };
+    const host = ts.createCompilerHost(options);
+    const original = host.getSourceFile.bind(host);
+    host.getSourceFile = (name, version, onError, fresh) =>
+      name === fileName
+        ? ts.createSourceFile(name, code, version, true)
+        : original(name, version, onError, fresh);
+    const program = ts.createProgram([fileName], options, host);
+    expect(program.getSemanticDiagnostics()).toHaveLength(0);
+    const result = (program.getSourceFile(fileName)!.statements[1] as ts.VariableStatement)
+      .declarationList.declarations[0]!;
+    const checker = program.getTypeChecker();
+    const expected = checker.typeToString(checker.getTypeAtLocation(result.initializer!));
+    const template = defaultWorkflowEditorNodeTemplates.find(
+      (node) => node.kind === "json.object.decompose",
+    )!;
+    const decompose = addWorkflowEditorObjectDecompositionOutputToNode(
+      { ...template, id: "decompose", x: 100, y: 0 },
+      { portId: "foo", propertyKey: "foo" },
+    );
+    const document = documentWithTypes(source, "unknown");
+    document.nodes = [document.nodes[0]!, decompose];
+    const connected = connectWorkflowEditorNodes(document, {
+      sourceNodeId: "source",
+      sourcePortId: "out",
+      targetNodeId: "decompose",
+      targetPortId: "object",
+    });
+    const output = connected.nodes
+      .find((node) => node.id === "decompose")!
+      .outputs!.find((port) => port.id === "foo")!;
+    expect(output.type).toEqual(native(expected));
+    expect(isWorkflowEditorPortTypeAssignable(output.type, native("number"))).toBe(false);
+    expect(
+      compileWorkflowEditorDocument(connected)
+        .nodes.find((node) => node.id === "decompose")!
+        .outputs!.find((port) => port.id === "foo")!.type,
+    ).toEqual(native(expected));
+    const resolver = createWorkflowEditorTypeResolver();
+    expect(
+      resolver.objectPropertiesFromType(native("{ [key: number]: string }"), ["0", "foo"])?.["0"]
+        ?.type,
+    ).toEqual(native("string | undefined"));
+    expect(
+      resolver.objectPropertiesFromType(native("{ [key: number]: string }"), ["0", "foo"])?.foo,
+    ).toBeUndefined();
+  },
+);

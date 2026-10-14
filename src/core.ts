@@ -3453,7 +3453,15 @@ function getWorkflowEditorObjectDecompositionPropertyType<TNodeData = Record<str
   const properties = createWorkflowEditorTypeResolver(
     typeDefinitions,
     typeDeclarations,
-  ).objectPropertiesFromType(objectInput.type);
+  ).objectPropertiesFromType(objectInput.type, [
+    propertyKey,
+    ...getWorkflowEditorObjectDecompositionOutputs(node).map(
+      (output) =>
+        getWorkflowEditorObjectDecompositionProperty(node, output.id)?.key ??
+        output.label ??
+        output.id,
+    ),
+  ]);
 
   return properties?.[propertyKey]?.type;
 }

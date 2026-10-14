@@ -14,6 +14,7 @@ import {
 export type WorkflowEditorTypeCheck = {
   source: WorkflowEditorPortType;
   target?: WorkflowEditorPortType;
+  propertyKeys?: readonly string[];
 };
 export type WorkflowEditorTypeResolver = {
   readonly programBuildCount: number;
@@ -23,6 +24,7 @@ export type WorkflowEditorTypeResolver = {
   findResolutionErrors(type: WorkflowEditorPortType): string[];
   objectPropertiesFromType(
     type: WorkflowEditorPortType,
+    propertyKeys?: readonly string[],
   ): Record<string, WorkflowEditorPortProperty> | null;
 };
 
@@ -70,7 +72,9 @@ export function createWorkflowEditorTypeResolver(
   );
   const invalidDeclaration = declarationFile.statements.some(
     (statement) =>
-      (!ts.isTypeAliasDeclaration(statement) && !ts.isInterfaceDeclaration(statement)) ||
+      (!ts.isTypeAliasDeclaration(statement) &&
+        !ts.isInterfaceDeclaration(statement) &&
+        !ts.isEmptyStatement(statement)) ||
       ("name" in statement &&
         ts.isIdentifier(statement.name as ts.Node) &&
         (statement.name as ts.Identifier).text.startsWith("__Workflow")),
@@ -126,12 +130,13 @@ export function createWorkflowEditorTypeResolver(
     results.set(key, result);
   };
   function prepareChecks(checks: readonly WorkflowEditorTypeCheck[]) {
-    const pending = new Map<string, { source: string; target?: string }>();
+    const pending = new Map<string, { source: string; target?: string; propertyKeys: string[] }>();
     for (const request of checks) {
       const source = workflowEditorPortTypeSource(request.source);
       const target =
         request.target === undefined ? undefined : workflowEditorPortTypeSource(request.target);
-      const key = JSON.stringify([source, target]);
+      const propertyKeys = [...new Set(request.propertyKeys ?? [])].sort();
+      const key = JSON.stringify([source, target, propertyKeys]);
       if (results.has(key) || pending.has(key)) {
         continue;
       }
@@ -153,7 +158,7 @@ export function createWorkflowEditorTypeResolver(
         remember(key, { errors: [...new Set(errors)], properties: null });
         continue;
       }
-      pending.set(key, { source, ...(target === undefined ? {} : { target }) });
+      pending.set(key, { source, propertyKeys, ...(target === undefined ? {} : { target }) });
     }
     if (!pending.size) {
       return;
@@ -166,7 +171,14 @@ export function createWorkflowEditorTypeResolver(
       if (request.target !== undefined) {
         code += `type __WorkflowCheckTarget_${index} = (${request.target}); declare const __WorkflowCheckValue_${index}: ${alias}; const __WorkflowCheckResult_${index}: __WorkflowCheckTarget_${index} = __WorkflowCheckValue_${index};\n`;
       }
-      return { key, alias, start, end: code.length, properties: request.target === undefined };
+      const end = code.length;
+      const accesses = request.propertyKeys.map((propertyKey, propertyIndex) => {
+        const start = code.length;
+        const name = `__WorkflowCheckProperty_${index}_${propertyIndex}`;
+        code += `declare const __WorkflowCheckInput_${index}_${propertyIndex}: ${alias}; const ${name} = __WorkflowCheckInput_${index}_${propertyIndex}[${JSON.stringify(propertyKey)}];\n`;
+        return { propertyKey, name, start, end: code.length };
+      });
+      return { key, alias, start, end, accesses, properties: request.target === undefined };
     });
     const sourceFile = ts.createSourceFile(fileName, code, ts.ScriptTarget.Latest, true);
     const host: ts.CompilerHost = {
@@ -201,6 +213,17 @@ export function createWorkflowEditorTypeResolver(
     const aliases = new Map(
       sourceFile.statements.flatMap((statement) =>
         ts.isTypeAliasDeclaration(statement) ? [[statement.name.text, statement] as const] : [],
+      ),
+    );
+    const accessExpressions = new Map(
+      sourceFile.statements.flatMap((statement) =>
+        ts.isVariableStatement(statement)
+          ? statement.declarationList.declarations.flatMap((declaration) =>
+              ts.isIdentifier(declaration.name) && declaration.initializer
+                ? [[declaration.name.text, declaration.initializer] as const]
+                : [],
+            )
+          : [],
       ),
     );
     for (const segment of segments) {
@@ -240,15 +263,38 @@ export function createWorkflowEditorTypeResolver(
                 ];
               }),
             );
+      if (properties && type) {
+        for (const access of segment.accesses) {
+          const expression = accessExpressions.get(access.name);
+          const invalidAccess = diagnostics.some(
+            (diagnostic) =>
+              diagnostic.start !== undefined &&
+              diagnostic.start >= access.start &&
+              diagnostic.start < access.end,
+          );
+          if (expression && !invalidAccess) {
+            const symbol = checker.getPropertyOfType(type, access.propertyKey);
+            properties[access.propertyKey] = {
+              optional: Boolean(symbol && symbol.flags & ts.SymbolFlags.Optional),
+              type: portTypeFromChecker(checker, checker.getTypeAtLocation(expression)),
+            };
+          }
+        }
+      }
       remember(segment.key, { errors, properties });
     }
   }
-  function check(source: WorkflowEditorPortType, target?: WorkflowEditorPortType): CheckedType {
+  function check(
+    source: WorkflowEditorPortType,
+    target?: WorkflowEditorPortType,
+    propertyKeys: readonly string[] = [],
+  ): CheckedType {
     const key = JSON.stringify([
       workflowEditorPortTypeSource(source),
       target === undefined ? undefined : workflowEditorPortTypeSource(target),
+      [...new Set(propertyKeys)].sort(),
     ]);
-    prepareChecks([{ source, ...(target === undefined ? {} : { target }) }]);
+    prepareChecks([{ source, propertyKeys, ...(target === undefined ? {} : { target }) }]);
     return results.get(key)!;
   }
   const resolver: WorkflowEditorTypeResolver = {
@@ -265,8 +311,8 @@ export function createWorkflowEditorTypeResolver(
     findResolutionErrors(type) {
       return check(type).errors;
     },
-    objectPropertiesFromType(type) {
-      return check(type).properties;
+    objectPropertiesFromType(type, propertyKeys) {
+      return check(type, undefined, propertyKeys).properties;
     },
   };
   if (resolvers.size >= 8) {
