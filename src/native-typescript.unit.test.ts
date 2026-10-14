@@ -217,6 +217,42 @@ describe("native type document contracts", () => {
       ).valid,
     ).toBe(true);
   });
+  test("connection mutations retain effective host-projected property types", () => {
+    const template = defaultWorkflowEditorNodeTemplates.find(
+      (candidate) => candidate.kind === "json.object.decompose",
+    )!;
+    const decompose = addWorkflowEditorObjectDecompositionOutputToNode(
+      { ...template, id: "decompose", x: 100, y: 0 },
+      { portId: "id", propertyKey: "id" },
+    );
+    const document = documentWithTypes("Customer", "unknown");
+    document.nodes = [document.nodes[0]!, decompose];
+    const connection = {
+      sourceNodeId: "source",
+      sourcePortId: "out",
+      targetNodeId: "decompose",
+      targetPortId: "object",
+    };
+    const options = { typeDefinitions: [{ name: "Customer", type: native("{ id: string }") }] };
+    for (const connect of [connectWorkflowEditorNodes, connectWorkflowEditorNodesWithCardinality]) {
+      const connected = connect(document, connection, options);
+      expect(
+        connected.nodes
+          .find((node) => node.id === "decompose")
+          ?.outputs?.find((port) => port.id === "id")?.type,
+      ).toEqual({ kind: "string" });
+      const overridden = connect(
+        { ...document, typeDeclarations: "type Customer = { id: number };" },
+        connection,
+        { typeDeclarations: "type Customer = { id: string };" },
+      );
+      expect(
+        overridden.nodes
+          .find((node) => node.id === "decompose")
+          ?.outputs?.find((port) => port.id === "id")?.type,
+      ).toEqual({ kind: "string" });
+    }
+  });
   test("compiler emits property types projected from effective host declarations", () => {
     const template = defaultWorkflowEditorNodeTemplates.find(
       (candidate) => candidate.kind === "json.object.decompose",
@@ -291,6 +327,22 @@ describe("native type document contracts", () => {
     );
     expect(compiled.nodes[0]?.outputs?.[0]?.type).toEqual({ kind: "ref", name: "order-item" });
     expect(compiled.typeDeclarations).toContain("__WorkflowCatalog_");
+  });
+  test("escaped legacy identifiers remain distinct from their decoded names", () => {
+    const definitions = [
+      { name: "C", type: native("string") },
+      { name: "\\u0043", type: native("number") },
+    ];
+    expect(
+      isWorkflowEditorPortTypeAssignable({ kind: "ref", name: "C" }, native("string"), definitions),
+    ).toBe(true);
+    expect(
+      isWorkflowEditorPortTypeAssignable(
+        { kind: "ref", name: "\\u0043" },
+        native("number"),
+        definitions,
+      ),
+    ).toBe(true);
   });
   test("legacy catalog names can coincide with TypeScript standard globals", () => {
     expect(

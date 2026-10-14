@@ -1902,16 +1902,22 @@ export function connectWorkflowEditorNodes<
     return document;
   }
 
-  const expandedConnection = expandWorkflowEditorConnectionWithBehaviors(document, connection);
+  const expandedConnection = expandWorkflowEditorConnectionWithBehaviors(
+    resolveWorkflowEditorDocumentTypes(document, options),
+    connection,
+  );
   const edgeId = createWorkflowEditorEdgeId(
     expandedConnection.document,
     expandedConnection.connection,
   );
 
-  return addWorkflowEditorEdge(expandedConnection.document, {
-    id: edgeId,
-    ...expandedConnection.connection,
-  } as WorkflowEditorEdge<TEdgeData>);
+  return resolveWorkflowEditorDocumentTypes(
+    addWorkflowEditorEdge(expandedConnection.document, {
+      id: edgeId,
+      ...expandedConnection.connection,
+    } as WorkflowEditorEdge<TEdgeData>),
+    options,
+  );
 }
 
 export function analyzeWorkflowEditorPortTypes<

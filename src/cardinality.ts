@@ -185,7 +185,10 @@ export function connectWorkflowEditorNodesWithCardinality<
   }
 
   const id = createCardinalityEdgeId(document, connection);
-  return addWorkflowEditorEdge(document, { id, ...connection } as WorkflowEditorEdge<TEdgeData>);
+  return resolveWorkflowEditorDocumentTypes(
+    addWorkflowEditorEdge(document, { id, ...connection } as WorkflowEditorEdge<TEdgeData>),
+    options,
+  );
 }
 
 export function getWorkflowEditorPortConnectionCount<

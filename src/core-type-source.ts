@@ -69,6 +69,7 @@ export function workflowEditorLegacyTypeName(name: string): string {
     !workflowStandardTypeNames.has(name) &&
     scanner.scan() === ts.SyntaxKind.Identifier &&
     scanner.getTokenText() === name &&
+    scanner.getTokenValue() === name &&
     scanner.scan() === ts.SyntaxKind.EndOfFileToken
   ) {
     return name;
