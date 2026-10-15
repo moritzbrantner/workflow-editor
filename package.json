@@ -123,7 +123,7 @@
     "check-types": "tsc --noEmit",
     "check-types:tests": "tsc --noEmit -p tsconfig.test.json",
     "api:extract": "bun run build && api-extractor run --local",
-    "api:check": "bun run build && api-extractor run --local && git diff -- etc/workflow-editor.api.md && git diff --exit-code -- etc/workflow-editor.api.md",
+    "api:check": "bun run build && api-extractor run",
     "types:public": "bun run build && node scripts/run-public-types.mjs",
     "coverage:check": "$(dirname $(command -v npm))/node node_modules/vitest/vitest.mjs run --coverage",
     "pack:check": "bun pm pack --dry-run",

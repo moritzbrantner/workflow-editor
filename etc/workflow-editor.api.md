@@ -784,11 +784,11 @@ export function resetWorkflowEditorHistory<TNodeData = Record<string, unknown>, 
 // @public (undocumented)
 export function resolveWorkflowEditorDocumentReference<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(library: WorkflowEditorLibrary<TNodeData, TEdgeData>, reference: WorkflowEditorWorkflowReference | null | undefined): WorkflowEditorLibraryEntry<TNodeData, TEdgeData> | null;
 
-// Warning: (ae-forgotten-export) The symbol "WorkflowEditorSettingsResolutionProps" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
+// @public
 export function resolveWorkflowEditorPortTypeColor(type: WorkflowEditorPortType, portTypeColors?: Readonly<Record<string, string>>): string;
 
+// Warning: (ae-forgotten-export) The symbol "WorkflowEditorSettingsResolutionProps" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
 export function resolveWorkflowEditorSettings<TAppSettings extends Record<string, unknown> = Record<string, unknown>>(input: WorkflowEditorSettingsResolutionProps<TAppSettings>): WorkflowEditorSettings<TAppSettings>;
 
@@ -2322,8 +2322,8 @@ export function wouldCreateWorkflowEditorCycle<TNodeData = Record<string, unknow
 // Warnings were encountered during analysis:
 //
 // dist/editor.d.ts:31:5 - (ae-forgotten-export) The symbol "ChromeController" needs to be exported by the entry point index.d.ts
-// dist/react.d.ts:123:9 - (ae-forgotten-export) The symbol "WorkflowWorkbenchPaletteCategoryGroup" needs to be exported by the entry point index.d.ts
-// dist/react.d.ts:128:9 - (ae-forgotten-export) The symbol "WorkflowWorkbenchOverlayPosition" needs to be exported by the entry point index.d.ts
+// dist/react.d.ts:127:9 - (ae-forgotten-export) The symbol "WorkflowWorkbenchPaletteCategoryGroup" needs to be exported by the entry point index.d.ts
+// dist/react.d.ts:132:9 - (ae-forgotten-export) The symbol "WorkflowWorkbenchOverlayPosition" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 
