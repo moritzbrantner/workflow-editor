@@ -70,14 +70,21 @@ export function createWorkflowEditorTypeResolver(
     ts.ScriptTarget.Latest,
     true,
   );
+  // Reserved checker names may be neither declared nor referenced: a reference such as
+  // `type Alias = __WorkflowCheckSource_0` would bind to the generated query alias.
+  // Member names (`{ __WorkflowNote: string }`) are ordinary keys, not symbol references.
+  const isMemberName = (node: ts.Identifier) =>
+    (ts.isPropertySignature(node.parent) || ts.isMethodSignature(node.parent)) &&
+    node.parent.name === node;
+  const referencesReservedName = (node: ts.Node): boolean =>
+    (ts.isIdentifier(node) && node.text.startsWith("__Workflow") && !isMemberName(node)) ||
+    (ts.forEachChild(node, (child) => referencesReservedName(child) || undefined) ?? false);
   const invalidDeclaration = declarationFile.statements.some(
     (statement) =>
       (!ts.isTypeAliasDeclaration(statement) &&
         !ts.isInterfaceDeclaration(statement) &&
         !ts.isEmptyStatement(statement)) ||
-      ("name" in statement &&
-        ts.isIdentifier(statement.name as ts.Node) &&
-        (statement.name as ts.Identifier).text.startsWith("__Workflow")),
+      referencesReservedName(statement),
   );
   const formatDiagnostic = (diagnostic: ts.Diagnostic) => {
     let message = `TS${diagnostic.code}: ${ts.flattenDiagnosticMessageText(diagnostic.messageText, " ")}`;

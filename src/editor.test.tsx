@@ -6,7 +6,7 @@ import {
 } from "./core";
 import { createWorkflowEditorHistory, commitWorkflowEditorHistory } from "./history";
 import { type ReactNode, useState } from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 
 import {
@@ -705,6 +705,72 @@ describe("@moritzbrantner/workflow-editor editor shell", () => {
     });
     fireEvent.keyDown(screen.getByLabelText("Output Out TypeScript type"), { key: "Enter" });
     expect(screen.getByTestId("property-type").textContent).toBe('{"kind":"number"}');
+  });
+
+  test("host catalog edits reproject inferred ports of the active document", async () => {
+    const definitions: WorkflowEditorTypeDefinition[] = [
+      { name: "Customer", type: { kind: "typescript", source: "{ id: string }" } },
+    ];
+    const decompose = addWorkflowEditorObjectDecompositionOutputToNode(
+      {
+        ...defaultWorkflowEditorNodeTemplates.find(
+          (template) => template.kind === "json.object.decompose",
+        )!,
+        id: "decompose",
+        x: 100,
+        y: 0,
+      },
+      { portId: "id", propertyKey: "id" },
+    );
+    const connected = connectWorkflowEditorNodes(
+      {
+        nodes: [
+          {
+            id: "source",
+            label: "Source",
+            x: 0,
+            y: 0,
+            outputs: [
+              { id: "out", label: "Out", type: { kind: "typescript", source: "Customer" } },
+            ],
+          },
+          decompose,
+        ],
+        edges: [],
+      },
+      {
+        sourceNodeId: "source",
+        sourcePortId: "out",
+        targetNodeId: "decompose",
+        targetPortId: "object",
+      },
+      { typeDefinitions: definitions },
+    );
+    let current: any;
+    const propertyType = () =>
+      JSON.stringify(
+        current.activeDocument?.nodes
+          .find((node: { id: string }) => node.id === "decompose")
+          ?.outputs?.find((port: { id: string }) => port.id === "id")?.type,
+      );
+    render(
+      <EditorControllerHarness typeDefinitions={definitions} onTypeDefinitionsChange={() => {}}>
+        {(controller) => {
+          current = controller;
+          return null;
+        }}
+      </EditorControllerHarness>,
+    );
+    await waitFor(() => expect(current.activeDocument).toBeTruthy());
+    act(() => current.actions.updateActiveDocument(connected));
+    expect(propertyType()).toBe('{"kind":"string"}');
+    act(() =>
+      current.catalog.actions.updateTypeDefinition("Customer", {
+        name: "Customer",
+        type: { kind: "typescript", source: "{ id: number }" },
+      }),
+    );
+    await waitFor(() => expect(propertyType()).toBe('{"kind":"number"}'));
   });
 
   test("types panel follows declaration undo redo and saved-version restoration", async () => {

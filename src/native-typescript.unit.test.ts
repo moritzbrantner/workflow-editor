@@ -378,6 +378,35 @@ describe("native type document contracts", () => {
         .valid,
     ).toBe(true);
   });
+  test("declarations cannot reference internal checker aliases", () => {
+    const declarations = "type Alias = __WorkflowCheckSource_0;";
+    expect(
+      validateWorkflowEditorConnection(
+        documentWithTypes("number", "Alias", declarations),
+        connection,
+      ).valid,
+    ).toBe(false);
+    expect(
+      validateWorkflowEditorConnection(
+        documentWithTypes(
+          "number",
+          "Alias",
+          "interface Alias { value: typeof __WorkflowCheckValue_0 }",
+        ),
+        connection,
+      ).valid,
+    ).toBe(false);
+    expect(
+      validateWorkflowEditorConnection(
+        documentWithTypes(
+          "{ __WorkflowNote: string }",
+          "Noted",
+          "interface Noted { __WorkflowNote: string }",
+        ),
+        connection,
+      ).valid,
+    ).toBe(true);
+  });
   test("diagnoses invalid declarations even when no ports reference them", () => {
     expect(() =>
       compileWorkflowEditorDocument({

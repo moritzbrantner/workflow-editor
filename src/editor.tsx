@@ -73,6 +73,7 @@ import {
   analyzeWorkflowEditorPortTypes,
   defaultWorkflowEditorNodeTemplates,
   normalizeWorkflowEditorSelection,
+  resolveWorkflowEditorDocumentTypes,
   updateWorkflowEditorNodeWorkflowReference,
   type WorkflowEditorDocument,
   type WorkflowEditorNodeTemplate,
@@ -385,6 +386,40 @@ export function updateWorkflowEditorAppSetting<
   value: TAppSettings[K],
 ): WorkflowEditorSettings<TAppSettings> {
   return { ...settings, app: { ...(settings.app ?? ({} as TAppSettings)), [key]: value } };
+}
+
+/**
+ * Host type definitions feed inferred ports (for example Object Decomposition outputs), so a
+ * catalog edit reprojects the active document with the new definitions at this mutation boundary.
+ */
+function withWorkflowEditorCatalogReprojection<TNodeData, TEdgeData>(
+  onTypeDefinitionsChange:
+    | ((definitions: readonly WorkflowEditorTypeDefinition[]) => void)
+    | undefined,
+  activeDocument: WorkflowEditorDocument<TNodeData, TEdgeData> | undefined,
+  updateDocument: (document: WorkflowEditorDocument<TNodeData, TEdgeData>) => void,
+) {
+  if (!onTypeDefinitionsChange) {
+    return undefined;
+  }
+  return (definitions: readonly WorkflowEditorTypeDefinition[]) => {
+    onTypeDefinitionsChange(definitions);
+    if (!activeDocument) {
+      return;
+    }
+    let projected: WorkflowEditorDocument<TNodeData, TEdgeData>;
+    try {
+      projected = resolveWorkflowEditorDocumentTypes(activeDocument, {
+        typeDefinitions: definitions,
+      });
+    } catch {
+      // Invalid catalog states surface through validation; keep the document unchanged.
+      return;
+    }
+    if (JSON.stringify(projected) !== JSON.stringify(activeDocument)) {
+      updateDocument(projected);
+    }
+  };
 }
 
 function createWorkflowEditorCatalogController<
@@ -1069,7 +1104,11 @@ export function WorkflowEditor<
     typeDefinitions,
     nodeTemplates,
     onSettingsChange,
-    onTypeDefinitionsChange,
+    onTypeDefinitionsChange: withWorkflowEditorCatalogReprojection(
+      onTypeDefinitionsChange,
+      readOnly ? undefined : activeDocument,
+      updateDocument,
+    ),
     onNodeTemplatesChange,
   });
 
@@ -2060,7 +2099,11 @@ export function useWorkflowEditorController<
     typeDefinitions,
     nodeTemplates,
     onSettingsChange,
-    onTypeDefinitionsChange,
+    onTypeDefinitionsChange: withWorkflowEditorCatalogReprojection(
+      onTypeDefinitionsChange,
+      readOnly ? undefined : activeDocument,
+      updateActiveDocument,
+    ),
     onNodeTemplatesChange,
   });
 
