@@ -1153,6 +1153,9 @@ export function WorkflowEditor<
     },
   } satisfies WorkflowEditorController<TNodeData, TEdgeData, TTemplateData, TAppSettings>;
 
+  const updatePortTypeColors = (colors: Readonly<Record<string, string>>) => {
+    catalogController.actions.updateBuiltInSetting("portTypeColors", colors);
+  };
   const documentControlsChrome =
     chrome?.documentControls ?? (compactControls ? "compact-menu" : "default");
   const documentPathChrome = chrome?.documentPath ?? "default";
@@ -1630,10 +1633,7 @@ export function WorkflowEditor<
               readOnly={readOnly}
               portTypeColors={resolvedSettings.editor.portTypeColors}
               onPortTypeColorsChange={
-                catalogController.writable.settings
-                  ? (colors) =>
-                      catalogController.actions.updateBuiltInSetting("portTypeColors", colors)
-                  : undefined
+                catalogController.writable.settings ? updatePortTypeColors : undefined
               }
               onChange={updateDocument}
             />
@@ -2380,6 +2380,9 @@ export function WorkflowEditorTypesPanel<
     controller.catalog.typeDefinitions.find((definition) => definition.name === selectedName) ??
     filtered[0] ??
     null;
+  const updatePortTypeColors = (colors: Readonly<Record<string, string>>) => {
+    controller.catalog.actions.updateBuiltInSetting("portTypeColors", colors);
+  };
 
   return (
     <section className="grid gap-3 rounded-md border border-border bg-card p-3 text-sm">
@@ -2403,10 +2406,7 @@ export function WorkflowEditorTypesPanel<
         readOnly={controller.readOnly}
         portTypeColors={controller.settings.editor.portTypeColors}
         onPortTypeColorsChange={
-          controller.catalog.writable.settings
-            ? (colors) =>
-                controller.catalog.actions.updateBuiltInSetting("portTypeColors", colors)
-            : undefined
+          controller.catalog.writable.settings ? updatePortTypeColors : undefined
         }
         onChange={controller.actions.updateActiveDocument}
       />
