@@ -29,7 +29,22 @@ const native = (source: string): WorkflowEditorPortType => ({ kind: "typescript"
 // standard library files. It shares no code with the editor's resolver. The editor documents
 // strict checking with exactOptionalPropertyTypes and noUncheckedIndexedAccess; the cases below
 // are chosen so that only `optional-undefined` depends on those flags.
+// Timing-only test infrastructure: standard library files are parsed once and shared across
+// oracle programs, and each (source, target, declarations) verdict is computed once. Inputs,
+// compiler options and assertions are unchanged.
+const libraryFiles = new Map<string, ts.SourceFile | undefined>();
+const verdicts = new Map<string, boolean>();
 function oracle(source: string, target: string, declarations = "") {
+  const key = JSON.stringify([source, target, declarations]);
+  const cached = verdicts.get(key);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const verdict = computeOracle(source, target, declarations);
+  verdicts.set(key, verdict);
+  return verdict;
+}
+function computeOracle(source: string, target: string, declarations: string) {
   const fileName = "/retrospective-oracle.ts";
   const code = `${declarations}\ndeclare const value: ${source};\nconst result: ${target} = value;\nexport {};`;
   const options: ts.CompilerOptions = {
@@ -43,10 +58,15 @@ function oracle(source: string, target: string, declarations = "") {
   };
   const host = ts.createCompilerHost(options);
   const original = host.getSourceFile.bind(host);
-  host.getSourceFile = (name, version, onError, fresh) =>
-    name === fileName
-      ? ts.createSourceFile(name, code, version, true)
-      : original(name, version, onError, fresh);
+  host.getSourceFile = (name, version, onError, fresh) => {
+    if (name === fileName) {
+      return ts.createSourceFile(name, code, version, true);
+    }
+    if (!libraryFiles.has(name)) {
+      libraryFiles.set(name, original(name, version, onError, fresh));
+    }
+    return libraryFiles.get(name);
+  };
   const program = ts.createProgram([fileName], options, host);
   const diagnostics = [...program.getSyntacticDiagnostics(), ...program.getSemanticDiagnostics()];
   return diagnostics.length === 0;
