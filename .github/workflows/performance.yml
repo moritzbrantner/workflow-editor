@@ -1,7 +1,7 @@
 name: Performance
 
 on:
-  pull_request:
+  # Full benchmarks run on main or on explicit request, not on every PR.
   push:
     branches:
       - main
