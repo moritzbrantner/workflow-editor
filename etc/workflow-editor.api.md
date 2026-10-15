@@ -787,6 +787,9 @@ export function resolveWorkflowEditorDocumentReference<TNodeData = Record<string
 // Warning: (ae-forgotten-export) The symbol "WorkflowEditorSettingsResolutionProps" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
+export function resolveWorkflowEditorPortTypeColor(type: WorkflowEditorPortType, portTypeColors?: Readonly<Record<string, string>>): string;
+
+// @public (undocumented)
 export function resolveWorkflowEditorSettings<TAppSettings extends Record<string, unknown> = Record<string, unknown>>(input: WorkflowEditorSettingsResolutionProps<TAppSettings>): WorkflowEditorSettings<TAppSettings>;
 
 // @public (undocumented)
@@ -805,10 +808,14 @@ export function saveWorkflowEditorLibrary<TNodeData = Record<string, unknown>, T
 export function topologicallySortWorkflowEditorNodes<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(document: WorkflowEditorDocument<TNodeData, TEdgeData>): WorkflowEditorNode<TNodeData>[];
 
 // @public (undocumented)
-export function toUiWorkflowBuilderEdges<TData = Record<string, unknown>>(edges: Array<WorkflowEditorEdge<TData>>, nodes?: Array<WorkflowEditorNode<unknown>>): GraphCanvasEdge[];
+export function toUiWorkflowBuilderEdges<TData = Record<string, unknown>>(edges: Array<WorkflowEditorEdge<TData>>, nodes?: Array<WorkflowEditorNode<unknown>>, options?: {
+    portTypeColors?: Readonly<Record<string, string>>;
+}): GraphCanvasEdge[];
 
 // @public (undocumented)
-export function toUiWorkflowBuilderNodes<TData = Record<string, unknown>>(nodes: Array<WorkflowEditorNode<TData>>, edges?: readonly WorkflowEditorEdge<unknown>[]): GraphCanvasNodeData[];
+export function toUiWorkflowBuilderNodes<TData = Record<string, unknown>>(nodes: Array<WorkflowEditorNode<TData>>, edges?: readonly WorkflowEditorEdge<unknown>[], options?: {
+    portTypeColors?: Readonly<Record<string, string>>;
+}): GraphCanvasNodeData[];
 
 // @public (undocumented)
 export function toUiWorkflowBuilderViewport(viewport: WorkflowEditorViewport | undefined): GraphCanvasViewport | undefined;
@@ -941,6 +948,7 @@ export type WorkflowEditorBuiltInSettings = {
     enableNestedWorkflows: boolean;
     maxNestedWorkflowDepth: number;
     maxVersions: number;
+    portTypeColors: Readonly<Record<string, string>>;
     readOnly: boolean;
     showDocumentPath: boolean;
     showDocumentStats: boolean;
@@ -2173,7 +2181,7 @@ export type WorkflowWorkbenchController<TNodeData extends Record<string, unknown
         palette: WorkflowWorkbenchPanelState;
         inspector: WorkflowWorkbenchPanelState;
     };
-    configuration: Pick<WorkflowWorkbenchProps<TNodeData, TEdgeData, TTemplateData>, "documentReferences" | "nodeTemplates" | "onCreateWorkflowReference" | "onOpenWorkflowReference" | "onSelectionChange" | "onSelectionStateChange" | "onViewportChange" | "renderInspector" | "renderNodeTemplate" | "renderToolbarActions" | "typeDefinitions">;
+    configuration: Pick<WorkflowWorkbenchProps<TNodeData, TEdgeData, TTemplateData>, "documentReferences" | "portTypeColors" | "nodeTemplates" | "onCreateWorkflowReference" | "onOpenWorkflowReference" | "onSelectionChange" | "onSelectionStateChange" | "onViewportChange" | "renderInspector" | "renderNodeTemplate" | "renderToolbarActions" | "typeDefinitions">;
     actions: {
         addTemplateNode: (template: WorkflowWorkbenchPaletteItem<TTemplateData>, position?: WorkflowEditorPoint) => void;
         arrangeAll: () => void;
@@ -2274,6 +2282,7 @@ export type WorkflowWorkbenchProps<TNodeData extends Record<string, unknown> = R
     nodeTemplates?: ReadonlyArray<WorkflowWorkbenchPaletteItem<TTemplateData>>;
     typeDefinitions?: readonly WorkflowEditorTypeDefinition[];
     documentReferences?: WorkflowEditorDocumentReferenceOption[];
+    portTypeColors?: Readonly<Record<string, string>>;
     className?: string;
     layout?: "default" | "unstyled";
     chrome?: WorkflowWorkbenchChrome<TNodeData, TEdgeData, TTemplateData>;
