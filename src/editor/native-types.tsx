@@ -8,6 +8,7 @@ import type {
   WorkflowEditorTypeDefinition,
 } from "../core-types";
 import { workflowEditorPortTypeSource } from "../core-type-source";
+import { resolveWorkflowEditorPortTypeColor } from "../port-type-colors";
 import { createWorkflowEditorTypeResolver } from "../core-type-resolver";
 
 export function NativeWorkflowTypes<
@@ -18,18 +19,31 @@ export function NativeWorkflowTypes<
   definitions,
   selectedNodeId,
   readOnly,
+  portTypeColors,
+  onPortTypeColorsChange,
   onChange,
 }: {
   document: WorkflowEditorDocument<TNodeData, TEdgeData>;
   definitions: readonly WorkflowEditorTypeDefinition[];
   selectedNodeId?: string;
   readOnly: boolean;
+  portTypeColors?: Readonly<Record<string, string>>;
+  onPortTypeColorsChange?: (colors: Readonly<Record<string, string>>) => void;
   onChange: (document: WorkflowEditorDocument<TNodeData, TEdgeData>) => void;
 }) {
   const [draft, setDraft] = useState(document.typeDeclarations ?? "");
   const [error, setError] = useState("");
   const selected = document.nodes.find((node) => node.id === selectedNodeId);
   const resolver = createWorkflowEditorTypeResolver(definitions, document.typeDeclarations);
+  const displayedTypes = Array.from(
+    new Set(
+      document.nodes.flatMap((node) =>
+        [...(node.inputs ?? []), ...(node.outputs ?? [])]
+          .map((port) => workflowEditorPortTypeSource(port.type).trim())
+          .filter(Boolean),
+      ),
+    ),
+  ).sort((left, right) => left.localeCompare(right));
   const update = (next: WorkflowEditorDocument<TNodeData, TEdgeData>) =>
     onChange(resolveWorkflowEditorDocumentTypes(next, { typeDefinitions: definitions }));
   resolver.prepareChecks(
@@ -88,6 +102,30 @@ export function NativeWorkflowTypes<
       ) : (
         <p className="text-xs text-muted-foreground">Select a node to edit its port types.</p>
       )}
+      <section className="grid gap-2" aria-label="Port type colors">
+        <h3 className="font-semibold">Port type colors</h3>
+        {displayedTypes.map((typeName) => (
+          <label key={typeName} className="flex items-center justify-between gap-2 text-xs">
+            <code className="min-w-0 break-all">{typeName}</code>
+            <input
+              aria-label={`Color for type ${typeName}`}
+              type="color"
+              className="h-8 w-12 shrink-0 cursor-pointer rounded border border-input bg-background"
+              value={resolveWorkflowEditorPortTypeColor(
+                { kind: "typescript", source: typeName },
+                portTypeColors,
+              )}
+              disabled={readOnly || !onPortTypeColorsChange}
+              onChange={(event) =>
+                onPortTypeColorsChange?.({
+                  ...portTypeColors,
+                  [typeName]: event.currentTarget.value,
+                })
+              }
+            />
+          </label>
+        ))}
+      </section>
       <details open>
         <summary>Possible outputs</summary>
         <ul className="grid gap-1 text-xs">

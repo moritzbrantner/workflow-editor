@@ -131,6 +131,7 @@ export {
   type WorkflowGraphRuntimeState,
   WorkflowEditorDocumentValidationError,
 } from "./core";
+export { resolveWorkflowEditorPortTypeColor } from "./port-type-colors";
 export {
   DefaultWorkflowInspector,
   WorkflowEditorComposedNodesPanel,

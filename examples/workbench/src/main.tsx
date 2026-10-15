@@ -1,4 +1,4 @@
-import { StrictMode, useMemo, useState } from "react";
+import { StrictMode, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 
 import {
@@ -7,10 +7,12 @@ import {
   createWorkflowEditorEntry,
   createWorkflowEditorLibrary,
   defaultWorkflowEditorNodeTemplates,
+  defaultWorkflowEditorBuiltInSettings,
   normalizeWorkflowEditorDocument,
   type WorkflowEditorDocument,
   type WorkflowEditorLibrary,
   type WorkflowEditorNode,
+  type WorkflowEditorSettings,
   type WorkflowEditorNodeTemplate,
   type WorkflowEditorPortType,
   type WorkflowEditorTypeDefinition,
@@ -23,6 +25,29 @@ type ExampleDocument = WorkflowEditorDocument<ExampleNodeData>;
 type ExampleLibrary = WorkflowEditorLibrary<ExampleNodeData>;
 
 const storageKey = "moritzbrantner.workflow-editor.examples.v1";
+const settingsStorageKey = `${storageKey}.settings.v1`;
+
+function loadWorkbenchSettings(): WorkflowEditorSettings {
+  const defaults: WorkflowEditorSettings = { editor: defaultWorkflowEditorBuiltInSettings };
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(settingsStorageKey) ?? "null") as {
+      editor?: { portTypeColors?: unknown };
+    } | null;
+    const colors = stored?.editor?.portTypeColors;
+    if (!colors || typeof colors !== "object" || Array.isArray(colors)) {
+      return defaults;
+    }
+    const portTypeColors = Object.fromEntries(
+      Object.entries(colors).filter(
+        ([name, color]) =>
+          name.trim() && typeof color === "string" && /^#[0-9a-f]{6}$/i.test(color),
+      ),
+    ) as Record<string, string>;
+    return { editor: { ...defaultWorkflowEditorBuiltInSettings, portTypeColors } };
+  } catch {
+    return defaults;
+  }
+}
 const seededAt = "2026-05-27T00:00:00.000Z";
 
 const stringType = { kind: "string" } satisfies WorkflowEditorPortType;
@@ -745,10 +770,21 @@ function edge(
 
 function App() {
   const [resetToken, setResetToken] = useState(0);
+  const [editorSettings, setEditorSettings] = useState(loadWorkbenchSettings);
   const initialLibrary = useMemo(createExamplesLibrary, [resetToken]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(settingsStorageKey, JSON.stringify(editorSettings));
+    } catch {
+      // Keep host settings usable when local storage is unavailable.
+    }
+  }, [editorSettings]);
 
   const resetExamples = () => {
     window.localStorage.removeItem(storageKey);
+    window.localStorage.removeItem(settingsStorageKey);
+    setEditorSettings({ editor: defaultWorkflowEditorBuiltInSettings });
     setResetToken((current) => current + 1);
   };
 
@@ -758,6 +794,8 @@ function App() {
         key={resetToken}
         storageKey={storageKey}
         initialLibrary={initialLibrary}
+        settings={editorSettings}
+        onSettingsChange={setEditorSettings}
         className="grid h-full min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] gap-[0.35rem] [&_[data-slot='workbench-layout']]:min-h-0 [&_[data-slot='workbench-layout']>div]:min-h-0"
         nodeTemplates={nodeTemplates}
         typeDefinitions={typeDefinitions}
