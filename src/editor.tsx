@@ -1631,7 +1631,8 @@ export function WorkflowEditor<
               portTypeColors={resolvedSettings.editor.portTypeColors}
               onPortTypeColorsChange={
                 catalogController.writable.settings
-                  ? (colors) => catalogController.actions.updateBuiltInSetting("portTypeColors", colors)
+                  ? (colors) =>
+                    catalogController.actions.updateBuiltInSetting("portTypeColors", colors)
                   : undefined
               }
               onChange={updateDocument}
@@ -2403,7 +2404,8 @@ export function WorkflowEditorTypesPanel<
         portTypeColors={controller.settings.editor.portTypeColors}
         onPortTypeColorsChange={
           controller.catalog.writable.settings
-            ? (colors) => controller.catalog.actions.updateBuiltInSetting("portTypeColors", colors)
+            ? (colors) =>
+                controller.catalog.actions.updateBuiltInSetting("portTypeColors", colors)
             : undefined
         }
         onChange={controller.actions.updateActiveDocument}

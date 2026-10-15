@@ -26,7 +26,7 @@ type WorkflowEditorPortColorOptions = {
 export function toUiWorkflowBuilderNodes<TData = Record<string, unknown>>(
   nodes: Array<WorkflowEditorNode<TData>>,
   edges?: readonly WorkflowEditorEdge<unknown>[],
-  options: WorkflowEditorPortColorOptions = {},
+  options: { portTypeColors?: Readonly<Record<string, string>> } = {},
 ): UiWorkflowBuilderNodeData[] {
   const connectedInputs = edges ? createWorkflowEditorConnectedInputLookup(edges) : undefined;
 
@@ -109,7 +109,7 @@ export function fromUiWorkflowBuilderNodes<TData = Record<string, unknown>>(
 export function toUiWorkflowBuilderEdges<TData = Record<string, unknown>>(
   edges: Array<WorkflowEditorEdge<TData>>,
   nodes?: Array<WorkflowEditorNode<unknown>>,
-  options: WorkflowEditorPortColorOptions = {},
+  options: { portTypeColors?: Readonly<Record<string, string>> } = {},
 ): UiWorkflowBuilderEdge[] {
   const nodeById = nodes ? new Map(nodes.map((node) => [node.id, node] as const)) : undefined;
 
@@ -275,7 +275,9 @@ function workflowEditorPortPresentationColor(
 ): string {
   const name = workflowEditorPortTypeSource(port.type).trim();
   const typeColor = resolveWorkflowEditorPortTypeColor(port.type, portTypeColors);
-  return portTypeColors && Object.hasOwn(portTypeColors, name) ? typeColor : (port.color ?? typeColor);
+  return portTypeColors && Object.hasOwn(portTypeColors, name)
+    ? typeColor
+    : (port.color ?? typeColor);
 }
 
 function formatWorkflowEditorPortType(type: WorkflowEditorPortType): string {
