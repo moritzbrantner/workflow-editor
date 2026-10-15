@@ -269,6 +269,8 @@ function formatWorkflowEditorPortType(type: WorkflowEditorPortType): string {
       const label = type.types.map(formatWorkflowEditorPortType).join(" & ");
       return label.length <= 36 ? label : "intersection";
     }
+    case "typescript":
+      return type.source;
     case "ref":
       return type.name;
     default:
@@ -300,6 +302,8 @@ function getWorkflowEditorPortTypeSignature(type: WorkflowEditorPortType): strin
       return `union:${type.types.map(getWorkflowEditorPortTypeSignature).join("|")}`;
     case "intersection":
       return `intersection:${type.types.map(getWorkflowEditorPortTypeSignature).join("&")}`;
+    case "typescript":
+      return `typescript:${type.source}`;
     case "ref":
       return `ref:${type.name}`;
     default:

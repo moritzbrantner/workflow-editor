@@ -76,6 +76,20 @@ const typeDefinitions: readonly WorkflowEditorTypeDefinition[] = [
 
 const domainTemplates = [
   {
+    id: "template-typed-value",
+    label: "Typed value",
+    kind: "data.value",
+    category: "Types",
+    outputs: [{ id: "value", label: "Value", type: { kind: "typescript", source: "unknown" } }],
+  },
+  {
+    id: "template-typed-input",
+    label: "Typed input",
+    kind: "data.input",
+    category: "Types",
+    inputs: [{ id: "value", label: "Value", type: { kind: "typescript", source: "unknown" } }],
+  },
+  {
     id: "template-webhook-trigger",
     label: "Webhook trigger",
     description: "Starts from an external event.",
@@ -155,6 +169,13 @@ const nodeTemplates: ReadonlyArray<WorkflowEditorNodeTemplate<ExampleNodeData>> 
 function createExamplesLibrary(): ExampleLibrary {
   const documents = [
     createWorkflowEditorEntry({
+      id: "typescript-ports",
+      name: "TypeScript ports",
+      createdAt: seededAt,
+      updatedAt: seededAt,
+      document: typescriptPortsDocument(),
+    }),
+    createWorkflowEditorEntry({
       id: "lead-intake",
       name: "Lead Intake Automation",
       description: "Branching, typed ports, and nested workflow references.",
@@ -204,6 +225,69 @@ function createExamplesLibrary(): ExampleLibrary {
   return createWorkflowEditorLibrary({
     activeDocumentId: "lead-intake",
     documents,
+  });
+}
+
+function typescriptPortsDocument(): ExampleDocument {
+  const template = (
+    kind: string,
+    id: string,
+    label: string,
+    x: number,
+    y: number,
+  ): WorkflowEditorNode<ExampleNodeData> => ({
+    ...defaultWorkflowEditorNodeTemplates.find((item) => item.kind === kind)!,
+    id,
+    label,
+    x,
+    y,
+  });
+  return normalizeWorkflowEditorDocument({
+    typeDeclarations: "type Customer = { id: string; name?: string };",
+    viewport: { x: 25, y: 35, zoom: 0.72 },
+    nodes: [
+      {
+        id: "customer",
+        label: "Customer source",
+        kind: "data.value",
+        x: 0,
+        y: 0,
+        outputs: [
+          { id: "value", label: "Value", type: { kind: "typescript", source: "Customer" } },
+        ],
+      },
+      {
+        id: "receiver",
+        label: "Customer receiver",
+        kind: "data.input",
+        x: 340,
+        y: 0,
+        inputs: [
+          { id: "value", label: "Value", type: { kind: "typescript", source: "{ id: string }" } },
+        ],
+      },
+      {
+        id: "number",
+        label: "Number receiver",
+        kind: "data.input",
+        x: 340,
+        y: 190,
+        inputs: [{ id: "value", label: "Value", type: numberType }],
+      },
+      template("control.if", "branch", "Customer branch", 0, 250),
+      {
+        id: "fallback",
+        label: "Fallback",
+        kind: "data.value",
+        x: 0,
+        y: 520,
+        outputs: [
+          { id: "value", label: "Value", type: { kind: "typescript", source: '"anonymous"' } },
+        ],
+      },
+      template("control.merge", "merge", "Possible customer", 340, 390),
+    ],
+    edges: [],
   });
 }
 

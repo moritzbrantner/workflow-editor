@@ -1,6 +1,12 @@
+import { workflowEditorTypeDefinitionsSource } from "./core-type-source";
 import { analyzeWorkflowEditorPortCardinality } from "./cardinality";
 import type { WorkflowEditorCardinalityPort, WorkflowEditorPortCardinality } from "./cardinality";
-import { normalizeWorkflowEditorDocument, WorkflowEditorDocumentValidationError } from "./core";
+import {
+  analyzeWorkflowEditorPortTypes,
+  normalizeWorkflowEditorDocument,
+  resolveWorkflowEditorDocumentTypes,
+  WorkflowEditorDocumentValidationError,
+} from "./core";
 import type {
   WorkflowEditorDocument,
   WorkflowEditorEdge,
@@ -8,6 +14,7 @@ import type {
   WorkflowEditorPort,
   WorkflowEditorPortDefaultValue,
   WorkflowEditorPortType,
+  WorkflowEditorTypeValidationOptions,
 } from "./core-types";
 
 export const compiledWorkflowFormat = "@moritzbrantner/workflow/compiled" as const;
@@ -43,9 +50,11 @@ export type CompiledWorkflow<TNodeData extends Record<string, unknown> = Record<
     nodes: CompiledWorkflowNode<TNodeData>[];
     edges: CompiledWorkflowEdge[];
     order: string[];
+    typeDeclarations?: string;
   };
 
 export type WorkflowEditorCompileDiagnosticCode =
+  | "invalid-port-type"
   | "missing-node-kind"
   | "nested-workflow-not-supported"
   | "composition-not-supported"
@@ -78,6 +87,24 @@ function compareIds(left: string, right: string) {
   if (left < right) return -1;
   if (left > right) return 1;
   return 0;
+}
+
+function containsNativeType(type: WorkflowEditorPortType): boolean {
+  switch (type.kind) {
+    case "typescript":
+      return true;
+    case "array":
+      return containsNativeType(type.element);
+    case "object":
+      return Object.values(type.properties ?? {}).some((property) =>
+        containsNativeType(property.type),
+      );
+    case "union":
+    case "intersection":
+      return type.types.some(containsNativeType);
+    default:
+      return false;
+  }
 }
 
 function compilePort(port: WorkflowEditorPort): CompiledWorkflowPort {
@@ -177,10 +204,16 @@ function topologicalOrder(document: WorkflowEditorDocument): string[] {
 export function compileWorkflowEditorDocument<
   TNodeData extends Record<string, unknown> = Record<string, unknown>,
   TEdgeData extends Record<string, unknown> = Record<string, unknown>,
->(document: WorkflowEditorDocument<TNodeData, TEdgeData>): CompiledWorkflow<TNodeData> {
+>(
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>,
+  options: WorkflowEditorTypeValidationOptions = {},
+): CompiledWorkflow<TNodeData> {
   let normalized: WorkflowEditorDocument<TNodeData, TEdgeData>;
   try {
-    normalized = normalizeWorkflowEditorDocument(document, { mode: "strict" });
+    normalized = resolveWorkflowEditorDocumentTypes(
+      normalizeWorkflowEditorDocument(document, { mode: "strict" }),
+      options,
+    );
   } catch (error) {
     if (
       error instanceof WorkflowEditorDocumentValidationError &&
@@ -206,7 +239,28 @@ export function compileWorkflowEditorDocument<
       nodeId: diagnostic.nodeId,
       portId: diagnostic.portId,
     }));
+  const nativeTypes =
+    normalized.typeDeclarations !== undefined ||
+    options.typeDeclarations !== undefined ||
+    Boolean(options.typeDefinitions?.length) ||
+    normalized.nodes.some((node) =>
+      [...(node.inputs ?? []), ...(node.outputs ?? [])].some((port) =>
+        containsNativeType(port.type),
+      ),
+    );
+  const typeDiagnostics: WorkflowEditorCompileDiagnostic[] = nativeTypes
+    ? analyzeWorkflowEditorPortTypes(normalized, options).map((diagnostic) => ({
+        code: "invalid-port-type",
+        message: diagnostic.message,
+        path: diagnostic.edgeId
+          ? `edges.${diagnostic.edgeId}`
+          : diagnostic.sourceNodeId
+            ? `nodes.${diagnostic.sourceNodeId}.${diagnostic.sourcePortId}`
+            : "typeDeclarations",
+      }))
+    : [];
   const diagnostics = [
+    ...typeDiagnostics,
     ...cardinalityDiagnostics,
     ...normalized.nodes.flatMap(validateExecutableNode),
   ];
@@ -255,5 +309,17 @@ export function compileWorkflowEditorDocument<
     nodes,
     edges,
     order,
+    ...(normalized.typeDeclarations === undefined &&
+    options.typeDeclarations === undefined &&
+    !options.typeDefinitions?.length
+      ? {}
+      : {
+          typeDeclarations: [
+            workflowEditorTypeDefinitionsSource(options.typeDefinitions ?? []),
+            options.typeDeclarations ?? normalized.typeDeclarations ?? "",
+          ]
+            .filter(Boolean)
+            .join("\n"),
+        }),
   };
 }

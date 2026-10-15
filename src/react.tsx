@@ -1,5 +1,7 @@
 "use client";
 
+import { createWorkflowEditorTypeResolver } from "./core-type-resolver";
+
 import {
   type DragEvent as ReactDragEvent,
   type Dispatch,
@@ -105,6 +107,7 @@ import {
   moveWorkflowEditorGroup,
   removeWorkflowEditorNode,
   removeWorkflowEditorSelection,
+  resolveWorkflowEditorDocumentTypes,
   ungroupWorkflowEditorGroup,
   updateWorkflowEditorGroup,
   updateWorkflowEditorNode,
@@ -433,6 +436,7 @@ type WorkflowWorkbenchPortConnectionMenuOption = {
   nodeLabel: string;
   portLabel: string;
   portTypeLabel?: string;
+  error?: string;
 };
 
 function toWorkflowWorkbenchConnectionInput(
@@ -1730,7 +1734,9 @@ export function WorkflowWorkbench<
     }
   };
 
-  const openPortConnectionMenu = (event: ReactMouseEvent<HTMLDivElement>) => {
+  const openPortConnectionMenu = (
+    event: ReactMouseEvent<HTMLDivElement> | ReactKeyboardEvent<HTMLDivElement>,
+  ) => {
     const container = containerRef.current;
     const portTarget = getWorkflowPortContextTarget(container, event);
 
@@ -1745,8 +1751,16 @@ export function WorkflowWorkbench<
       Date.now() + workflowWorkbenchOverlaySelectionPreservationMs;
     setPortConnectionMenu({
       ...portTarget,
-      x: Math.round(event.clientX + 4),
-      y: Math.round(event.clientY + 4),
+      x: Math.round(
+        ("clientX" in event
+          ? event.clientX
+          : (event.target as HTMLElement).getBoundingClientRect().right) + 4,
+      ),
+      y: Math.round(
+        ("clientY" in event
+          ? event.clientY
+          : (event.target as HTMLElement).getBoundingClientRect().top) + 4,
+      ),
     });
   };
 
@@ -2651,6 +2665,11 @@ export function WorkflowWorkbench<
               pendingNodeSnapRef.current = null;
             }}
             onContextMenuCapture={openPortConnectionMenu}
+            onKeyDownCapture={(event) => {
+              if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
+                openPortConnectionMenu(event);
+              }
+            }}
             onDoubleClickCapture={startNodeRenameFromDoubleClick}
             onDragOver={handleTemplateDragOver}
             onDrop={handleTemplateDrop}
@@ -5178,6 +5197,22 @@ function WorkflowPortConnectionMenu<
     () => getWorkflowPortConnectionMenuOptions(document, menu, typeDefinitions),
     [document, menu, typeDefinitions],
   );
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const previousFocus = globalThis.document?.activeElement;
+    const element = menuRef.current;
+    if (element && globalThis.window) {
+      const bounds = element.getBoundingClientRect();
+      element.style.left = `${Math.max(8, Math.min(menu.x, window.innerWidth - bounds.width - 8))}px`;
+      element.style.top = `${Math.max(8, Math.min(menu.y, window.innerHeight - bounds.height - 8))}px`;
+      element.querySelector<HTMLButtonElement>("button")?.focus();
+    }
+    return () => {
+      if (previousFocus instanceof HTMLElement && previousFocus.isConnected) {
+        previousFocus.focus();
+      }
+    };
+  }, [menu]);
   const title = `${node?.label ?? menu.nodeId} ${port?.label ?? menu.portId}`;
   const targetLabel = menu.direction === "output" ? "Possible inputs" : "Possible outputs";
   const ownerDocument = globalThis.document;
@@ -5192,8 +5227,38 @@ function WorkflowPortConnectionMenu<
 
   return createPortal(
     <div
+      ref={menuRef}
       role="menu"
       data-slot="workflow-port-connection-menu"
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          event.stopPropagation();
+          onClose();
+          return;
+        }
+        if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+          return;
+        }
+        const choices = [...event.currentTarget.querySelectorAll<HTMLButtonElement>("button")];
+        if (!choices.length) {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        const current = choices.indexOf(globalThis.document.activeElement as HTMLButtonElement);
+        let next =
+          event.key === "ArrowUp"
+            ? (current - 1 + choices.length) % choices.length
+            : (current + 1) % choices.length;
+        if (event.key === "Home") {
+          next = 0;
+        }
+        if (event.key === "End") {
+          next = choices.length - 1;
+        }
+        choices[next]?.focus();
+      }}
       aria-label={`${title} ${targetLabel}`}
       className="fixed z-[30000] grid max-h-72 w-56 gap-1 overflow-auto rounded-md bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10"
       style={{
@@ -5227,8 +5292,13 @@ function WorkflowPortConnectionMenu<
             type="button"
             role="menuitem"
             aria-label={`${option.nodeLabel} ${option.portLabel}`}
+            aria-disabled={Boolean(option.error)}
+            title={option.error}
             className="grid min-w-0 gap-0.5 rounded-sm px-1.5 py-1.5 text-left text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
             onClick={() => {
+              if (option.error) {
+                return;
+              }
               onConnect(option.connection);
               onClose();
             }}
@@ -5236,6 +5306,7 @@ function WorkflowPortConnectionMenu<
             <span className="truncate font-medium">
               {option.nodeLabel} {option.portLabel}
             </span>
+            {option.error ? <span className="text-xs text-destructive">{option.error}</span> : null}
             {option.portTypeLabel ? (
               <span className="truncate text-[11px] text-muted-foreground">
                 {option.portTypeLabel}
@@ -5257,7 +5328,29 @@ function getWorkflowPortConnectionMenuOptions<
   menu: WorkflowWorkbenchPortConnectionMenuState,
   typeDefinitions?: readonly WorkflowEditorTypeDefinition[],
 ): WorkflowWorkbenchPortConnectionMenuOption[] {
+  document = resolveWorkflowEditorDocumentTypes(document, { typeDefinitions });
   const options: WorkflowWorkbenchPortConnectionMenuOption[] = [];
+  const context = createWorkflowEditorDocumentContext(document);
+  const selectedPort =
+    menu.direction === "output"
+      ? context.getOutputPort(menu.nodeId, menu.portId)
+      : context.getInputPort(menu.nodeId, menu.portId);
+  if (selectedPort) {
+    createWorkflowEditorTypeResolver(typeDefinitions, document.typeDeclarations).prepareChecks(
+      document.nodes.flatMap((node) =>
+        (menu.direction === "output" ? (node.inputs ?? []) : (node.outputs ?? [])).flatMap(
+          (port) => {
+            const source = menu.direction === "output" ? selectedPort.type : port.type;
+            const target = menu.direction === "output" ? port.type : selectedPort.type;
+            return [
+              { source, target },
+              { source, target: { kind: "any" } as const },
+            ];
+          },
+        ),
+      ),
+    );
+  }
 
   for (const node of document.nodes) {
     const ports = menu.direction === "output" ? (node.inputs ?? []) : (node.outputs ?? []);
@@ -5279,11 +5372,12 @@ function getWorkflowPortConnectionMenuOptions<
             };
       const validity = validateWorkflowEditorConnection(document, connection, { typeDefinitions });
 
-      if (!validity.valid) {
+      if (!validity.valid && validity.reason !== "type-mismatch") {
         continue;
       }
 
       options.push({
+        ...(validity.valid ? {} : { error: validity.message ?? "Incompatible port types" }),
         connection,
         id: getWorkflowWorkbenchConnectionKey(connection),
         nodeLabel: node.label,
@@ -5301,6 +5395,9 @@ function formatWorkflowPortConnectionMenuType(type: unknown) {
     return undefined;
   }
 
+  if ((type as { kind?: unknown }).kind === "typescript") {
+    return "source" in type && typeof type.source === "string" ? type.source : undefined;
+  }
   const kind = (type as { kind?: unknown }).kind;
   return typeof kind === "string" ? kind : undefined;
 }
@@ -5535,7 +5632,7 @@ function isEditableEventTarget(target: EventTarget | null) {
 
 function getWorkflowPortContextTarget(
   container: HTMLElement | null,
-  event: ReactMouseEvent,
+  event: ReactMouseEvent | ReactKeyboardEvent,
 ): Pick<WorkflowWorkbenchPortConnectionMenuState, "direction" | "nodeId" | "portId"> | null {
   if (!container) {
     return null;
@@ -5551,7 +5648,11 @@ function getWorkflowPortContextTarget(
   const portElement =
     directPort && container.contains(directPort)
       ? directPort
-      : getWorkflowPortElementFromPoint(container, event.clientX, event.clientY);
+      : getWorkflowPortElementFromPoint(
+          container,
+          "clientX" in event ? event.clientX : -1,
+          "clientY" in event ? event.clientY : -1,
+        );
   const nodeElement = portElement?.closest<HTMLElement>(
     "[data-slot='workflow-builder-node'][data-node-id]",
   );

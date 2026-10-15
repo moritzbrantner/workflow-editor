@@ -8,6 +8,27 @@ Typed DAG workflow document utilities and a controlled React editor shell built 
 [Product decisions and open questions](./docs/DECISION-ATLAS.md) describe the intended
 experience; implementation status remains in code and GitHub issues.
 
+## Native TypeScript ports
+
+Open the workbench document menu and choose **TypeScript ports**. Use **Types** to edit
+workflow declarations (for example `type Customer = { id: string; name?: string };`),
+select a node on the canvas, and apply a TypeScript expression to its input or output.
+Right-click a port or focus it and press Shift+F10 to inspect connection choices and
+native incompatibility diagnostics. If/Merge/Filter expose their propagated possible
+outputs in the Types panel. Export/import and saved versions retain declarations.
+
+New port records use `{ kind: "typescript", source: "Customer" }`. A document's optional
+`typeDeclarations` contains type aliases and interfaces, including generics. Existing
+structured port records and host `typeDefinitions` are translated into compiler syntax;
+they no longer define a separate assignability algorithm. Opaque legacy catalog names
+(such as `order-item`) are encoded consistently for checking; saved reference names stay intact. Checking uses TypeScript 6,
+strict mode, exact optional properties, and bundled ES2022/DOM libraries without network
+or filesystem access. Imports, executable declarations, and compiler suppression comments are unsupported and diagnosed.
+Static checking does not validate runtime payloads. Compiled version 1 preserves new port
+records and includes optional `typeDeclarations`; legacy handoffs remain unchanged.
+Pass `{ typeDefinitions }` as the compiler's second argument when a workflow uses a host
+catalog: the handoff then carries those declarations alongside document-owned types.
+
 ## Install
 
 The package is not published to npm. Install it as a commit-pinned git
@@ -36,7 +57,7 @@ sharing, versions, settings, workflow panels, controls, and editor shell chrome.
 - `@moritzbrantner/graph-editor` owns the generic graph model, document validation,
   graph indexes, mutation primitives, layout, runtime operations, commands, and canvas.
 - `@moritzbrantner/workflow-editor` specializes those primitives for execution-ready
-  directed acyclic workflow documents with TypeScript-like port assignability, workflow
+  directed acyclic workflow documents with native TypeScript port assignability, workflow
   constructor/decomposition behavior, workflow clipboard semantics, built-in templates,
   composed nodes, nested workflow references, persistence, sharing, history, settings,
   and workflow-specific panels/controls/editor shell.
@@ -257,7 +278,7 @@ For smaller changes, use slots on the existing components:
 
 - Imported workflow JSON files are validated strictly. Malformed workflow documents fail with
   validation diagnostics instead of being silently repaired.
-- Workflow ports use serializable TypeScript-like `type` objects instead of port-level
+- Workflow ports use serializable `type` objects checked by TypeScript instead of port-level
   `kind` strings. `validateWorkflowEditorConnection(...)` accepts an optional
   `typeDefinitions` registry and allows an output to connect to an input when the
   output type is assignable to the input type.

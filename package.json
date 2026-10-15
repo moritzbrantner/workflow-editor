@@ -68,7 +68,8 @@
   "dependencies": {
     "@moritzbrantner/graph-editor": "^0.1.0",
     "@moritzbrantner/ui": "^0.8.0",
-    "lucide-react": "^1.17.0"
+    "lucide-react": "^1.17.0",
+    "typescript": "6.0.3"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.11.3",
@@ -91,7 +92,6 @@
     "tailwindcss": "^4.3.0",
     "tsd": "^0.33.0",
     "tsup": "^8.5.0",
-    "typescript": "6.0.3",
     "vite": "^8.0.14",
     "vitest": "^4.1.2"
   },
@@ -127,7 +127,7 @@
     "types:public": "bun run build && node scripts/run-public-types.mjs",
     "coverage:check": "$(dirname $(command -v npm))/node node_modules/vitest/vitest.mjs run --coverage",
     "pack:check": "bun pm pack --dry-run",
-    "smoke:package": "node scripts/smoke-package-exports.mjs",
+    "smoke:package": "node scripts/smoke-package-exports.ts",
     "smoke:packed-consumer": "node scripts/smoke-packed-consumer.mjs",
     "test": "$(dirname $(command -v npm))/node node_modules/vitest/vitest.mjs run",
     "bench": "$(dirname $(command -v npm))/node node_modules/vitest/vitest.mjs bench --passWithNoTests",

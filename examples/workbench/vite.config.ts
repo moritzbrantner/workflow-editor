@@ -12,8 +12,16 @@ export default defineConfig({
   base: "./",
   plugins: [tailwindcss()],
   build: {
-    // The demo intentionally bundles the local editor, UI kit, and example data in one app.
-    chunkSizeWarningLimit: 700,
+    // Offline native typing ships the compiler and ES2022/DOM declaration text (~6.5 MB
+    // uncompressed). Keep that vendor asset separate so editor changes reuse its cache.
+    chunkSizeWarningLimit: 7200,
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [{ name: "typescript", test: /node_modules[\\/]typescript[\\/]lib/ }],
+        },
+      },
+    },
   },
   resolve: {
     alias: [

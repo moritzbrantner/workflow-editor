@@ -1,5 +1,12 @@
+import { NativeWorkflowTypes } from "./editor/native-types";
+import {
+  connectWorkflowEditorNodes,
+  addWorkflowEditorObjectDecompositionOutputToNode,
+  defaultWorkflowEditorNodeTemplates,
+} from "./core";
+import { createWorkflowEditorHistory, commitWorkflowEditorHistory } from "./history";
 import { type ReactNode, useState } from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 
 import {
@@ -628,6 +635,182 @@ describe("@moritzbrantner/workflow-editor editor shell", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     expect(handleTypeDefinitionsChange).toHaveBeenCalled();
+  });
+
+  test("port edits retain property types from the host catalog through history", () => {
+    const definitions: WorkflowEditorTypeDefinition[] = [
+      { name: "TextCustomer", type: { kind: "typescript", source: "{ id: string }" } },
+      { name: "NumberCustomer", type: { kind: "typescript", source: "{ id: number }" } },
+    ];
+    const decompose = addWorkflowEditorObjectDecompositionOutputToNode(
+      {
+        ...defaultWorkflowEditorNodeTemplates.find(
+          (template) => template.kind === "json.object.decompose",
+        )!,
+        id: "decompose",
+        x: 100,
+        y: 0,
+      },
+      { portId: "id", propertyKey: "id" },
+    );
+    const initial = connectWorkflowEditorNodes(
+      {
+        nodes: [
+          {
+            id: "source",
+            label: "Source",
+            x: 0,
+            y: 0,
+            outputs: [
+              { id: "out", label: "Out", type: { kind: "typescript", source: "TextCustomer" } },
+            ],
+          },
+          decompose,
+        ],
+        edges: [],
+      },
+      {
+        sourceNodeId: "source",
+        sourcePortId: "out",
+        targetNodeId: "decompose",
+        targetPortId: "object",
+      },
+      { typeDefinitions: definitions },
+    );
+    function Host() {
+      const [history, setHistory] = useState(() => createWorkflowEditorHistory(initial));
+      return (
+        <>
+          <NativeWorkflowTypes
+            document={history.present}
+            definitions={definitions}
+            selectedNodeId="source"
+            readOnly={false}
+            onChange={(next) => setHistory(commitWorkflowEditorHistory(history, next))}
+          />
+          <output data-testid="property-type">
+            {JSON.stringify(
+              history.present.nodes
+                .find((node) => node.id === "decompose")
+                ?.outputs?.find((port) => port.id === "id")?.type,
+            )}
+          </output>
+        </>
+      );
+    }
+    render(<Host />);
+    expect(screen.getByTestId("property-type").textContent).toBe('{"kind":"string"}');
+    fireEvent.change(screen.getByLabelText("Output Out TypeScript type"), {
+      target: { value: "NumberCustomer" },
+    });
+    fireEvent.keyDown(screen.getByLabelText("Output Out TypeScript type"), { key: "Enter" });
+    expect(screen.getByTestId("property-type").textContent).toBe('{"kind":"number"}');
+  });
+
+  test("host catalog edits reproject inferred ports of the active document", async () => {
+    const definitions: WorkflowEditorTypeDefinition[] = [
+      { name: "Customer", type: { kind: "typescript", source: "{ id: string }" } },
+    ];
+    const decompose = addWorkflowEditorObjectDecompositionOutputToNode(
+      {
+        ...defaultWorkflowEditorNodeTemplates.find(
+          (template) => template.kind === "json.object.decompose",
+        )!,
+        id: "decompose",
+        x: 100,
+        y: 0,
+      },
+      { portId: "id", propertyKey: "id" },
+    );
+    const connected = connectWorkflowEditorNodes(
+      {
+        nodes: [
+          {
+            id: "source",
+            label: "Source",
+            x: 0,
+            y: 0,
+            outputs: [
+              { id: "out", label: "Out", type: { kind: "typescript", source: "Customer" } },
+            ],
+          },
+          decompose,
+        ],
+        edges: [],
+      },
+      {
+        sourceNodeId: "source",
+        sourcePortId: "out",
+        targetNodeId: "decompose",
+        targetPortId: "object",
+      },
+      { typeDefinitions: definitions },
+    );
+    let current: any;
+    const propertyType = () =>
+      JSON.stringify(
+        current.activeDocument?.nodes
+          .find((node: { id: string }) => node.id === "decompose")
+          ?.outputs?.find((port: { id: string }) => port.id === "id")?.type,
+      );
+    render(
+      <EditorControllerHarness typeDefinitions={definitions} onTypeDefinitionsChange={() => {}}>
+        {(controller) => {
+          current = controller;
+          return null;
+        }}
+      </EditorControllerHarness>,
+    );
+    await waitFor(() => expect(current.activeDocument).toBeTruthy());
+    act(() => current.actions.updateActiveDocument(connected));
+    expect(propertyType()).toBe('{"kind":"string"}');
+    act(() =>
+      current.catalog.actions.updateTypeDefinition("Customer", {
+        name: "Customer",
+        type: { kind: "typescript", source: "{ id: number }" },
+      }),
+    );
+    await waitFor(() => expect(propertyType()).toBe('{"kind":"number"}'));
+  });
+
+  test("types panel follows declaration undo redo and saved-version restoration", async () => {
+    render(
+      <EditorControllerHarness>
+        {(controller) => (
+          <>
+            <WorkflowEditorSaveStateBadge controller={controller} />
+            <WorkflowEditorHistoryControls controller={controller} />
+            <WorkflowEditorVersionControls controller={controller} />
+            <WorkflowEditorTypesPanel controller={controller} />
+          </>
+        )}
+      </EditorControllerHarness>,
+    );
+    await waitFor(() => expect(screen.getByTestId("save-state").textContent).toBe("Saved"));
+    const first = "type Customer = string;";
+    const second = "type Customer = number;";
+    fireEvent.change(screen.getByLabelText("TypeScript declarations"), {
+      target: { value: first },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Apply declarations" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save version", exact: true }));
+    fireEvent.change(screen.getByLabelText("TypeScript declarations"), {
+      target: { value: second },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Apply declarations" }));
+    fireEvent.click(screen.getByRole("button", { name: "Undo", exact: true }));
+    expect((screen.getByLabelText("TypeScript declarations") as HTMLTextAreaElement).value).toBe(
+      first,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Redo", exact: true }));
+    expect((screen.getByLabelText("TypeScript declarations") as HTMLTextAreaElement).value).toBe(
+      second,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Restore version", exact: true }));
+    expect((screen.getByLabelText("TypeScript declarations") as HTMLTextAreaElement).value).toBe(
+      first,
+    );
+    await waitFor(() => expect(screen.getByTestId("save-state").textContent).toBe("Saved"));
   });
 
   test("node template panel creates updates deletes and reports invalid JSON", () => {

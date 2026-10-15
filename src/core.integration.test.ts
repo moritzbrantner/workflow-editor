@@ -1936,7 +1936,7 @@ describe("@moritzbrantner/workflow-editor core", () => {
 
     expect(analyzeWorkflowEditorPortTypes(missingTypeDocument)).toEqual([
       expect.objectContaining({
-        message: "Missing workflow port type definition: Missing",
+        message: "TS2304: Cannot find name 'Missing'.",
         type: "missing-type-definition",
       }),
     ]);

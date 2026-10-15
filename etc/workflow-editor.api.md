@@ -196,6 +196,9 @@ export const defaultWorkflowEditorNodeTemplates: ({
         type: {
             kind: "any";
         };
+        metadata: {
+            workflowTypeInference: string;
+        };
     }[];
 } | {
     id: string;
@@ -417,6 +420,9 @@ export const defaultWorkflowEditorNodeTemplates: ({
     outputs: {
         id: string;
         label: string;
+        metadata: {
+            workflowTypeInference: string;
+        };
         type: {
             kind: "array";
             element: {
@@ -457,6 +463,9 @@ export const defaultWorkflowEditorNodeTemplates: ({
         label: string;
         type: {
             kind: "any";
+        };
+        metadata: {
+            workflowTypeInference: string;
         };
     }[];
     data: {
@@ -1031,6 +1040,9 @@ export const workflowEditorCollectionNodeTemplates: ({
     outputs: {
         id: string;
         label: string;
+        metadata: {
+            workflowTypeInference: string;
+        };
         type: {
             kind: "array";
             element: {
@@ -1071,6 +1083,9 @@ export const workflowEditorCollectionNodeTemplates: ({
         label: string;
         type: {
             kind: "any";
+        };
+        metadata: {
+            workflowTypeInference: string;
         };
     }[];
     data: {
@@ -1221,6 +1236,7 @@ export type WorkflowEditorConnectionInvalidReason = NonNullable<GraphEditorConne
 export type WorkflowEditorConnectionValidity = {
     valid: boolean;
     reason?: WorkflowEditorConnectionInvalidReason;
+    message?: string;
 };
 
 // @public (undocumented)
@@ -1262,6 +1278,9 @@ export const workflowEditorControlFlowNodeTemplates: ({
         label: string;
         type: {
             kind: "any";
+        };
+        metadata: {
+            workflowTypeInference: string;
         };
     }[];
 } | {
@@ -1353,6 +1372,7 @@ export function WorkflowEditorDefaultLayout(input: {
 export type WorkflowEditorDocument<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>> = Omit<GraphEditorDocument<TNodeData, TEdgeData, WorkflowEditorPortType>, "edges" | "nodes"> & {
     nodes: Array<WorkflowEditorNode<TNodeData>>;
     edges: Array<WorkflowEditorEdge<TEdgeData>>;
+    typeDeclarations?: string;
 };
 
 // @public (undocumented)
@@ -1392,7 +1412,7 @@ export type WorkflowEditorDocumentDiagnostic = {
 };
 
 // @public (undocumented)
-export type WorkflowEditorDocumentDiagnosticCode = "invalid-document" | "invalid-node" | "invalid-edge" | "duplicate-node-id" | "duplicate-edge-id" | "duplicate-group-id" | "duplicate-group-node" | "missing-edge-node" | "missing-edge-port" | "missing-group-node" | "self-edge" | "cycle" | "invalid-group";
+export type WorkflowEditorDocumentDiagnosticCode = "invalid-port-type" | "invalid-type-declarations" | "invalid-document" | "invalid-node" | "invalid-edge" | "duplicate-node-id" | "duplicate-edge-id" | "duplicate-group-id" | "duplicate-group-node" | "missing-edge-node" | "missing-edge-port" | "missing-group-node" | "self-edge" | "cycle" | "invalid-group";
 
 // @public (undocumented)
 export type WorkflowEditorDocumentFile<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>> = {
@@ -1875,6 +1895,9 @@ export type WorkflowEditorPortProperty = {
 
 // @public (undocumented)
 export type WorkflowEditorPortType = {
+    kind: "typescript";
+    source: string;
+} | {
     kind: "any";
 } | {
     kind: "unknown";
@@ -2055,6 +2078,7 @@ export function WorkflowEditorTypesPanel<TNodeData extends Record<string, unknow
 // @public (undocumented)
 export type WorkflowEditorTypeValidationOptions = {
     typeDefinitions?: readonly WorkflowEditorTypeDefinition[];
+    typeDeclarations?: string;
 };
 
 // @public (undocumented)

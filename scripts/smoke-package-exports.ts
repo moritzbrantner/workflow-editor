@@ -1,3 +1,4 @@
+import ts from "typescript";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
@@ -123,7 +124,7 @@ async function findArchitectureBoundaryFailures(entrypoint) {
       for (const reference of bannedReferences) {
         if (containsBannedReference(content, reference)) {
           architectureFailures.push(
-            `${entrypoint}: ${fileUrl.pathname.split("/").at(-1)} contains ${reference}`,
+            `${entrypoint}: ${new URL(fileUrl).pathname.split("/").at(-1)} imports ${reference}`,
           );
         }
       }
@@ -142,13 +143,12 @@ async function collectRelativeModuleFiles(entryUrl, seen = new Set()) {
 
   seen.add(key);
   const content = await readText(entryUrl);
-  const moduleSpecifierPattern =
-    /(?:import|export)\s+(?:[^'"]*?\s+from\s+)?["'](\.[^"']+\.js)["']/g;
-
   await Promise.all(
-    [...content.matchAll(moduleSpecifierPattern)].map((match) =>
-      collectRelativeModuleFiles(new URL(match[1], entryUrl), seen),
-    ),
+    ts
+      .preProcessFile(content)
+      .importedFiles.map((reference) => reference.fileName)
+      .filter((specifier) => specifier.startsWith(".") && specifier.endsWith(".js"))
+      .map((specifier) => collectRelativeModuleFiles(new URL(specifier, entryUrl), seen)),
   );
 
   return seen;
@@ -159,7 +159,9 @@ async function readText(fileUrl) {
 }
 
 function containsBannedReference(content, reference) {
-  return reference === "react"
-    ? /(?<![A-Za-z0-9_-])react(?![A-Za-z0-9_-])/.test(content)
-    : content.includes(reference);
+  return ts
+    .preProcessFile(content)
+    .importedFiles.some(
+      ({ fileName }) => fileName === reference || fileName.startsWith(`${reference}/`),
+    );
 }
