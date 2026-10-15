@@ -104,6 +104,7 @@ export type WorkflowEditorBuiltInSettings = {
   enableNestedWorkflows: boolean;
   maxNestedWorkflowDepth: number;
   maxVersions: number;
+  portTypeColors: Readonly<Record<string, string>>;
   readOnly: boolean;
   showDocumentPath: boolean;
   showDocumentStats: boolean;
@@ -133,6 +134,7 @@ export const defaultWorkflowEditorBuiltInSettings: WorkflowEditorBuiltInSettings
   enableNestedWorkflows: true,
   maxNestedWorkflowDepth: 64,
   maxVersions: defaultWorkflowEditorMaxVersions,
+  portTypeColors: {},
   readOnly: false,
   showDocumentPath: true,
   showDocumentStats: true,
@@ -1080,6 +1082,7 @@ export function WorkflowEditor<
     readOnly,
     nodeTemplates,
     typeDefinitions,
+    portTypeColors: resolvedSettings.editor.portTypeColors,
     documentReferences: documentReferenceOptions,
     onOpenWorkflowReference: canOpenNestedWorkflow ? openWorkflowReference : undefined,
     onCreateWorkflowReference: canOpenNestedWorkflow ? createWorkflowReference : undefined,
@@ -1150,6 +1153,9 @@ export function WorkflowEditor<
     },
   } satisfies WorkflowEditorController<TNodeData, TEdgeData, TTemplateData, TAppSettings>;
 
+  const updatePortTypeColors = (colors: Readonly<Record<string, string>>) => {
+    catalogController.actions.updateBuiltInSetting("portTypeColors", colors);
+  };
   const documentControlsChrome =
     chrome?.documentControls ?? (compactControls ? "compact-menu" : "default");
   const documentPathChrome = chrome?.documentPath ?? "default";
@@ -1579,6 +1585,7 @@ export function WorkflowEditor<
           readOnly={readOnly}
           nodeTemplates={nodeTemplates}
           typeDefinitions={typeDefinitions}
+          portTypeColors={resolvedSettings.editor.portTypeColors}
           documentReferences={documentReferenceOptions}
           chrome={{
             ...(chrome?.workbenchToolbar ? { toolbar: chrome.workbenchToolbar } : {}),
@@ -1624,6 +1631,10 @@ export function WorkflowEditor<
               definitions={typeDefinitions ?? []}
               selectedNodeId={normalizedSelection.nodeIds[0]}
               readOnly={readOnly}
+              portTypeColors={resolvedSettings.editor.portTypeColors}
+              onPortTypeColorsChange={
+                catalogController.writable.settings ? updatePortTypeColors : undefined
+              }
               onChange={updateDocument}
             />
           </aside>
@@ -2075,6 +2086,7 @@ export function useWorkflowEditorController<
     readOnly,
     nodeTemplates,
     typeDefinitions,
+    portTypeColors: resolvedSettings.editor.portTypeColors,
     documentReferences: documentReferenceOptions,
     onOpenWorkflowReference: canOpenNestedWorkflow ? openWorkflowReference : undefined,
     onCreateWorkflowReference: canOpenNestedWorkflow ? createWorkflowReference : undefined,
@@ -2368,6 +2380,9 @@ export function WorkflowEditorTypesPanel<
     controller.catalog.typeDefinitions.find((definition) => definition.name === selectedName) ??
     filtered[0] ??
     null;
+  const updatePortTypeColors = (colors: Readonly<Record<string, string>>) => {
+    controller.catalog.actions.updateBuiltInSetting("portTypeColors", colors);
+  };
 
   return (
     <section className="grid gap-3 rounded-md border border-border bg-card p-3 text-sm">
@@ -2389,6 +2404,10 @@ export function WorkflowEditorTypesPanel<
         definitions={controller.catalog.typeDefinitions}
         selectedNodeId={controller.selection.nodeIds[0]}
         readOnly={controller.readOnly}
+        portTypeColors={controller.settings.editor.portTypeColors}
+        onPortTypeColorsChange={
+          controller.catalog.writable.settings ? updatePortTypeColors : undefined
+        }
         onChange={controller.actions.updateActiveDocument}
       />
       <SearchField

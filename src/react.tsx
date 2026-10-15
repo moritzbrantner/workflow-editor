@@ -294,6 +294,7 @@ export type WorkflowWorkbenchController<
   configuration: Pick<
     WorkflowWorkbenchProps<TNodeData, TEdgeData, TTemplateData>,
     | "documentReferences"
+    | "portTypeColors"
     | "nodeTemplates"
     | "onCreateWorkflowReference"
     | "onOpenWorkflowReference"
@@ -378,6 +379,7 @@ export type WorkflowWorkbenchProps<
   nodeTemplates?: ReadonlyArray<WorkflowWorkbenchPaletteItem<TTemplateData>>;
   typeDefinitions?: readonly WorkflowEditorTypeDefinition[];
   documentReferences?: WorkflowEditorDocumentReferenceOption[];
+  portTypeColors?: Readonly<Record<string, string>>;
   className?: string;
   layout?: "default" | "unstyled";
   chrome?: WorkflowWorkbenchChrome<TNodeData, TEdgeData, TTemplateData>;
@@ -508,6 +510,7 @@ export function WorkflowWorkbench<
   >,
   typeDefinitions,
   documentReferences,
+  portTypeColors,
   className,
   layout = "default",
   chrome,
@@ -684,12 +687,12 @@ export function WorkflowWorkbench<
   });
   const graphIndex = useMemo(() => createWorkflowEditorGraphIndex(document), [document]);
   const uiNodes = useMemo(
-    () => toUiWorkflowBuilderNodes(document.nodes, document.edges),
-    [document.edges, document.nodes],
+    () => toUiWorkflowBuilderNodes(document.nodes, document.edges, { portTypeColors }),
+    [document.edges, document.nodes, portTypeColors],
   );
   const uiEdges = useMemo(
-    () => toUiWorkflowBuilderEdges(document.edges, document.nodes),
-    [document.edges, document.nodes],
+    () => toUiWorkflowBuilderEdges(document.edges, document.nodes, { portTypeColors }),
+    [document.edges, document.nodes, portTypeColors],
   );
   const minimizedGroups = useMemo(
     () => (document.groups ?? []).filter((group) => group.minimized === true),
@@ -2428,6 +2431,7 @@ export function WorkflowWorkbench<
       renderNodeTemplate,
       renderToolbarActions,
       typeDefinitions,
+      portTypeColors,
     },
     actions: {
       addTemplateNode,
@@ -2676,6 +2680,8 @@ export function WorkflowWorkbench<
           >
             <WorkflowWorkbenchNodeLayerStyles
               nodes={document.nodes}
+              edges={uiEdges}
+              portTypeColors={portTypeColors}
               objectConstructorExpressionDrafts={objectConstructorExpressionDrafts}
               primaryNodeId={primarySelectedNodeId}
             />
@@ -3122,6 +3128,7 @@ export function useWorkflowWorkbenchController<
   >,
   typeDefinitions,
   documentReferences,
+  portTypeColors,
   showGraphStats = true,
   showShortcutHint = true,
   onDocumentChange,
@@ -3909,6 +3916,7 @@ export function useWorkflowWorkbenchController<
       renderNodeTemplate,
       renderToolbarActions,
       typeDefinitions,
+      portTypeColors,
     },
     actions: {
       addTemplateNode,
@@ -3955,6 +3963,7 @@ export function WorkflowWorkbenchCanvas<
       selectedGroupIds={controller.selection.groupIds}
       nodeTemplates={controller.configuration.nodeTemplates}
       typeDefinitions={controller.configuration.typeDefinitions}
+      portTypeColors={controller.configuration.portTypeColors}
       documentReferences={controller.configuration.documentReferences}
       chrome={{ toolbar: "hidden", palette: "hidden", inspector: "hidden" }}
       onDocumentChange={controller.actions.updateDocument}
@@ -4061,10 +4070,14 @@ function getWorkflowEditorWheelDelta(event: WheelEvent) {
 
 function WorkflowWorkbenchNodeLayerStyles<TNodeData extends Record<string, unknown>>({
   nodes,
+  edges,
+  portTypeColors,
   objectConstructorExpressionDrafts,
   primaryNodeId,
 }: {
   nodes: Array<WorkflowEditorNode<TNodeData>>;
+  edges: ReturnType<typeof toUiWorkflowBuilderEdges>;
+  portTypeColors?: Readonly<Record<string, string>>;
   objectConstructorExpressionDrafts?: Record<string, string>;
   primaryNodeId?: string;
 }) {
@@ -4086,11 +4099,20 @@ function WorkflowWorkbenchNodeLayerStyles<TNodeData extends Record<string, unkno
     `[data-slot="workbench-layout"] [data-slot="workflow-node"][data-minimized="true"] > [data-slot="workflow-node-minimized-ports"] > [data-slot="workflow-node-port"][data-port-direction="output"] { right: -6px !important; }`,
     `[data-slot="workbench-layout"] [data-slot="workflow-node"][data-minimized="true"] > [data-slot="workflow-node-minimized-ports"] [data-slot="workflow-node-port-dot"] { display: block !important; width: 100% !important; height: 100% !important; border-radius: 9999px !important; }`,
     `[data-slot="workbench-layout"] [data-slot="workflow-node"][data-compact="true"] [data-slot="workflow-node-port"] { z-index: 0 !important; }`,
+    ...edges.flatMap((edge) => {
+      const color = (edge as { color?: unknown }).color;
+      if (typeof color !== "string" || !isSafeWorkflowEditorCssValue(color)) {
+        return [];
+      }
+      // Graph-editor's stroke-border class otherwise wins over its SVG stroke attribute.
+      const selector = `[data-slot="workflow-builder-edges"] [data-slot="workflow-builder-edge-hit"][aria-label="Connection ${cssAttributeValue(edge.id)}"] + [data-slot="workflow-builder-edge"]:not([data-status="error"]):not([data-status="success"]):not([data-status="running"])`;
+      return [`${selector} { stroke: ${color}; }`];
+    }),
     ...nodes.map((node, index) => {
       const selector = `[data-slot="workflow-builder-node"][data-node-id="${cssAttributeValue(node.id)}"]`;
       const layer = getWorkflowEditorNodeLayerIndex(index, node.id, primaryNodeId);
       const rules = [`${selector} { z-index: ${layer}; }`];
-      const uiNode = toUiWorkflowBuilderNodes([node])[0]!;
+      const uiNode = toUiWorkflowBuilderNodes([node], undefined, { portTypeColors })[0]!;
 
       rules.push(...getWorkflowEditorPortColorRules(selector, uiNode));
 

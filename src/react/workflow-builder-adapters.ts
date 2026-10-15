@@ -8,6 +8,8 @@ import type {
   WorkflowNodePort as UiWorkflowNodePort,
 } from "./workflow-node";
 import { formatWorkflowEditorJsonPrimitiveNodeValue } from "../core-node-metrics";
+import { workflowEditorPortTypeSource } from "../core-type-source";
+import { resolveWorkflowEditorPortTypeColor } from "../port-type-colors";
 import type {
   WorkflowEditorEdge,
   WorkflowEditorNode,
@@ -17,9 +19,14 @@ import type {
   WorkflowEditorViewport,
 } from "../core-types";
 
+type WorkflowEditorPortColorOptions = {
+  portTypeColors?: Readonly<Record<string, string>>;
+};
+
 export function toUiWorkflowBuilderNodes<TData = Record<string, unknown>>(
   nodes: Array<WorkflowEditorNode<TData>>,
   edges?: readonly WorkflowEditorEdge<unknown>[],
+  options: { portTypeColors?: Readonly<Record<string, string>> } = {},
 ): UiWorkflowBuilderNodeData[] {
   const connectedInputs = edges ? createWorkflowEditorConnectedInputLookup(edges) : undefined;
 
@@ -46,15 +53,19 @@ export function toUiWorkflowBuilderNodes<TData = Record<string, unknown>>(
         toUiWorkflowEditorPort(port, {
           connected: connectedInputs?.has(workflowEditorPortKey(node.id, port.id)) ?? false,
           direction: "input",
+          portTypeColors: options.portTypeColors,
         }),
       ),
       outputs: node.outputs?.map((port) =>
-        toUiWorkflowEditorPort({
-          ...port,
-          badge:
-            port.badge ??
-            (port.id === "value" && minimized === true ? jsonPrimitiveValue : undefined),
-        }),
+        toUiWorkflowEditorPort(
+          {
+            ...port,
+            badge:
+              port.badge ??
+              (port.id === "value" && minimized === true ? jsonPrimitiveValue : undefined),
+          },
+          { portTypeColors: options.portTypeColors },
+        ),
       ),
       metadata: node.data as Record<string, unknown> | undefined,
     };
@@ -98,6 +109,7 @@ export function fromUiWorkflowBuilderNodes<TData = Record<string, unknown>>(
 export function toUiWorkflowBuilderEdges<TData = Record<string, unknown>>(
   edges: Array<WorkflowEditorEdge<TData>>,
   nodes?: Array<WorkflowEditorNode<unknown>>,
+  options: { portTypeColors?: Readonly<Record<string, string>> } = {},
 ): UiWorkflowBuilderEdge[] {
   const nodeById = nodes ? new Map(nodes.map((node) => [node.id, node] as const)) : undefined;
 
@@ -109,7 +121,7 @@ export function toUiWorkflowBuilderEdges<TData = Record<string, unknown>>(
         sourcePortId: edge.sourcePortId,
         targetNodeId: edge.targetNodeId,
         targetPortId: edge.targetPortId,
-        color: workflowEditorEdgePortColor(edge, nodeById),
+        color: workflowEditorEdgePortColor(edge, nodeById, options.portTypeColors),
         status: edge.status,
         metadata: edge.data as Record<string, unknown> | undefined,
       }) as UiWorkflowBuilderEdge & { color?: string },
@@ -145,8 +157,12 @@ export function toUiWorkflowBuilderViewport(
 
 function toUiWorkflowEditorPort(
   port: WorkflowEditorPort,
-  options: { connected?: boolean; direction?: "input" | "output" } = {},
+  options: WorkflowEditorPortColorOptions & {
+    connected?: boolean;
+    direction?: "input" | "output";
+  } = {},
 ): UiWorkflowNodePort {
+  const color = workflowEditorPortPresentationColor(port, options.portTypeColors);
   const defaultValueBadge =
     options.direction === "input" && options.connected !== true
       ? formatWorkflowEditorPortDefaultValue(port)
@@ -167,11 +183,11 @@ function toUiWorkflowEditorPort(
       source: getWorkflowEditorPortTypeSignature(port.type),
       metadata: { workflowEditorType: port.type },
     },
-    color: port.color ?? getWorkflowEditorPortTypeColor(port.type),
+    color,
     metadata: {
       ...port.metadata,
       workflowEditorType: port.type,
-      workflowEditorPortColor: port.color ?? getWorkflowEditorPortTypeColor(port.type),
+      workflowEditorPortColor: color,
     },
   } as UiWorkflowNodePort & {
     color?: string;
@@ -235,6 +251,7 @@ function getWorkflowEditorPortTypeFromUi(port: UiWorkflowNodePort): WorkflowEdit
 function workflowEditorEdgePortColor<TData = Record<string, unknown>>(
   edge: WorkflowEditorEdge<TData>,
   nodeById?: ReadonlyMap<string, WorkflowEditorNode<unknown>>,
+  portTypeColors?: Readonly<Record<string, string>>,
 ) {
   if (!nodeById) {
     return undefined;
@@ -248,7 +265,19 @@ function workflowEditorEdgePortColor<TData = Record<string, unknown>>(
     ?.inputs?.find((port) => port.id === edge.targetPortId);
   const port = sourcePort ?? targetPort;
 
-  return port ? (port.color ?? getWorkflowEditorPortTypeColor(port.type)) : undefined;
+  return port ? workflowEditorPortPresentationColor(port, portTypeColors) : undefined;
+}
+
+/** A configured type-wide color overrides a legacy per-port color without changing document data. */
+function workflowEditorPortPresentationColor(
+  port: WorkflowEditorPort,
+  portTypeColors?: Readonly<Record<string, string>>,
+): string {
+  const name = workflowEditorPortTypeSource(port.type).trim();
+  const typeColor = resolveWorkflowEditorPortTypeColor(port.type, portTypeColors);
+  return portTypeColors && Object.hasOwn(portTypeColors, name)
+    ? typeColor
+    : (port.color ?? typeColor);
 }
 
 function formatWorkflowEditorPortType(type: WorkflowEditorPortType): string {
@@ -309,46 +338,6 @@ function getWorkflowEditorPortTypeSignature(type: WorkflowEditorPortType): strin
     default:
       return type.kind;
   }
-}
-
-function getWorkflowEditorPortTypeColor(type: WorkflowEditorPortType): string {
-  switch (type.kind) {
-    case "string":
-      return "#0891b2";
-    case "number":
-      return "#16a34a";
-    case "boolean":
-      return "#ca8a04";
-    case "array":
-      return "#9333ea";
-    case "object":
-      return "#4f46e5";
-    case "any":
-    case "unknown":
-      return "#71717a";
-    case "never":
-    case "null":
-    case "undefined":
-      return "#a1a1aa";
-    default:
-      return workflowEditorPortTypeFallbackColor(getWorkflowEditorPortTypeSignature(type));
-  }
-}
-
-const workflowEditorPortTypeFallbackColors = [
-  "#0284c7",
-  "#16a34a",
-  "#ca8a04",
-  "#db2777",
-  "#7c3aed",
-  "#ea580c",
-  "#4f46e5",
-  "#0d9488",
-];
-
-function workflowEditorPortTypeFallbackColor(signature: string): string {
-  const hash = Array.from(signature).reduce((value, char) => value + char.charCodeAt(0), 0);
-  return workflowEditorPortTypeFallbackColors[hash % workflowEditorPortTypeFallbackColors.length]!;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
