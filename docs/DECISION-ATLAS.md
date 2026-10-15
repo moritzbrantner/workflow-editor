@@ -99,3 +99,15 @@ This is the repository-owned, feature-oriented source of **owner-approved produc
 - **3.1 Make port types recognizable by consistent, configurable colors.**  
   Status: adopted 2026-10-14.  
   Each displayed type has a consistent color across the workflow, and users can set or override its color. Matching colors help with visual scanning of inputs and outputs, while visible type labels and actual compatibility diagnostics remain authoritative: assignable TypeScript types are not necessarily identical, and color alone must not determine connection validity.
+
+## 4. Release maturity and feature delivery
+
+- **4.1** [question] **Should Workflow Editor target a stable 1.0 release now?**  
+  Answered 2026-10-15 by Decision 4.2 (option B); retained as the historical Question.  
+  Choose A: complete 1.0 stability and platform guarantees before expanding features; B: keep version 0.x, deliver usable authoring features, and revisit 1.0 when consumers justify it; or C: stabilize a minimal 1.0 core while advanced features remain experimental. This decides the release priority, not permission to break working consumers.
+
+- **4.2 Keep Workflow Editor feature-first on 0.x and defer 1.0.**  
+  Status: owner-approved 2026-10-15. Answers 4.1 (option B).  
+  Continue an explicitly pre-1.0 package and prioritize independently verifiable editing and composition in the real Pages workbench, including typed/binary ports, bounded workflows, and versioned linked templates (1.x–3.x; issues #61, #64 and #65). Preserve delivered capabilities from #59 and #60. The formal 1.0 release-readiness program in #13 (W-01) is deferred. The remaining W-02–W-12 issues are feature and quality work to pursue when they enable a real user-facing slice, not a mandatory sequence or collective 1.0 gate.
+  Do not require arbitrary stability freezes, fixed React/browser/Node/bundler support matrices, deprecation windows, numeric workload budgets, or a release date before current feature delivery. Preserve existing consumer interfaces or provide explicit migrations; retain correctness, data recovery, accessibility and appropriate testing. Graph gestures remain owned by graph-editor, typed design and compilation by workflow-editor, and execution by workflow-engine/workflow-runner.
+  Revisit possible 1.0 promotion only when concrete consumer integrations and verified workflows establish which interfaces, workloads and compatibility obligations need guarantees. Seek owner approval then, rather than inventing numeric targets or support promises now. This is product intent, not a claim that feature acceptance or a stable release has occurred. ([Owner choice B, 2026-10-15](https://github.com/moritzbrantner/workflow-editor/issues/13))
