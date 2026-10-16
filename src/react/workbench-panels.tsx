@@ -5,6 +5,7 @@ import { Badge, Button, Input, SearchField } from "@moritzbrantner/ui";
 import {
   duplicateWorkflowEditorNode,
   removeWorkflowEditorNode,
+  isWorkflowEditorIterationNode,
   restoreWorkflowEditorComposedNode,
   updateWorkflowEditorNode,
   type WorkflowEditorNode,
@@ -277,7 +278,12 @@ function WorkflowEditorComposedNodeRow<
           type="button"
           size="sm"
           variant="outline"
-          disabled={controller.readOnly}
+          disabled={controller.readOnly || isWorkflowEditorIterationNode(node)}
+          title={
+            isWorkflowEditorIterationNode(node)
+              ? "An iteration body is a bounded loop and cannot be flattened."
+              : undefined
+          }
           onClick={() =>
             controller.actions.updateDocument(
               restoreWorkflowEditorComposedNode(controller.document, node.id),

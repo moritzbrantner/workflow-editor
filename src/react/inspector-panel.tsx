@@ -300,13 +300,16 @@ function InspectorField({
         field={field}
         value={value}
         disabled={disabled}
+        describedBy={validationMessage ? `inspector-${field.id}-validation` : undefined}
         onValueChange={onValueChange}
       />
       {field.description ? (
         <div className="text-xs text-muted-foreground">{field.description}</div>
       ) : null}
       {validationMessage ? (
-        <div className="text-xs text-destructive">{validationMessage}</div>
+        <div id={`inspector-${field.id}-validation`} className="text-xs text-destructive">
+          {validationMessage}
+        </div>
       ) : null}
     </div>
   );
@@ -316,11 +319,13 @@ function InspectorFieldEditor({
   field,
   value,
   disabled,
+  describedBy,
   onValueChange,
 }: {
   field: InspectorFieldDefinition;
   value?: InspectorFieldValue;
   disabled?: boolean;
+  describedBy?: string;
   onValueChange?: (value: InspectorFieldValue) => void;
 }) {
   const id = `inspector-${field.id}`;
@@ -445,13 +450,17 @@ function InspectorFieldEditor({
     <Input
       id={id}
       aria-label={field.label}
+      aria-describedby={describedBy}
       type={field.type === "number" ? "number" : "text"}
       value={String(value ?? "")}
       disabled={disabled}
       placeholder={field.placeholder}
       onChange={(event) =>
         onValueChange?.(
-          field.type === "number" ? Number(event.currentTarget.value) : event.currentTarget.value,
+          // A cleared number field stays empty instead of silently becoming 0.
+          field.type === "number" && event.currentTarget.value !== ""
+            ? Number(event.currentTarget.value)
+            : event.currentTarget.value,
         )
       }
     />

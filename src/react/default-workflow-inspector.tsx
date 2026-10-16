@@ -18,6 +18,14 @@ import {
   removeWorkflowEditorObjectConstructorInput,
   updateWorkflowEditorObjectDecompositionPropertiesInNode,
   updateWorkflowEditorObjectConstructorPropertiesInNode,
+  isWorkflowEditorIterationNode,
+  updateWorkflowEditorIterationBound,
+  updateWorkflowEditorIterationStateType,
+  validateWorkflowEditorIterationNode,
+  workflowEditorIterationBound,
+  workflowEditorPortTypeSource,
+  type WorkflowEditorDocument,
+  type WorkflowEditorIterationDiagnostic,
   type WorkflowEditorNode,
 } from "../core";
 import type { WorkflowWorkbenchInspectorContext } from "../react";
@@ -58,6 +66,9 @@ export function DefaultWorkflowInspector<
       objectDecompositionOutputs.map((output) => [`objectOutput:${output.id}`, output.label]),
     );
     const jsonValueField = createWorkflowEditorJsonValueField(node);
+    const iteration = isWorkflowEditorIterationNode(node)
+      ? describeWorkflowEditorIteration(node, context.document.typeDeclarations)
+      : null;
     const jsonValueDefault = readWorkflowEditorJsonValueFieldValue(node);
 
     return (
@@ -67,11 +78,12 @@ export function DefaultWorkflowInspector<
           title="Workflow node"
           description={node.kind ?? node.category}
           readOnly={context.readOnly}
-          validationMessages={
-            referenceMissing
+          validationMessages={{
+            ...(referenceMissing
               ? { workflowDocumentId: `Missing workflow document: ${referencedDocumentId}` }
-              : undefined
-          }
+              : {}),
+            ...iteration?.validationMessages,
+          }}
           defaultValues={{
             label: node.label,
             description: node.description ?? "",
@@ -85,6 +97,7 @@ export function DefaultWorkflowInspector<
             objectExpression: objectConstructorExpression,
             objectDecompositionExpression,
             ...(jsonValueField ? { jsonValue: jsonValueDefault } : {}),
+            ...iteration?.defaultValues,
             ...arrayConstructorDefaultValues,
             ...objectConstructorDefaultValues,
             ...objectDecompositionDefaultValues,
@@ -234,6 +247,36 @@ export function DefaultWorkflowInspector<
                   },
                 ]
               : []),
+            ...(iteration
+              ? [
+                  {
+                    id: "iteration",
+                    title: "Iteration",
+                    description:
+                      "A bounded loop: the body runs at most the maximum number of times. The editor compiles it; a runner executes it.",
+                    fields: [
+                      { id: "maxIterations", label: "Maximum iterations", type: "number" as const },
+                      {
+                        id: "stateType",
+                        label: "State type (TypeScript)",
+                        type: "text" as const,
+                      },
+                      {
+                        id: "stopCondition",
+                        label: "Stop condition",
+                        type: "text" as const,
+                        readOnly: true,
+                      },
+                      {
+                        id: "resultContract",
+                        label: "Result contract",
+                        type: "code" as const,
+                        readOnly: true,
+                      },
+                    ],
+                  },
+                ]
+              : []),
           ]}
           onApply={(values) => {
             const patch: Partial<WorkflowEditorNode<TNodeData>> = {
@@ -284,6 +327,30 @@ export function DefaultWorkflowInspector<
               patch.inputs = nextNode.inputs;
               patch.outputs = nextNode.outputs;
               patch.data = nextNode.data;
+            }
+
+            if (iteration) {
+              const bound = values.maxIterations;
+              let single: WorkflowEditorDocument<TNodeData, TEdgeData> = {
+                nodes: [node],
+                edges: [],
+              };
+              single = updateWorkflowEditorIterationBound(
+                single,
+                node.id,
+                bound === "" || bound === undefined || bound === null ? null : Number(bound),
+              );
+              const stateSource = String(values.stateType ?? "").trim();
+              if (stateSource) {
+                single = updateWorkflowEditorIterationStateType(single, node.id, {
+                  kind: "typescript",
+                  source: stateSource,
+                });
+              }
+              const [updated] = single.nodes;
+              patch.data = updated!.data;
+              patch.inputs = updated!.inputs;
+              patch.outputs = updated!.outputs;
             }
 
             if (jsonValueField) {
@@ -489,6 +556,46 @@ function createWorkflowEditorRemovableInspectorField({
         </Button>
       </div>
     ),
+  };
+}
+
+const iterationFieldByCode: Record<WorkflowEditorIterationDiagnostic["code"], string> = {
+  "iteration-bound-required": "maxIterations",
+  "iteration-bound-invalid": "maxIterations",
+  "iteration-state-type": "stateType",
+  "iteration-stop-type": "stopCondition",
+  "iteration-body-missing": "stopCondition",
+  "iteration-boundary-invalid": "stopCondition",
+  "nested-iteration-not-supported": "stopCondition",
+};
+
+function describeWorkflowEditorIteration<TData>(
+  node: WorkflowEditorNode<TData>,
+  typeDeclarations: string | undefined,
+) {
+  const bound = workflowEditorIterationBound(node);
+  const state = node.inputs?.find((port) => port.id === "state");
+  const result = node.outputs?.find((port) => port.id === "result");
+  const converged = node.composition?.outputBoundaries.find(
+    (boundary) => boundary.wrapperPortId === "converged",
+  );
+  const validationMessages: Record<string, string> = {};
+  for (const diagnostic of validateWorkflowEditorIterationNode(node, { typeDeclarations })) {
+    const field = iterationFieldByCode[diagnostic.code];
+    validationMessages[field] = [validationMessages[field], diagnostic.message]
+      .filter(Boolean)
+      .join(" ");
+  }
+  return {
+    defaultValues: {
+      maxIterations: typeof bound === "number" && Number.isFinite(bound) ? bound : "",
+      stateType: state ? workflowEditorPortTypeSource(state.type) : "",
+      stopCondition: converged
+        ? `Body output ${converged.nodeId}.${converged.portId} (boolean)`
+        : "None — stops only at the limit",
+      resultContract: result ? workflowEditorPortTypeSource(result.type) : "",
+    },
+    validationMessages,
   };
 }
 

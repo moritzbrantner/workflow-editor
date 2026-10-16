@@ -132,6 +132,9 @@ export function createWorkflowEditorGroup<TNodeData = Record<string, unknown>, T
 export function createWorkflowEditorHistory<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(document: WorkflowEditorDocument<TNodeData, TEdgeData>): WorkflowEditorHistoryState<TNodeData, TEdgeData>;
 
 // @public (undocumented)
+export function createWorkflowEditorIterationNode<TNodeData = Record<string, unknown>>(options: WorkflowEditorCreateIterationNodeOptions<TNodeData>): WorkflowEditorNode<TNodeData>;
+
+// @public (undocumented)
 export function createWorkflowEditorLibrary<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(input?: WorkflowEditorLibraryInput<TNodeData, TEdgeData>): WorkflowEditorLibrary<TNodeData, TEdgeData>;
 
 // @public (undocumented)
@@ -632,6 +635,9 @@ export function findWorkflowEditorPortPayloadMismatch(source: Pick<WorkflowEdito
 export function formatWorkflowEditorArrayConstructorExpression<TNodeData = Record<string, unknown>>(node: WorkflowEditorNode<TNodeData>): string;
 
 // @public (undocumented)
+export function formatWorkflowEditorIterationSummary<TNodeData>(node: WorkflowEditorNode<TNodeData>): string;
+
+// @public (undocumented)
 export function formatWorkflowEditorObjectConstructorExpression<TNodeData = Record<string, unknown>>(node: WorkflowEditorNode<TNodeData>): string;
 
 // @public (undocumented)
@@ -696,6 +702,9 @@ export function isWorkflowEditorArrayConstructorNode<TNodeData = Record<string, 
 
 // @public (undocumented)
 export function isWorkflowEditorDirectedAcyclicGraph<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(document: WorkflowEditorDocument<TNodeData, TEdgeData>): boolean;
+
+// @public (undocumented)
+export function isWorkflowEditorIterationNode<TNodeData>(node: WorkflowEditorNode<TNodeData>): boolean;
 
 // @public (undocumented)
 export function isWorkflowEditorObjectConstructorNode<TNodeData = Record<string, unknown>>(node: WorkflowEditorNode<TNodeData>): boolean;
@@ -845,6 +854,12 @@ export function updateWorkflowEditorBuiltInSetting<TAppSettings extends Record<s
 export function updateWorkflowEditorGroup<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(document: WorkflowEditorDocument<TNodeData, TEdgeData>, groupId: string, patch: Partial<WorkflowEditorGroup>): WorkflowEditorDocument<TNodeData, TEdgeData>;
 
 // @public (undocumented)
+export function updateWorkflowEditorIterationBound<TNodeData, TEdgeData>(document: WorkflowEditorDocument<TNodeData, TEdgeData>, nodeId: string, maxIterations: number | null): WorkflowEditorDocument<TNodeData, TEdgeData>;
+
+// @public (undocumented)
+export function updateWorkflowEditorIterationStateType<TNodeData, TEdgeData>(document: WorkflowEditorDocument<TNodeData, TEdgeData>, nodeId: string, type: WorkflowEditorPortType): WorkflowEditorDocument<TNodeData, TEdgeData>;
+
+// @public (undocumented)
 export function updateWorkflowEditorNode<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(document: WorkflowEditorDocument<TNodeData, TEdgeData>, nodeId: string, patch: Partial<WorkflowEditorNode<TNodeData>>): WorkflowEditorDocument<TNodeData, TEdgeData>;
 
 // @public (undocumented)
@@ -925,6 +940,9 @@ export function validateWorkflowEditorConnection<TNodeData = Record<string, unkn
 
 // @public (undocumented)
 export function validateWorkflowEditorDocument(value: unknown, options?: WorkflowEditorDocumentValidationOptions): WorkflowEditorDocumentDiagnostic[];
+
+// @public (undocumented)
+export function validateWorkflowEditorIterationNode<TNodeData>(node: WorkflowEditorNode<TNodeData>, options?: WorkflowEditorTypeValidationOptions): WorkflowEditorIterationDiagnostic[];
 
 // @public (undocumented)
 export function validateWorkflowEditorObjectConstructorExpression(expression: string): WorkflowEditorObjectConstructorExpressionDiagnostic[];
@@ -1375,6 +1393,18 @@ export type WorkflowEditorCreateGroupOptions<TData = Record<string, unknown>> = 
 };
 
 // @public (undocumented)
+export type WorkflowEditorCreateIterationNodeOptions<TNodeData = Record<string, unknown>> = {
+    id: string;
+    label: string;
+    x: number;
+    y: number;
+    stateType: WorkflowEditorPortType;
+    maxIterations: number;
+    invariantInputs?: WorkflowEditorPort[];
+    body: WorkflowEditorNodeComposition<TNodeData>;
+};
+
+// @public (undocumented)
 export function WorkflowEditorCurrentNodesPanel<TNodeData extends Record<string, unknown> = Record<string, unknown>, TEdgeData extends Record<string, unknown> = Record<string, unknown>, TTemplateData = TNodeData>(input: {
     controller: WorkflowWorkbenchController<TNodeData, TEdgeData, TTemplateData>;
 }): react_jsx_runtime.JSX.Element;
@@ -1559,6 +1589,32 @@ export type WorkflowEditorIndexedEdge<TData = Record<string, unknown>> = GraphEd
 
 // @public (undocumented)
 export type WorkflowEditorIndexedNode<TData = Record<string, unknown>> = GraphEditorIndexedNode<TData, WorkflowEditorPortType>;
+
+// @public (undocumented)
+export function workflowEditorIterationBound<TNodeData>(node: WorkflowEditorNode<TNodeData>): unknown;
+
+// @public (undocumented)
+export type WorkflowEditorIterationConfig = {
+    maxIterations?: number | null;
+};
+
+// @public (undocumented)
+export type WorkflowEditorIterationDiagnostic = {
+    code: WorkflowEditorIterationDiagnosticCode;
+    message: string;
+    path: string;
+    nodeId: string;
+    portId?: string;
+};
+
+// @public (undocumented)
+export type WorkflowEditorIterationDiagnosticCode = "iteration-bound-required" | "iteration-bound-invalid" | "iteration-body-missing" | "iteration-boundary-invalid" | "iteration-state-type" | "iteration-stop-type" | "nested-iteration-not-supported";
+
+// @public
+export const workflowEditorIterationNodeKind = "control.iterate";
+
+// @public
+export function workflowEditorIterationResultType(stateType: WorkflowEditorPortType): WorkflowEditorPortType;
 
 // @public (undocumented)
 export const workflowEditorJsonNodeTemplates: ({
