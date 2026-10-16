@@ -1,11 +1,23 @@
-# ComfyUI remains authoritative for native generative-media workflows
+# ComfyUI remains authoritative for native media workflows
 
-**Decision:** 2026-10-16 cross-repository ComfyUI-first direction; product authority is [asset-tooling Decision Atlas 5.1.1](https://github.com/moritzbrantner/asset-tooling/blob/main/docs/decisions/atlas.md), not a second Workflow Editor product-decision registry.
+The ComfyUI-first product direction is defined by asset-tooling Decision Atlas 5.1.1.
+This ADR defines Workflow Editor's integration boundary, not a second product decision.
 
-ComfyUI is the quality/capability and interaction benchmark for supported media-generation workflows. It remains authoritative for the contents, custom nodes, models, execution semantics and versioned identity of a native ComfyUI graph. Use its existing editor and supported API rather than recreating each ComfyUI node, model inspector, scheduler or graph runtime in `workflow-editor`.
+ComfyUI owns the contents, custom nodes, models, execution and versioned identity of a
+native generative-media graph. Use its existing media editor and runtime instead of
+reimplementing each ComfyUI node, inference service or queue in workflow-editor.
 
-`workflow-editor` remains a *general-purpose* typed Workflow Document author and compiler. A ComfyUI workflow can be composed into a broader workflow as **one externally executed asset operation** exposed through `asset-tooling`'s existing operation-descriptor → Node Template bridge. Store its declared typed ports, parameter bindings and a stable reference to a pinned native ComfyUI workflow/implementation. Do not convert every ComfyUI node into a second authoritative editable graph or silently synchronize two versions of the same media graph. Native media-graph editing happens in ComfyUI; generic cross-domain composition happens here.
+Workflow-editor owns general typed Workflow Documents, authoring and compilation.
+A pinned ComfyUI graph appears as one externally executed asset-tooling operation,
+projected through the existing operation-descriptor and Node Template bridge.
+Store typed ports, parameter bindings and an immutable native workflow reference.
+Do not silently synchronize two independently editable copies of a ComfyUI graph.
 
-Improve general editing and inspection patterns when an actual consumer demonstrates value (discoverable templates, useful node previews, direct manipulation, context, structured inspectors, execution overlays), with ComfyUI as a reference, **not as a mandate for feature parity**. Reuse `graph-editor` for graph gestures, the existing Editor Catalog/Node Template registry for typed definitions, the existing compiler for general DAG semantics, and an external runner for execution. If `asset-tooling` later selects an internal implementation for a capability, it is an explicit implementation/provider change behind the same declared operation contract, not a change in Workflow Editor's graph authority.
+ComfyUI can guide general-purpose UX improvements such as previews, discovery and
+inspection, but exact feature parity is not a goal. Reuse graph-editor for gestures,
+the Editor Catalog for definitions, the existing compiler for general workflow
+semantics and an external runner for execution. Later first-party asset providers
+retain the same asset-operation boundary and explicit provider selection.
 
-Acceptance for cross-repository integration belongs to [asset-tooling #212](https://github.com/moritzbrantner/asset-tooling/issues/212) and [#211](https://github.com/moritzbrantner/asset-tooling/issues/211). This architecture decision alone is not evidence of a working ComfyUI bridge, published Pages interaction or model output.
+Real integration acceptance belongs to asset-tooling issues #212 and #211; this ADR
+does not claim model generation, published UI acceptance or actual image approval.
