@@ -247,7 +247,9 @@ describe("binary port payload conformance", () => {
 // emitting compiled v1 (the fixtures above are unchanged).
 // The exact TypeScript source of the generated `result` type is not pinned: both the fixture's and
 // the compiler's result type must equal `workflowEditorIterationResultType(state)` semantically
-// (mutually assignable) and are then compared structurally with that one string masked. An empty
+// (mutually assignable) and are then compared structurally with that one string masked.
+// Existing JSON primitive normalization keeps `data.sourceName` unique in document order, so the
+// second json.number ("initial-guess") compiles with "numberValue2". An empty
 // compiled `data` object on the iteration node is treated like an omitted one.
 const boundedIterationV2Fixture = JSON.parse(
   readFileSync(resolve(process.cwd(), "fixtures/compiled-v2-bounded-iteration.json"), "utf8"),

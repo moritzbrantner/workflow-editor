@@ -574,8 +574,13 @@ describe("iteration validation", () => {
 
 describe("iteration documents: normalization and persistence", () => {
   test("keeps a document with a missing or invalid bound loadable", () => {
-    for (const maxIterations of [undefined, null, 0, 1.5]) {
-      const document = newtonDocument(literalIterationNode({ maxIterations }));
+    const variants: WorkflowEditorNode[] = [
+      // Missing bound: `maxIterations: undefined` would hit literalIterationNode's default of 10.
+      literalIterationNode({ data: { iteration: {} } }),
+      ...[null, 0, 1.5].map((maxIterations) => literalIterationNode({ maxIterations })),
+    ];
+    for (const iterationNode of variants) {
+      const document = newtonDocument(iterationNode);
       const normalized = normalizeWorkflowEditorDocument(document);
       const node = iterationNodeOf(normalized);
       expect(node.kind).toBe("control.iterate");
