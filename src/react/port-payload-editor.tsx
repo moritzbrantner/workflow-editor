@@ -30,7 +30,7 @@ export function WorkflowPortPayloadEditor({
       nextMode === "buffered" && !trimmedMediaType
         ? undefined
         : { mode: nextMode, ...(trimmedMediaType ? { mediaType: trimmedMediaType } : {}) };
-    if (JSON.stringify(payload ?? null) !== JSON.stringify(port.payload ?? null)) {
+    if (payload?.mode !== port.payload?.mode || payload?.mediaType !== port.payload?.mediaType) {
       onApply(payload);
     }
   };

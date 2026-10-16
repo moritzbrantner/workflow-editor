@@ -1936,9 +1936,11 @@ export function validateWorkflowEditorConnection<
             message: typeResolver.compatibilityErrors(sourceType, targetType).join(" "),
           };
         }
+        // An expanding constructor receives the edge on a newly created input, which assembles a
+        // complete JSON value and therefore has the default (buffered) delivery contract.
         const payloadMismatch = findWorkflowEditorPortPayloadMismatch(
           sourcePort as WorkflowEditorPort,
-          targetPort as WorkflowEditorPort,
+          expandsToNewTargetPort ? {} : (targetPort as WorkflowEditorPort),
         );
         // graph-editor passes the workflow-specific reason through to the validity result.
         return payloadMismatch
