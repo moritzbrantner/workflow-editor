@@ -4,6 +4,9 @@ import type { WorkflowEditorCardinalityPort, WorkflowEditorPortCardinality } fro
 import {
   analyzeWorkflowEditorPortTypes,
   findWorkflowEditorPortPayloadMismatch,
+  isWorkflowEditorIterationNode,
+  validateWorkflowEditorIterationNode,
+  workflowEditorIterationBound,
   normalizeWorkflowEditorDocument,
   resolveWorkflowEditorDocumentTypes,
   WorkflowEditorDocumentValidationError,
@@ -18,9 +21,12 @@ import type {
   WorkflowEditorPortType,
   WorkflowEditorTypeValidationOptions,
 } from "./core-types";
+import type { WorkflowEditorIterationDiagnosticCode } from "./core-iteration";
 
 export const compiledWorkflowFormat = "@moritzbrantner/workflow/compiled" as const;
 export const compiledWorkflowVersion = 1 as const;
+/** Emitted only for documents containing bounded iteration; DAG-only documents stay version 1. */
+export const compiledWorkflowIterationVersion = 2 as const;
 
 export type CompiledWorkflowPort = {
   id: string;
@@ -46,15 +52,61 @@ export type CompiledWorkflowEdge = Pick<
   "id" | "sourceNodeId" | "sourcePortId" | "targetNodeId" | "targetPortId"
 >;
 
-export type CompiledWorkflow<TNodeData extends Record<string, unknown> = Record<string, unknown>> =
-  {
-    format: typeof compiledWorkflowFormat;
-    version: typeof compiledWorkflowVersion;
-    nodes: CompiledWorkflowNode<TNodeData>[];
+export type CompiledWorkflowIterationBoundary = { nodeId: string; portId: string };
+
+/**
+ * A bounded loop (TECH-002). The runner runs `body` at most `maxIterations` times, feeding each
+ * `next` back as `state`, and reports `converged` only when the `converged` body output is true;
+ * with `limit-only` every completed run is `limit-exhausted`. `value` is always the latest state.
+ */
+export type CompiledWorkflowIteration<
+  TData extends Record<string, unknown> = Record<string, unknown>,
+> = {
+  maxIterations: number;
+  state: { inputPortId: "state"; type: WorkflowEditorPortType };
+  stop: { kind: "body-output"; outputId: "converged" } | { kind: "limit-only" };
+  candidate: "latest-state";
+  result: { outputPortId: "result"; statuses: ["converged", "limit-exhausted"] };
+  body: {
+    nodes: CompiledWorkflowNode<TData>[];
     edges: CompiledWorkflowEdge[];
     order: string[];
-    typeDeclarations?: string;
+    inputs: Array<CompiledWorkflowIterationBoundary & { id: string }>;
+    outputs: {
+      next: CompiledWorkflowIterationBoundary;
+      converged?: CompiledWorkflowIterationBoundary;
+    };
   };
+};
+
+export type CompiledWorkflowIterationNode<
+  TData extends Record<string, unknown> = Record<string, unknown>,
+> = CompiledWorkflowNode<TData> & {
+  kind: "control.iterate";
+  iteration: CompiledWorkflowIteration<TData>;
+};
+
+export type CompiledWorkflowV1<
+  TNodeData extends Record<string, unknown> = Record<string, unknown>,
+> = {
+  format: typeof compiledWorkflowFormat;
+  version: typeof compiledWorkflowVersion;
+  nodes: CompiledWorkflowNode<TNodeData>[];
+  edges: CompiledWorkflowEdge[];
+  order: string[];
+  typeDeclarations?: string;
+};
+
+export type CompiledWorkflowV2<
+  TNodeData extends Record<string, unknown> = Record<string, unknown>,
+> = Omit<CompiledWorkflowV1<TNodeData>, "version" | "nodes"> & {
+  version: typeof compiledWorkflowIterationVersion;
+  nodes: Array<CompiledWorkflowNode<TNodeData> | CompiledWorkflowIterationNode<TNodeData>>;
+};
+
+export type CompiledWorkflow<TNodeData extends Record<string, unknown> = Record<string, unknown>> =
+  | CompiledWorkflowV1<TNodeData>
+  | CompiledWorkflowV2<TNodeData>;
 
 export type WorkflowEditorCompileDiagnosticCode =
   | "invalid-port-type"
@@ -63,7 +115,8 @@ export type WorkflowEditorCompileDiagnosticCode =
   | "nested-workflow-not-supported"
   | "composition-not-supported"
   | "port-cardinality"
-  | "invalid-dag";
+  | "invalid-dag"
+  | WorkflowEditorIterationDiagnosticCode;
 
 export type WorkflowEditorCompileDiagnostic = {
   code: WorkflowEditorCompileDiagnosticCode;
@@ -145,8 +198,12 @@ function payloadDiagnostics(document: WorkflowEditorDocument): WorkflowEditorCom
   });
 }
 
-function validateExecutableNode(node: WorkflowEditorNode): WorkflowEditorCompileDiagnostic[] {
+function validateExecutableNode(
+  node: WorkflowEditorNode,
+  scope: CompileScope,
+): WorkflowEditorCompileDiagnostic[] {
   const diagnostics: WorkflowEditorCompileDiagnostic[] = [];
+  const iteration = isWorkflowEditorIterationNode(node);
 
   if (!node.kind?.trim()) {
     diagnostics.push({
@@ -166,7 +223,33 @@ function validateExecutableNode(node: WorkflowEditorNode): WorkflowEditorCompile
     });
   }
 
-  if (node.composition) {
+  if (iteration && scope.inBody) {
+    // The enclosing iteration already reports nested-iteration-not-supported.
+    return diagnostics;
+  }
+
+  if (iteration) {
+    diagnostics.push(
+      ...validateWorkflowEditorIterationNode(node, scope.options).map(
+        ({ code, message, path, nodeId, portId }) => ({
+          code,
+          message,
+          path: `${scope.pathPrefix}${path}`,
+          nodeId,
+          ...(portId ? { portId } : {}),
+        }),
+      ),
+    );
+    if (node.composition && diagnostics.length === 0) {
+      diagnostics.push(
+        ...scopeDiagnostics(bodyDocument(node, scope), {
+          ...scope,
+          inBody: true,
+          pathPrefix: `${scope.pathPrefix}nodes.${node.id}.composition.`,
+        }),
+      );
+    }
+  } else if (node.composition) {
     diagnostics.push({
       code: "composition-not-supported",
       message: `Workflow node ${node.id} contains an embedded composition; restore or flatten it before compilation.`,
@@ -258,91 +341,26 @@ export function compileWorkflowEditorDocument<
     throw error;
   }
 
-  const cardinalityDiagnostics: WorkflowEditorCompileDiagnostic[] =
-    analyzeWorkflowEditorPortCardinality(normalized).map((diagnostic) => ({
-      code: "port-cardinality",
-      message: diagnostic.message,
-      path: `nodes.${diagnostic.nodeId}.${diagnostic.direction === "input" ? "inputs" : "outputs"}.${diagnostic.portId}.cardinality`,
-      nodeId: diagnostic.nodeId,
-      portId: diagnostic.portId,
-    }));
-  const nativeTypes =
-    normalized.typeDeclarations !== undefined ||
-    options.typeDeclarations !== undefined ||
-    Boolean(options.typeDefinitions?.length) ||
-    normalized.nodes.some((node) =>
-      [...(node.inputs ?? []), ...(node.outputs ?? [])].some((port) =>
-        containsNativeType(port.type),
-      ),
-    );
-  const typeDiagnostics: WorkflowEditorCompileDiagnostic[] = nativeTypes
-    ? analyzeWorkflowEditorPortTypes(normalized, options)
-        .filter(
-          (diagnostic) =>
-            diagnostic.type === "incompatible-port-type" ||
-            diagnostic.type === "missing-type-definition",
-        )
-        .map((diagnostic) => ({
-          code: "invalid-port-type",
-          message: diagnostic.message,
-          path: diagnostic.edgeId
-            ? `edges.${diagnostic.edgeId}`
-            : diagnostic.sourceNodeId
-              ? `nodes.${diagnostic.sourceNodeId}.${diagnostic.sourcePortId}`
-              : "typeDeclarations",
-        }))
-    : [];
-  const diagnostics = [
-    ...typeDiagnostics,
-    ...payloadDiagnostics(normalized),
-    ...cardinalityDiagnostics,
-    ...normalized.nodes.flatMap(validateExecutableNode),
-  ];
+  const scope: CompileScope = {
+    options: {
+      ...options,
+      typeDeclarations: options.typeDeclarations ?? normalized.typeDeclarations,
+    },
+    pathPrefix: "",
+    inBody: false,
+  };
+  const diagnostics = scopeDiagnostics(normalized as WorkflowEditorDocument, scope);
   if (diagnostics.length > 0) {
     throw new WorkflowEditorCompileError(diagnostics);
   }
 
-  const order = topologicalOrder(normalized);
-  const nodeById = new Map(normalized.nodes.map((node) => [node.id, node] as const));
-  const nodes = order.map((nodeId) => {
-    const node = nodeById.get(nodeId);
-    if (!node?.kind) {
-      throw new WorkflowEditorCompileError([
-        {
-          code: "missing-node-kind",
-          message: `Workflow node ${nodeId} has no executable kind.`,
-          path: `nodes.${nodeId}.kind`,
-          nodeId,
-        },
-      ]);
-    }
-
-    return {
-      id: node.id,
-      label: node.label,
-      kind: node.kind,
-      ...(node.inputs?.length ? { inputs: node.inputs.map(compilePort) } : {}),
-      ...(node.outputs?.length ? { outputs: node.outputs.map(compilePort) } : {}),
-      ...(node.data === undefined ? {} : { data: node.data }),
-    };
-  });
-
-  const edges = [...normalized.edges]
-    .sort((a, b) => compareIds(a.id, b.id))
-    .map(({ id, sourceNodeId, sourcePortId, targetNodeId, targetPortId }) => ({
-      id,
-      sourceNodeId,
-      sourcePortId,
-      targetNodeId,
-      targetPortId,
-    }));
+  const compiledScope = compileScope(normalized as WorkflowEditorDocument, scope);
+  const iterates = normalized.nodes.some(isWorkflowEditorIterationNode);
 
   return {
     format: compiledWorkflowFormat,
-    version: compiledWorkflowVersion,
-    nodes,
-    edges,
-    order,
+    version: iterates ? compiledWorkflowIterationVersion : compiledWorkflowVersion,
+    ...(compiledScope as Omit<CompiledWorkflowV1<TNodeData>, "format" | "version">),
     ...(normalized.typeDeclarations === undefined &&
     options.typeDeclarations === undefined &&
     !options.typeDefinitions?.length
@@ -355,5 +373,165 @@ export function compileWorkflowEditorDocument<
             .filter(Boolean)
             .join("\n"),
         }),
+  } as CompiledWorkflow<TNodeData>;
+}
+
+type CompileScope = {
+  options: WorkflowEditorTypeValidationOptions;
+  /** Prefix that places body diagnostics inside their iteration node. */
+  pathPrefix: string;
+  inBody: boolean;
+};
+
+function scopeDiagnostics(
+  document: WorkflowEditorDocument,
+  scope: CompileScope,
+): WorkflowEditorCompileDiagnostic[] {
+  const prefix = scope.pathPrefix;
+  const cardinalityDiagnostics: WorkflowEditorCompileDiagnostic[] =
+    analyzeWorkflowEditorPortCardinality(document).map((diagnostic) => ({
+      code: "port-cardinality",
+      message: diagnostic.message,
+      path: `${prefix}nodes.${diagnostic.nodeId}.${diagnostic.direction === "input" ? "inputs" : "outputs"}.${diagnostic.portId}.cardinality`,
+      nodeId: diagnostic.nodeId,
+      portId: diagnostic.portId,
+    }));
+  const nativeTypes =
+    scope.options.typeDeclarations !== undefined ||
+    Boolean(scope.options.typeDefinitions?.length) ||
+    document.nodes.some((node) =>
+      [...(node.inputs ?? []), ...(node.outputs ?? [])].some((port) =>
+        containsNativeType(port.type),
+      ),
+    );
+  const typeDiagnostics: WorkflowEditorCompileDiagnostic[] = nativeTypes
+    ? analyzeWorkflowEditorPortTypes(document, scope.options)
+        .filter(
+          (diagnostic) =>
+            diagnostic.type === "incompatible-port-type" ||
+            diagnostic.type === "missing-type-definition",
+        )
+        .map((diagnostic) => ({
+          code: "invalid-port-type",
+          message: diagnostic.message,
+          path: diagnostic.edgeId
+            ? `${prefix}edges.${diagnostic.edgeId}`
+            : diagnostic.sourceNodeId
+              ? `${prefix}nodes.${diagnostic.sourceNodeId}.${diagnostic.sourcePortId}`
+              : "typeDeclarations",
+        }))
+    : [];
+  return [
+    ...typeDiagnostics,
+    ...payloadDiagnostics(document).map((diagnostic) => ({
+      ...diagnostic,
+      path: `${prefix}${diagnostic.path}`,
+    })),
+    ...cardinalityDiagnostics,
+    ...document.nodes.flatMap((node) => validateExecutableNode(node, scope)),
+  ];
+}
+
+function compileScope(document: WorkflowEditorDocument, scope: CompileScope) {
+  const order = topologicalOrder(document);
+  const nodeById = new Map(document.nodes.map((node) => [node.id, node] as const));
+  const nodes = order.map((nodeId) => {
+    const node = nodeById.get(nodeId);
+    if (!node?.kind) {
+      throw new WorkflowEditorCompileError([
+        {
+          code: "missing-node-kind",
+          message: `Workflow node ${nodeId} has no executable kind.`,
+          path: `${scope.pathPrefix}nodes.${nodeId}.kind`,
+          nodeId,
+        },
+      ]);
+    }
+
+    if (isWorkflowEditorIterationNode(node)) {
+      return compileIterationNode(node, scope);
+    }
+
+    return {
+      id: node.id,
+      label: node.label,
+      kind: node.kind,
+      ...(node.inputs?.length ? { inputs: node.inputs.map(compilePort) } : {}),
+      ...(node.outputs?.length ? { outputs: node.outputs.map(compilePort) } : {}),
+      ...(node.data === undefined ? {} : { data: node.data }),
+    };
+  });
+
+  const edges = [...document.edges]
+    .sort((a, b) => compareIds(a.id, b.id))
+    .map(({ id, sourceNodeId, sourcePortId, targetNodeId, targetPortId }) => ({
+      id,
+      sourceNodeId,
+      sourcePortId,
+      targetNodeId,
+      targetPortId,
+    }));
+
+  return { nodes, edges, order };
+}
+
+function bodyDocument(node: WorkflowEditorNode, scope: CompileScope): WorkflowEditorDocument {
+  return resolveWorkflowEditorDocumentTypes(
+    {
+      nodes: node.composition?.nodes ?? [],
+      edges: node.composition?.edges ?? [],
+      ...(scope.options.typeDeclarations === undefined
+        ? {}
+        : { typeDeclarations: scope.options.typeDeclarations }),
+    },
+    scope.options,
+  );
+}
+
+function compileIterationNode(
+  node: WorkflowEditorNode,
+  scope: CompileScope,
+): CompiledWorkflowIterationNode {
+  const body = node.composition!;
+  const compiledBody = compileScope(bodyDocument(node, scope), {
+    ...scope,
+    inBody: true,
+    pathPrefix: `${scope.pathPrefix}nodes.${node.id}.composition.`,
+  });
+  const boundary = (id: string) => {
+    const match = body.outputBoundaries.find((candidate) => candidate.wrapperPortId === id);
+    return match ? { nodeId: match.nodeId, portId: match.portId } : undefined;
+  };
+  const next = boundary("next")!;
+  const converged = boundary("converged");
+  const state = node.inputs!.find((port) => port.id === "state")!;
+  const { iteration: _iteration, ...data } = (node.data ?? {}) as Record<string, unknown>;
+
+  return {
+    id: node.id,
+    label: node.label,
+    kind: "control.iterate",
+    ...(node.inputs?.length ? { inputs: node.inputs.map(compilePort) } : {}),
+    ...(node.outputs?.length ? { outputs: node.outputs.map(compilePort) } : {}),
+    ...(Object.keys(data).length ? { data } : {}),
+    iteration: {
+      maxIterations: workflowEditorIterationBound(node) as number,
+      state: { inputPortId: "state", type: state.type },
+      stop: converged ? { kind: "body-output", outputId: "converged" } : { kind: "limit-only" },
+      candidate: "latest-state",
+      result: { outputPortId: "result", statuses: ["converged", "limit-exhausted"] },
+      body: {
+        ...compiledBody,
+        inputs: body.inputBoundaries
+          .map(({ wrapperPortId, nodeId, portId }) => ({ id: wrapperPortId, nodeId, portId }))
+          .sort(
+            (a, b) =>
+              compareIds(a.id, b.id) ||
+              compareIds(a.nodeId, b.nodeId) ||
+              compareIds(a.portId, b.portId),
+          ),
+        outputs: { next, ...(converged ? { converged } : {}) },
+      },
+    },
   };
 }

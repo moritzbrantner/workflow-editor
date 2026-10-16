@@ -8,6 +8,10 @@ import type {
   WorkflowNodePort as UiWorkflowNodePort,
 } from "./workflow-node";
 import { formatWorkflowEditorJsonPrimitiveNodeValue } from "../core-node-metrics";
+import {
+  formatWorkflowEditorIterationSummary,
+  isWorkflowEditorIterationNode,
+} from "../core-iteration";
 import { formatWorkflowEditorPortPayload } from "../core-payload";
 import { workflowEditorPortTypeSource } from "../core-type-source";
 import { resolveWorkflowEditorPortTypeColor } from "../port-type-colors";
@@ -43,7 +47,10 @@ export function toUiWorkflowBuilderNodes<TData = Record<string, unknown>>(
       category: node.category,
       status: node.status,
       eyebrow: node.eyebrow,
-      packageLabel: node.packageLabel ?? jsonPrimitiveValue,
+      // The iteration summary is derived from its bound and body, so it always wins.
+      packageLabel: isWorkflowEditorIterationNode(node)
+        ? formatWorkflowEditorIterationSummary(node)
+        : (node.packageLabel ?? jsonPrimitiveValue),
       tone: node.tone,
       variant: node.variant,
       minimized,
@@ -91,7 +98,10 @@ export function fromUiWorkflowBuilderNodes<TData = Record<string, unknown>>(
       categoryPath: previousNode?.categoryPath ? [...previousNode.categoryPath] : undefined,
       status: node.status,
       eyebrow: node.eyebrow,
-      packageLabel: node.packageLabel,
+      packageLabel:
+        previousNode && isWorkflowEditorIterationNode(previousNode)
+          ? previousNode.packageLabel
+          : node.packageLabel,
       tone: node.tone,
       variant: node.variant,
       minimized: node.minimized,

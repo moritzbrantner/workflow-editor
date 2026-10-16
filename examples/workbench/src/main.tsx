@@ -2,8 +2,14 @@ import { StrictMode, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 
 import {
+  compileWorkflowEditorDocument,
+  WorkflowEditorCompileError,
+  type CompiledWorkflow,
+} from "@moritzbrantner/workflow-editor/compiler";
+import {
   WorkflowEditor,
   addWorkflowEditorObjectConstructorInputToNode,
+  createWorkflowEditorIterationNode,
   createWorkflowEditorEntry,
   createWorkflowEditorLibrary,
   defaultWorkflowEditorNodeTemplates,
@@ -12,6 +18,7 @@ import {
   type WorkflowEditorDocument,
   type WorkflowEditorLibrary,
   type WorkflowEditorNode,
+  type WorkflowEditorNodeComposition,
   type WorkflowEditorSettings,
   type WorkflowEditorNodeTemplate,
   type WorkflowEditorPortType,
@@ -210,8 +217,90 @@ const domainTemplates = [
   },
 ] satisfies WorkflowEditorNodeTemplate<ExampleNodeData>[];
 
+function newtonSquareRootBody(): WorkflowEditorNodeComposition<ExampleNodeData> {
+  return {
+    nodes: [
+      {
+        id: "newton-step",
+        label: "Newton step",
+        description: "next = (estimate + target / estimate) / 2",
+        kind: "math.sqrt.newtonStep",
+        x: 0,
+        y: 0,
+        inputs: [
+          { id: "estimate", label: "Estimate", type: numberType },
+          { id: "target", label: "Target", type: numberType },
+        ],
+        outputs: [{ id: "next", label: "Next", type: numberType }],
+      },
+      {
+        id: "within-tolerance",
+        label: "Within tolerance",
+        kind: "math.compare.withinTolerance",
+        x: 260,
+        y: 0,
+        inputs: [
+          { id: "previous", label: "Previous", type: numberType },
+          { id: "next", label: "Next", type: numberType },
+        ],
+        outputs: [{ id: "converged", label: "Converged", type: booleanType }],
+        data: { tolerance: 1e-9 },
+      },
+    ],
+    edges: [
+      {
+        id: "step-next",
+        sourceNodeId: "newton-step",
+        sourcePortId: "next",
+        targetNodeId: "within-tolerance",
+        targetPortId: "next",
+      },
+    ],
+    inputBoundaries: [
+      { wrapperPortId: "state", nodeId: "newton-step", portId: "estimate" },
+      { wrapperPortId: "state", nodeId: "within-tolerance", portId: "previous" },
+      { wrapperPortId: "target", nodeId: "newton-step", portId: "target" },
+    ],
+    outputBoundaries: [
+      { wrapperPortId: "next", nodeId: "newton-step", portId: "next" },
+      { wrapperPortId: "converged", nodeId: "within-tolerance", portId: "converged" },
+    ],
+  };
+}
+
+function newtonSquareRootIteration(id: string, x: number, y: number) {
+  return createWorkflowEditorIterationNode<ExampleNodeData>({
+    id,
+    label: "Refine square root",
+    x,
+    y,
+    stateType: { kind: "typescript", source: "number" },
+    maxIterations: 10,
+    invariantInputs: [{ id: "target", label: "Target", type: numberType }],
+    body: newtonSquareRootBody(),
+  });
+}
+
+const {
+  id: _iterationId,
+  x: _iterationX,
+  y: _iterationY,
+  ...newtonIteration
+} = newtonSquareRootIteration("template", 0, 0);
+
+const iterationTemplates: WorkflowEditorNodeTemplate<ExampleNodeData>[] = [
+  {
+    ...newtonIteration,
+    id: "template-bounded-newton-iteration",
+    label: "Bounded iteration (Newton step)",
+    description: "Refines a square root at most 10 times; a runner executes it.",
+    category: "Control flow",
+  },
+];
+
 const nodeTemplates: ReadonlyArray<WorkflowEditorNodeTemplate<ExampleNodeData>> = [
   ...domainTemplates,
+  ...iterationTemplates,
   ...(defaultWorkflowEditorNodeTemplates as ReadonlyArray<
     WorkflowEditorNodeTemplate<ExampleNodeData>
   >),
@@ -225,6 +314,16 @@ function createExamplesLibrary(): ExampleLibrary {
       createdAt: seededAt,
       updatedAt: seededAt,
       document: typescriptPortsDocument(),
+    }),
+    createWorkflowEditorEntry({
+      id: "bounded-approximation",
+      name: "Bounded Approximation (Newton √2)",
+      description:
+        "Refines √2 at most 10 times and stops early once converged; compiled, not executed, in Pages.",
+      tags: ["iteration", "example"],
+      createdAt: seededAt,
+      updatedAt: seededAt,
+      document: boundedApproximationDocument(),
     }),
     createWorkflowEditorEntry({
       id: "external-asset-handoff",
@@ -338,6 +437,38 @@ function externalAssetHandoffDocument(): ExampleDocument {
         targetNodeId: "end",
         targetPortId: "in",
       },
+    ],
+  });
+}
+
+function boundedApproximationDocument(): ExampleDocument {
+  const number = (id: string, label: string, value: number, y: number) => ({
+    ...defaultWorkflowEditorNodeTemplates.find((item) => item.kind === "json.number")!,
+    id,
+    label,
+    x: 0,
+    y,
+    data: { value, sourceName: id === "target" ? "target" : "initialGuess" },
+  });
+  return normalizeWorkflowEditorDocument({
+    viewport: { x: 25, y: 35, zoom: 0.72 },
+    nodes: [
+      number("target", "Target", 2, 0) as WorkflowEditorNode<ExampleNodeData>,
+      number("initial-guess", "Initial guess", 1, 180) as WorkflowEditorNode<ExampleNodeData>,
+      newtonSquareRootIteration("refine", 320, 60),
+      {
+        id: "approximation",
+        label: "Approximation",
+        kind: "control.end",
+        x: 700,
+        y: 60,
+        inputs: [{ id: "in", label: "Result", type: { kind: "typescript", source: "unknown" } }],
+      },
+    ],
+    edges: [
+      edge("initial-guess", "value", "refine", "state"),
+      edge("target", "value", "refine", "target"),
+      edge("refine", "result", "approximation", "in"),
     ],
   });
 }
@@ -904,6 +1035,7 @@ function edge(
 
 function App() {
   const [resetToken, setResetToken] = useState(0);
+  const [compilation, setCompilation] = useState<CompilationResult | null>(null);
   const [editorSettings, setEditorSettings] = useState(loadWorkbenchSettings);
   const initialLibrary = useMemo(createExamplesLibrary, [resetToken]);
 
@@ -937,6 +1069,15 @@ function App() {
         showDocumentPath={false}
         showDocumentStats={false}
         showWorkbenchStats={false}
+        renderToolbarActions={(context) => (
+          <button
+            type="button"
+            className="min-h-8 cursor-pointer rounded-[0.4rem] border border-[#aeb9c6] bg-white px-[0.62rem] py-[0.3rem] text-[0.82rem] font-[600] text-[#17202a] hover:bg-[#eef2f6]"
+            onClick={() => setCompilation(compileExample(context.document))}
+          >
+            Compile workflow
+          </button>
+        )}
         renderCompactMenuActions={() => (
           <button
             type="button"
@@ -964,7 +1105,84 @@ function App() {
           </span>
         )}
       />
+      {compilation ? (
+        <CompilationPanel result={compilation} onClose={() => setCompilation(null)} />
+      ) : null}
     </main>
+  );
+}
+
+type CompilationResult =
+  | { ok: true; compiled: CompiledWorkflow; summary: string }
+  | { ok: false; problems: string[] };
+
+/** Compiles the authored document; Pages has no runner, so nothing is executed. */
+function compileExample(document: ExampleDocument): CompilationResult {
+  try {
+    const compiled = compileWorkflowEditorDocument(document as WorkflowEditorDocument, {
+      typeDefinitions,
+    });
+    const iterations = compiled.nodes.flatMap((node) => ("iteration" in node ? [node] : []));
+    const loops = iterations.map(
+      ({ iteration }) =>
+        `max ${iteration.maxIterations}, ${iteration.stop.kind === "body-output" ? "stops when converged" : "stops only at the limit"}`,
+    );
+    const detail = loops.length
+      ? `${loops.length} bounded iteration${loops.length === 1 ? "" : "s"} (${loops.join("; ")})`
+      : `${compiled.nodes.length} nodes`;
+    return {
+      ok: true,
+      compiled,
+      summary: `Compiled contract v${compiled.version} · ${detail} · not executed`,
+    };
+  } catch (error) {
+    if (error instanceof WorkflowEditorCompileError) {
+      return {
+        ok: false,
+        problems: error.diagnostics.map(
+          (diagnostic) => `${diagnostic.code} — ${diagnostic.message}`,
+        ),
+      };
+    }
+    return { ok: false, problems: [error instanceof Error ? error.message : String(error)] };
+  }
+}
+
+function CompilationPanel({ result, onClose }: { result: CompilationResult; onClose: () => void }) {
+  return (
+    <section
+      aria-label={result.ok ? "Compiled contract" : "Compilation failed"}
+      className="fixed top-14 right-3 z-50 grid max-h-[70vh] w-[min(30rem,calc(100vw-1.5rem))] gap-2 overflow-auto rounded-[0.5rem] border border-[#aeb9c6] bg-white p-3 text-[0.82rem] shadow-lg"
+    >
+      <div className="flex items-start justify-between gap-2">
+        {result.ok ? (
+          <strong className="[overflow-wrap:anywhere]">{result.summary}</strong>
+        ) : (
+          <strong>Compilation failed</strong>
+        )}
+        <button
+          type="button"
+          className="cursor-pointer rounded border border-[#aeb9c6] px-2 py-0.5"
+          aria-label="Close compiled contract"
+          onClick={onClose}
+        >
+          Close
+        </button>
+      </div>
+      {result.ok ? (
+        <pre className="max-h-[50vh] overflow-auto rounded bg-[#f6f7f8] p-2 text-[0.72rem]">
+          {JSON.stringify(result.compiled, null, 2)}
+        </pre>
+      ) : (
+        <ul role="alert" className="grid list-disc gap-1 pl-5 text-[#b42318]">
+          {result.problems.map((problem) => (
+            <li key={problem} className="[overflow-wrap:anywhere]">
+              {problem}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 

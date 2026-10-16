@@ -70,6 +70,11 @@ import {
   findWorkflowEditorPortPayloadMismatch,
   isWorkflowEditorPortPayloadLike,
 } from "./core-payload";
+import {
+  isWorkflowEditorIterationNode,
+  syncWorkflowEditorIterationResultPort,
+  workflowEditorIterationNodeKind,
+} from "./core-iteration";
 import { createWorkflowEditorTypeResolver } from "./core-type-resolver";
 
 export type WorkflowGraphOperation<
@@ -157,6 +162,21 @@ export type {
   WorkflowEditorWorkflowReference,
 } from "./core-types";
 export { workflowEditorPortTypeSource } from "./core-type-source";
+export {
+  createWorkflowEditorIterationNode,
+  formatWorkflowEditorIterationSummary,
+  isWorkflowEditorIterationNode,
+  updateWorkflowEditorIterationBound,
+  updateWorkflowEditorIterationStateType,
+  validateWorkflowEditorIterationNode,
+  workflowEditorIterationBound,
+  workflowEditorIterationNodeKind,
+  workflowEditorIterationResultType,
+  type WorkflowEditorCreateIterationNodeOptions,
+  type WorkflowEditorIterationConfig,
+  type WorkflowEditorIterationDiagnostic,
+  type WorkflowEditorIterationDiagnosticCode,
+} from "./core-iteration";
 export {
   findWorkflowEditorPortPayloadMismatch,
   formatWorkflowEditorPortPayload,
@@ -1744,7 +1764,8 @@ export function restoreWorkflowEditorComposedNode<
 ): WorkflowEditorDocument<TNodeData, TEdgeData> {
   const composedNode = findWorkflowEditorNode(document, nodeId);
 
-  if (!composedNode?.composition) {
+  // An iteration body is loop semantics, not a grouping; flattening it would drop the bound.
+  if (!composedNode?.composition || isWorkflowEditorIterationNode(composedNode)) {
     return document;
   }
 
@@ -2523,6 +2544,10 @@ const workflowEditorNodeBehaviors = [
     kind: "json.object.decompose",
     syncNodes: syncWorkflowEditorObjectDecompositionNodes,
     expandConnection: expandWorkflowEditorObjectDecompositionConnection,
+  },
+  {
+    kind: workflowEditorIterationNodeKind,
+    syncNodes: (nodes) => nodes.map(syncWorkflowEditorIterationResultPort),
   },
 ] satisfies WorkflowEditorNodeBehavior[];
 
@@ -3953,20 +3978,25 @@ function normalizeWorkflowEditorNode<TNodeData = Record<string, unknown>>(
       ? { documentId: node.workflowRef.documentId }
       : undefined,
     composition: node.composition
-      ? normalizeWorkflowEditorNodeComposition(node.composition)
+      ? normalizeWorkflowEditorNodeComposition(
+          node.composition,
+          // A loop body is executable control flow: reject a cyclic body instead of repairing it.
+          isWorkflowEditorIterationNode(node) ? "strict" : "repair",
+        )
       : undefined,
   };
 }
 
 function normalizeWorkflowEditorNodeComposition<TNodeData = Record<string, unknown>>(
   composition: WorkflowEditorNodeComposition<TNodeData>,
+  mode: NonNullable<WorkflowEditorDocumentNormalizationOptions["mode"]> = "repair",
 ): WorkflowEditorNodeComposition<TNodeData> {
   const normalizedDocument = normalizeWorkflowEditorDocument(
     {
       nodes: composition.nodes,
       edges: composition.edges,
     },
-    { mode: "repair" },
+    { mode },
   );
   const nodeIds = new Set(normalizedDocument.nodes.map((node) => node.id));
 

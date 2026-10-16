@@ -4,6 +4,13 @@
 
 ### Minor Changes
 
+- Author and compile bounded iteration (TECH-002, Decisions 2.6 and 2.8).
+  - A `control.iterate` node holds its loop body as its embedded composition, with typed `state`, a required finite `maxIterations`, an optional boolean `converged` stop output, and a generated `result` port typed `{ status: "converged" | "limit-exhausted"; value; iterations; maxIterations }`.
+  - `validateWorkflowEditorIterationNode` reports missing or invalid bounds, body, boundary, state-type and stop-type problems, and nested iterations. A cyclic body is rejected on import instead of being repaired.
+  - Documents with iteration compile to **compiled v2**; documents without it stay byte-identical v1. `CompiledWorkflow` is now `CompiledWorkflowV1 | CompiledWorkflowV2`.
+  - The workbench shows "≤ N iterations · until converged" on the node face and adds an **Iteration** inspector section.
+  - The Pages example adds a "Compile workflow" action, which reports "not executed", and a **Bounded Approximation (Newton √2)** example.
+  - A cleared number field in the inspector now stays empty instead of becoming 0, and field validation messages are linked to their inputs.
 - Configure shared, deterministic colors for TypeScript port types and their connections. The Pages workbench retains color settings across reloads without changing workflow documents.
 - Use TypeScript 6's checker for workflow port compatibility, with offline ES2022/DOM libraries, document-owned type declarations, editable port expressions, native diagnostics, and propagated branch/collection output contracts. Legacy port records remain readable and compiled workflows optionally carry declarations. The Pages workbench includes a TypeScript ports example. Type checking remains execution-neutral.
 - Type diagnostics are now the TypeScript compiler's messages (for example `TS2304: Cannot find name 'Missing'.` and `TS2456: Type alias 'A' circularly references itself.`) instead of the former `Missing workflow port type definition` / `Cyclic workflow port type reference` texts. Declarations that reference reserved `__Workflow` checker names are rejected.

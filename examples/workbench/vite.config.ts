@@ -54,6 +54,11 @@ export default defineConfig({
         replacement: path.resolve(rootDir, "node_modules/@moritzbrantner/ui/dist/index.js"),
       },
       {
+        // Subpath entries must resolve before the package-root alias captures them.
+        find: /^@moritzbrantner\/workflow-editor\/compiler$/,
+        replacement: path.resolve(rootDir, "src/compiler.ts"),
+      },
+      {
         find: "@moritzbrantner/workflow-editor",
         replacement: path.resolve(rootDir, "src/index.ts"),
       },
