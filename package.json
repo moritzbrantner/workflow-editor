@@ -115,7 +115,7 @@
     "source:smoke": "node scripts/source-deps.mjs smoke",
     "source:restore": "node scripts/source-deps.mjs restore",
     "format": "oxfmt",
-    "format:check": "oxfmt docs/technical-decisions.md && echo OXFMT_OUTPUT_START && cat docs/technical-decisions.md && echo OXFMT_OUTPUT_END && oxfmt --check",
+    "format:check": "oxfmt --check",
     "lint": "oxlint --format=github",
     "prepack": "bun run build",
     "prepare": "bun ./scripts/prepare-git-install.ts",
