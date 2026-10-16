@@ -123,6 +123,32 @@ const domainTemplates = [
     outputs: [{ id: "event", label: "Event", type: objectType }],
   },
   {
+    id: "template-external-asset-operation",
+    label: "External asset operation (example)",
+    description: "Authoring-only example; an external host must supply the executor.",
+    kind: "asset.operation",
+    category: "Integration",
+    inputs: [{ id: "request", label: "Request", type: anyType }],
+    outputs: [{ id: "asset", label: "AssetRef", type: objectType }],
+    data: {
+      assetOperation: {
+        id: "image.comfyui.generate",
+        version: "1",
+        parameters: {
+          provider: "comfyui",
+          workflow: {
+            schemaVersion: 1,
+            kind: "workflow",
+            mediaType: "application/json",
+            sha256: "a".repeat(64),
+            byteLength: 256,
+            metadata: { format: "comfyui-api-prompt" },
+          },
+        },
+      },
+    },
+  },
+  {
     id: "template-api-request",
     label: "API request",
     description: "Sends data to another service.",
@@ -201,6 +227,15 @@ function createExamplesLibrary(): ExampleLibrary {
       document: typescriptPortsDocument(),
     }),
     createWorkflowEditorEntry({
+      id: "external-asset-handoff",
+      name: "External Asset Handoff (example)",
+      description: "Typed opaque operation reference; no ComfyUI model or executor runs in Pages.",
+      tags: ["integration", "asset", "example"],
+      createdAt: seededAt,
+      updatedAt: seededAt,
+      document: externalAssetHandoffDocument(),
+    }),
+    createWorkflowEditorEntry({
       id: "lead-intake",
       name: "Lead Intake Automation",
       description: "Branching, typed ports, and nested workflow references.",
@@ -250,6 +285,50 @@ function createExamplesLibrary(): ExampleLibrary {
   return createWorkflowEditorLibrary({
     activeDocumentId: "lead-intake",
     documents,
+  });
+}
+
+function externalAssetHandoffDocument(): ExampleDocument {
+  const externalOperation = domainTemplates.find(
+    (template) => template.id === "template-external-asset-operation",
+  );
+  if (!externalOperation) throw new Error("External operation example template is missing");
+  return normalizeWorkflowEditorDocument({
+    nodes: [
+      {
+        id: "start",
+        label: "Start",
+        kind: "control.start",
+        x: 0,
+        y: 0,
+        outputs: [{ id: "out", label: "Request", type: anyType }],
+      },
+      { ...externalOperation, id: "generate", x: 300, y: 0 },
+      {
+        id: "end",
+        label: "End",
+        kind: "control.end",
+        x: 620,
+        y: 0,
+        inputs: [{ id: "in", label: "AssetRef", type: objectType }],
+      },
+    ],
+    edges: [
+      {
+        id: "start-generate",
+        sourceNodeId: "start",
+        sourcePortId: "out",
+        targetNodeId: "generate",
+        targetPortId: "request",
+      },
+      {
+        id: "generate-end",
+        sourceNodeId: "generate",
+        sourcePortId: "asset",
+        targetNodeId: "end",
+        targetPortId: "in",
+      },
+    ],
   });
 }
 
