@@ -181,6 +181,7 @@ export {
   type WorkflowEditorDocumentPathItem,
   WorkflowEditorDocumentPath,
   WorkflowEditorHistoryControls,
+  WorkflowEditorImportErrorAlert,
   WorkflowEditorImportExportControls,
   WorkflowEditorSaveStateBadge,
   WorkflowEditorVersionControls,

@@ -1,6 +1,7 @@
 "use client";
 
 import { createWorkflowEditorTypeResolver } from "./core-type-resolver";
+import { WorkflowEditorImportErrorAlert } from "./editor/chrome";
 import { NativeWorkflowTypes } from "./editor/native-types";
 import { workflowEditorPortTypeSource } from "./core-type-source";
 
@@ -88,6 +89,7 @@ export {
   WorkflowEditorDocumentMenu,
   WorkflowEditorDocumentPath,
   WorkflowEditorHistoryControls,
+  WorkflowEditorImportErrorAlert,
   WorkflowEditorImportExportControls,
   WorkflowEditorSaveStateBadge,
   WorkflowEditorVersionControls,
@@ -190,6 +192,8 @@ export type WorkflowEditorController<
   }>;
   documentReferenceOptions?: WorkflowEditorDocumentReferenceOption[];
   history: WorkflowEditorHistoryState<TNodeData, TEdgeData>;
+  /** Message of the most recent rejected import, cleared by the next import or dismissal. */
+  importError: string | null;
   library: WorkflowEditorLibrary<TNodeData, TEdgeData>;
   nameDraft: string;
   readOnly: boolean;
@@ -202,6 +206,7 @@ export type WorkflowEditorController<
     createDocument: () => void;
     createWorkflowReference: (node: WorkflowEditorNode<TNodeData>) => void;
     deleteDocument: () => void;
+    dismissImportError: () => void;
     duplicateDocument: () => void;
     exportDocument: () => void;
     importDocumentFromFile: (file: File) => Promise<void>;
@@ -627,6 +632,7 @@ export function WorkflowEditor<
     useState<WorkflowEditorLibrary<TNodeData, TEdgeData>>(fallbackLibrary);
   const [loaded, setLoaded] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("loading");
+  const [importError, setImportError] = useState<string | null>(null);
   const [selection, setSelection] = useState<WorkflowEditorSelectionState>(
     emptyWorkflowEditorSelection,
   );
@@ -960,6 +966,7 @@ export function WorkflowEditor<
       return;
     }
 
+    setImportError(null);
     try {
       const restored = await readWorkflowEditorDocumentFile<TNodeData, TEdgeData>(file);
       const entry = createWorkflowEditorEntry<TNodeData, TEdgeData>({
@@ -975,8 +982,11 @@ export function WorkflowEditor<
       }));
       updateLibrary(upsertWorkflowEditorEntry(library, entry, { activate: true }));
     } catch (error) {
+      const importFailure =
+        error instanceof Error ? error : new Error("Failed to import workflow document");
       setSaveState("error");
-      onError?.(error instanceof Error ? error : new Error("Failed to import workflow document"));
+      setImportError(importFailure.message);
+      onError?.(importFailure);
     }
   };
 
@@ -1052,6 +1062,7 @@ export function WorkflowEditor<
       return;
     }
 
+    setImportError(null);
     try {
       const restored = await readWorkflowEditorDocumentFile<TNodeData, TEdgeData>(file);
       const entry = createWorkflowEditorEntry<TNodeData, TEdgeData>({
@@ -1067,8 +1078,11 @@ export function WorkflowEditor<
       }));
       updateLibrary(upsertWorkflowEditorEntry(library, entry, { activate: true }));
     } catch (error) {
+      const importFailure =
+        error instanceof Error ? error : new Error("Failed to import workflow document");
       setSaveState("error");
-      onError?.(error instanceof Error ? error : new Error("Failed to import workflow document"));
+      setImportError(importFailure.message);
+      onError?.(importFailure);
     }
   };
 
@@ -1123,6 +1137,7 @@ export function WorkflowEditor<
     documentPathEntries,
     documentReferenceOptions,
     history,
+    importError,
     library,
     nameDraft,
     readOnly,
@@ -1135,6 +1150,7 @@ export function WorkflowEditor<
       createDocument,
       createWorkflowReference,
       deleteDocument,
+      dismissImportError: () => setImportError(null),
       duplicateDocument,
       exportDocument,
       importDocumentFromFile,
@@ -1170,7 +1186,7 @@ export function WorkflowEditor<
         documentControlsChrome(editorController)
       ) : documentControlsChrome === "hidden" ||
         layout === "unstyled" ? null : documentControlsChrome === "compact-menu" ? (
-        <WorkbenchToolbar className="flex items-center justify-between gap-2 border border-border bg-background px-2 py-1">
+        <WorkbenchToolbar className="flex flex-wrap items-center justify-between gap-2 border border-border bg-background px-2 py-1">
           <DropdownMenu modal={false}>
             <DropdownMenuTrigger asChild>
               <Button type="button" size="sm" variant="outline">
@@ -1380,6 +1396,7 @@ export function WorkflowEditor<
               {formatSaveState(saveState)}
             </Badge>
           </div>
+          <WorkflowEditorImportErrorAlert controller={editorController} />
         </WorkbenchToolbar>
       ) : (
         <>
@@ -1546,6 +1563,7 @@ export function WorkflowEditor<
                 Export JSON
               </Button>
             </div>
+            <WorkflowEditorImportErrorAlert controller={editorController} />
           </WorkbenchToolbar>
         </>
       )}
@@ -1716,6 +1734,7 @@ export function useWorkflowEditorController<
     useState<WorkflowEditorLibrary<TNodeData, TEdgeData>>(fallbackLibrary);
   const [loaded, setLoaded] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("loading");
+  const [importError, setImportError] = useState<string | null>(null);
   const [selection, setSelection] = useState<WorkflowEditorSelectionState>(
     emptyWorkflowEditorSelection,
   );
@@ -1998,6 +2017,7 @@ export function useWorkflowEditorController<
     if (readOnly) {
       return;
     }
+    setImportError(null);
     try {
       const restored = await readWorkflowEditorDocumentFile<TNodeData, TEdgeData>(file);
       const entry = createWorkflowEditorEntry<TNodeData, TEdgeData>({
@@ -2013,8 +2033,11 @@ export function useWorkflowEditorController<
       }));
       updateLibrary(upsertWorkflowEditorEntry(library, entry, { activate: true }));
     } catch (error) {
+      const importFailure =
+        error instanceof Error ? error : new Error("Failed to import workflow document");
       setSaveState("error");
-      onError?.(error instanceof Error ? error : new Error("Failed to import workflow document"));
+      setImportError(importFailure.message);
+      onError?.(importFailure);
     }
   };
   const openWorkflowReference = (node: WorkflowEditorNode<TNodeData>) => {
@@ -2127,6 +2150,7 @@ export function useWorkflowEditorController<
     documentPathEntries,
     documentReferenceOptions,
     history,
+    importError,
     library,
     nameDraft,
     readOnly,
@@ -2139,6 +2163,7 @@ export function useWorkflowEditorController<
       createDocument,
       createWorkflowReference,
       deleteDocument,
+      dismissImportError: () => setImportError(null),
       duplicateDocument,
       exportDocument,
       importDocumentFromFile,

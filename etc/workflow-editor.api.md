@@ -876,6 +876,7 @@ export function useWorkflowEditorController<TNodeData extends Record<string, unk
     }[];
     documentReferenceOptions: WorkflowEditorDocumentReferenceOption[] | undefined;
     history: WorkflowEditorHistoryState<TNodeData, TEdgeData>;
+    importError: string | null;
     library: WorkflowEditorLibrary<TNodeData, TEdgeData>;
     nameDraft: string;
     readOnly: boolean;
@@ -888,6 +889,7 @@ export function useWorkflowEditorController<TNodeData extends Record<string, unk
         createDocument: () => void;
         createWorkflowReference: (node: WorkflowEditorNode<TNodeData>) => void;
         deleteDocument: () => void;
+        dismissImportError: () => void;
         duplicateDocument: () => void;
         exportDocument: () => void;
         importDocumentFromFile: (file: File) => Promise<void>;
@@ -1319,6 +1321,7 @@ export type WorkflowEditorController<TNodeData extends Record<string, unknown> =
     }>;
     documentReferenceOptions?: WorkflowEditorDocumentReferenceOption[];
     history: WorkflowEditorHistoryState<TNodeData, TEdgeData>;
+    importError: string | null;
     library: WorkflowEditorLibrary<TNodeData, TEdgeData>;
     nameDraft: string;
     readOnly: boolean;
@@ -1331,6 +1334,7 @@ export type WorkflowEditorController<TNodeData extends Record<string, unknown> =
         createDocument: () => void;
         createWorkflowReference: (node: WorkflowEditorNode<TNodeData>) => void;
         deleteDocument: () => void;
+        dismissImportError: () => void;
         duplicateDocument: () => void;
         exportDocument: () => void;
         importDocumentFromFile: (file: File) => Promise<void>;
@@ -1528,6 +1532,13 @@ export type WorkflowEditorHistoryState<TNodeData = Record<string, unknown>, TEdg
     present: WorkflowEditorDocument<TNodeData, TEdgeData>;
     future: Array<WorkflowEditorDocument<TNodeData, TEdgeData>>;
 };
+
+// @public
+export function WorkflowEditorImportErrorAlert(input: {
+    controller: Pick<WorkflowEditorController, "importError"> & {
+        actions: Pick<WorkflowEditorController["actions"], "dismissImportError">;
+    };
+}): react_jsx_runtime.JSX.Element | null;
 
 // @public (undocumented)
 export function WorkflowEditorImportExportControls<TNodeData extends Record<string, unknown> = Record<string, unknown>, TEdgeData extends Record<string, unknown> = Record<string, unknown>, TTemplateData = TNodeData>(input: {
@@ -2321,7 +2332,7 @@ export function wouldCreateWorkflowEditorCycle<TNodeData = Record<string, unknow
 
 // Warnings were encountered during analysis:
 //
-// dist/editor.d.ts:31:5 - (ae-forgotten-export) The symbol "ChromeController" needs to be exported by the entry point index.d.ts
+// dist/editor.d.ts:37:5 - (ae-forgotten-export) The symbol "ChromeController" needs to be exported by the entry point index.d.ts
 // dist/react.d.ts:127:9 - (ae-forgotten-export) The symbol "WorkflowWorkbenchPaletteCategoryGroup" needs to be exported by the entry point index.d.ts
 // dist/react.d.ts:132:9 - (ae-forgotten-export) The symbol "WorkflowWorkbenchOverlayPosition" needs to be exported by the entry point index.d.ts
 
