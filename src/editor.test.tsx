@@ -287,6 +287,33 @@ describe("@moritzbrantner/workflow-editor editor shell", () => {
     expect(screen.getByTestId("save-state").textContent).toBe("Save error");
   });
 
+  test("explains a rejected import until it is dismissed", async () => {
+    const handleError = vi.fn();
+    const saveLibrary = vi.fn(async () => {});
+
+    render(
+      <WorkflowEditor
+        storage={{ loadLibrary: vi.fn(async () => null), saveLibrary }}
+        onError={handleError}
+      />,
+    );
+    await waitFor(() => expect(screen.getByTestId("save-state").textContent).toBe("Saved"));
+    const savesBeforeImport = saveLibrary.mock.calls.length;
+
+    fireEvent.change(screen.getByLabelText("Import workflow JSON"), {
+      target: { files: [new File(["{not json"], "broken.json", { type: "application/json" })] },
+    });
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("Import rejected:");
+    expect(alert.textContent).toContain(handleError.mock.calls[0]?.[0].message);
+    expect(screen.getByTestId("save-state").textContent).toBe("Save error");
+    expect(saveLibrary).toHaveBeenCalledTimes(savesBeforeImport);
+
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   test("places document controls through custom editor chrome", async () => {
     const initialLibrary = createWorkflowEditorLibrary({
       activeDocumentId: "parent",

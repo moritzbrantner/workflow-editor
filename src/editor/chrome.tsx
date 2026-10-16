@@ -17,12 +17,48 @@ export function WorkflowEditorSaveStateBadge<
   TTemplateData = TNodeData,
 >({ controller }: { controller: ChromeController<TNodeData, TEdgeData, TTemplateData> }) {
   return (
-    <Badge
-      variant={controller.saveState === "error" ? "outline" : "secondary"}
-      data-testid="save-state"
+    <>
+      <Badge
+        variant={controller.saveState === "error" ? "outline" : "secondary"}
+        data-testid="save-state"
+      >
+        {formatSaveState(controller.saveState)}
+      </Badge>
+      <WorkflowEditorImportErrorAlert controller={controller} />
+    </>
+  );
+}
+
+/** Explains why the last import was rejected; the rejected file never reaches the library. */
+export function WorkflowEditorImportErrorAlert({
+  controller,
+}: {
+  controller: Pick<WorkflowEditorController, "importError"> & {
+    actions: Pick<WorkflowEditorController["actions"], "dismissImportError">;
+  };
+}) {
+  if (!controller.importError) {
+    return null;
+  }
+
+  return (
+    <div
+      role="alert"
+      className="flex basis-full items-start justify-between gap-2 rounded-md border border-destructive/40 bg-destructive/5 px-2 py-1.5 text-xs text-destructive"
     >
-      {formatSaveState(controller.saveState)}
-    </Badge>
+      <p className="min-w-0 [overflow-wrap:anywhere]">
+        <strong className="font-semibold">Import rejected:</strong> {controller.importError}
+      </p>
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        className="h-6 flex-none px-2 text-xs"
+        onClick={controller.actions.dismissImportError}
+      >
+        Dismiss
+      </Button>
+    </div>
   );
 }
 
