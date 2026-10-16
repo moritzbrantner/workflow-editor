@@ -10,3 +10,7 @@
 ## Domain context
 
 See `docs/agents/domain.md`.
+
+## ComfyUI integration boundary
+
+ComfyUI is the external reference and owner of its own media-generation graphs. Treat an entire ComfyUI workflow as one versioned, externally executed `asset-tooling` operation when composing a general typed workflow; do not duplicate ComfyUI node authoring, inference, queue or graph runtime. Learn from ComfyUI's visual editing patterns only when improving general Workflow Editor behavior. See `docs/adr/0003-comfyui-as-external-media-runtime.md`.
