@@ -22,7 +22,7 @@ Technical implementation decisions complement the owner-approved product intent 
 - **Persistence and portability:** Save/export the reference and sufficient revision identity to
   reproduce the linked semantics. Import/restore must verify required definitions/revisions against
   the available registry and report missing dependencies. Full self-contained offline snapshots are
-  *not* the default linked-node authority. Explicit **Detach / Unlink** materializes the currently
+  _not_ the default linked-node authority. Explicit **Detach / Unlink** materializes the currently
   resolved definition as an independent local Composed Node; it ceases following registry updates.
 - **Ownership:** Workflow Editor owns linked authoring, registry integration, type validation and
   compilation; graph-editor owns generic graph interactions, and an external runner owns execution.
