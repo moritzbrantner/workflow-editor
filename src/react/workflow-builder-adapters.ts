@@ -8,6 +8,7 @@ import type {
   WorkflowNodePort as UiWorkflowNodePort,
 } from "./workflow-node";
 import { formatWorkflowEditorJsonPrimitiveNodeValue } from "../core-node-metrics";
+import { formatWorkflowEditorPortPayload } from "../core-payload";
 import { workflowEditorPortTypeSource } from "../core-type-source";
 import { resolveWorkflowEditorPortTypeColor } from "../port-type-colors";
 import type {
@@ -176,6 +177,7 @@ function toUiWorkflowEditorPort(
       (options.direction === "input" && port.optional ? false : undefined),
     badge:
       port.badge ??
+      (port.payload ? formatWorkflowEditorPortPayload(port.payload) : undefined) ??
       defaultValueBadge ??
       (options.direction === "input" && port.optional ? "optional" : undefined),
     type: {

@@ -26,6 +26,7 @@ import {
   type InspectorFieldDefinition,
   type InspectorFieldValue,
 } from "./inspector-panel";
+import { WorkflowPortPayloadEditor, withWorkflowEditorPortPayload } from "./port-payload-editor";
 
 export function DefaultWorkflowInspector<
   TNodeData extends Record<string, unknown>,
@@ -295,6 +296,26 @@ export function DefaultWorkflowInspector<
             context.updateSelectedNode(patch);
           }}
         />
+        {node.inputs?.length || node.outputs?.length ? (
+          <section className="grid gap-2 px-4" aria-label="Port delivery">
+            <h3 className="text-sm font-semibold">Port delivery</h3>
+            {(["inputs", "outputs"] as const).flatMap((direction) =>
+              (node[direction] ?? []).map((port) => (
+                <WorkflowPortPayloadEditor
+                  key={`${node.id}:${direction}:${port.id}:${JSON.stringify(port.payload ?? null)}`}
+                  port={port}
+                  direction={direction}
+                  readOnly={context.readOnly}
+                  onApply={(payload) =>
+                    context.updateSelectedNode({
+                      [direction]: withWorkflowEditorPortPayload(node[direction], port.id, payload),
+                    } as Partial<WorkflowEditorNode<TNodeData>>)
+                  }
+                />
+              )),
+            )}
+          </section>
+        ) : null}
         {isWorkflowEditorArrayConstructorNode(node) ? (
           <div className="flex flex-wrap gap-2 px-4">
             <Button

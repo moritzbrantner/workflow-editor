@@ -236,6 +236,16 @@ function createExamplesLibrary(): ExampleLibrary {
       document: externalAssetHandoffDocument(),
     }),
     createWorkflowEditorEntry({
+      id: "binary-audio-ports",
+      name: "Binary Audio Ports",
+      description:
+        "Buffered WAV values and streamed WAV chunks fan out to two consumers each; a runner moves the bytes.",
+      tags: ["binary", "audio", "example"],
+      createdAt: seededAt,
+      updatedAt: seededAt,
+      document: binaryAudioPortsDocument(),
+    }),
+    createWorkflowEditorEntry({
       id: "lead-intake",
       name: "Lead Intake Automation",
       description: "Branching, typed ports, and nested workflow references.",
@@ -328,6 +338,51 @@ function externalAssetHandoffDocument(): ExampleDocument {
         targetNodeId: "end",
         targetPortId: "in",
       },
+    ],
+  });
+}
+
+function binaryAudioPortsDocument(): ExampleDocument {
+  const bytes = { kind: "typescript", source: "Uint8Array" } as const;
+  const bufferedWav = { mode: "buffered", mediaType: "audio/wav" } as const;
+  const streamedWav = { mode: "streamed", mediaType: "audio/wav" } as const;
+  const consumer = (
+    id: string,
+    label: string,
+    payload: typeof bufferedWav | typeof streamedWav,
+    y: number,
+  ): WorkflowEditorNode<ExampleNodeData> => ({
+    id,
+    label,
+    kind: `audio.${id}`,
+    x: 420,
+    y,
+    inputs: [{ id: "audio", label: "Audio", type: bytes, payload }],
+  });
+  return normalizeWorkflowEditorDocument({
+    viewport: { x: 25, y: 35, zoom: 0.72 },
+    nodes: [
+      {
+        id: "recorder",
+        label: "WAV recorder",
+        kind: "audio.source",
+        x: 0,
+        y: 150,
+        outputs: [
+          { id: "recording", label: "Recording", type: bytes, payload: bufferedWav },
+          { id: "chunks", label: "Live chunks", type: bytes, payload: streamedWav },
+        ],
+      },
+      consumer("archive", "Archive recording", bufferedWav, 0),
+      consumer("waveform", "Render waveform", bufferedWav, 150),
+      consumer("monitor", "Live monitor", streamedWav, 300),
+      consumer("transcribe", "Live transcription", streamedWav, 450),
+    ],
+    edges: [
+      edge("recorder", "recording", "archive", "audio"),
+      edge("recorder", "recording", "waveform", "audio"),
+      edge("recorder", "chunks", "monitor", "audio"),
+      edge("recorder", "chunks", "transcribe", "audio"),
     ],
   });
 }

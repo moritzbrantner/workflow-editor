@@ -297,6 +297,8 @@ describe("@moritzbrantner/workflow-editor editor shell", () => {
         onError={handleError}
       />,
     );
+    // Let the initial save settle so it cannot overwrite the import's error state.
+    await waitFor(() => expect(saveLibrary).toHaveBeenCalled());
     await waitFor(() => expect(screen.getByTestId("save-state").textContent).toBe("Saved"));
     const savesBeforeImport = saveLibrary.mock.calls.length;
 

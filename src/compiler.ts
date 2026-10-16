@@ -3,6 +3,7 @@ import { analyzeWorkflowEditorPortCardinality } from "./cardinality";
 import type { WorkflowEditorCardinalityPort, WorkflowEditorPortCardinality } from "./cardinality";
 import {
   analyzeWorkflowEditorPortTypes,
+  findWorkflowEditorPortPayloadMismatch,
   normalizeWorkflowEditorDocument,
   resolveWorkflowEditorDocumentTypes,
   WorkflowEditorDocumentValidationError,
@@ -13,6 +14,7 @@ import type {
   WorkflowEditorNode,
   WorkflowEditorPort,
   WorkflowEditorPortDefaultValue,
+  WorkflowEditorPortPayload,
   WorkflowEditorPortType,
   WorkflowEditorTypeValidationOptions,
 } from "./core-types";
@@ -26,6 +28,7 @@ export type CompiledWorkflowPort = {
   optional?: boolean;
   defaultValue?: WorkflowEditorPortDefaultValue;
   cardinality?: WorkflowEditorPortCardinality;
+  payload?: WorkflowEditorPortPayload;
 };
 
 export type CompiledWorkflowNode<TData extends Record<string, unknown> = Record<string, unknown>> =
@@ -55,6 +58,7 @@ export type CompiledWorkflow<TNodeData extends Record<string, unknown> = Record<
 
 export type WorkflowEditorCompileDiagnosticCode =
   | "invalid-port-type"
+  | "invalid-port-payload"
   | "missing-node-kind"
   | "nested-workflow-not-supported"
   | "composition-not-supported"
@@ -115,7 +119,30 @@ function compilePort(port: WorkflowEditorPort): CompiledWorkflowPort {
     ...(port.optional === undefined ? {} : { optional: port.optional }),
     ...(port.defaultValue === undefined ? {} : { defaultValue: port.defaultValue }),
     ...(cardinality === undefined ? {} : { cardinality }),
+    ...(port.payload === undefined ? {} : { payload: port.payload }),
   };
+}
+
+function payloadDiagnostics(document: WorkflowEditorDocument): WorkflowEditorCompileDiagnostic[] {
+  const nodeById = new Map(document.nodes.map((node) => [node.id, node]));
+  return document.edges.flatMap((edge) => {
+    const source = nodeById
+      .get(edge.sourceNodeId)
+      ?.outputs?.find((port) => port.id === edge.sourcePortId);
+    const target = nodeById
+      .get(edge.targetNodeId)
+      ?.inputs?.find((port) => port.id === edge.targetPortId);
+    const mismatch = source && target && findWorkflowEditorPortPayloadMismatch(source, target);
+    return mismatch
+      ? [
+          {
+            code: "invalid-port-payload" as const,
+            message: mismatch.message,
+            path: `edges.${edge.id}`,
+          },
+        ]
+      : [];
+  });
 }
 
 function validateExecutableNode(node: WorkflowEditorNode): WorkflowEditorCompileDiagnostic[] {
@@ -249,18 +276,25 @@ export function compileWorkflowEditorDocument<
       ),
     );
   const typeDiagnostics: WorkflowEditorCompileDiagnostic[] = nativeTypes
-    ? analyzeWorkflowEditorPortTypes(normalized, options).map((diagnostic) => ({
-        code: "invalid-port-type",
-        message: diagnostic.message,
-        path: diagnostic.edgeId
-          ? `edges.${diagnostic.edgeId}`
-          : diagnostic.sourceNodeId
-            ? `nodes.${diagnostic.sourceNodeId}.${diagnostic.sourcePortId}`
-            : "typeDeclarations",
-      }))
+    ? analyzeWorkflowEditorPortTypes(normalized, options)
+        .filter(
+          (diagnostic) =>
+            diagnostic.type === "incompatible-port-type" ||
+            diagnostic.type === "missing-type-definition",
+        )
+        .map((diagnostic) => ({
+          code: "invalid-port-type",
+          message: diagnostic.message,
+          path: diagnostic.edgeId
+            ? `edges.${diagnostic.edgeId}`
+            : diagnostic.sourceNodeId
+              ? `nodes.${diagnostic.sourceNodeId}.${diagnostic.sourcePortId}`
+              : "typeDeclarations",
+        }))
     : [];
   const diagnostics = [
     ...typeDiagnostics,
+    ...payloadDiagnostics(normalized),
     ...cardinalityDiagnostics,
     ...normalized.nodes.flatMap(validateExecutableNode),
   ];
