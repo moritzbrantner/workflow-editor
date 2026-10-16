@@ -5394,7 +5394,7 @@ function getWorkflowPortConnectionMenuOptions<
             };
       const validity = validateWorkflowEditorConnection(document, connection, { typeDefinitions });
 
-      if (!validity.valid && validity.reason !== "type-mismatch") {
+      if (!validity.valid && !isExplainedWorkflowConnectionRejection(validity.reason)) {
         continue;
       }
 
@@ -5410,6 +5410,17 @@ function getWorkflowPortConnectionMenuOptions<
   }
 
   return options;
+}
+
+/** Contract rejections stay listed (disabled, with their reason); structural ones are hidden. */
+function isExplainedWorkflowConnectionRejection(
+  reason: ReturnType<typeof validateWorkflowEditorConnection>["reason"],
+) {
+  return (
+    reason === "type-mismatch" ||
+    reason === "payload-mode-mismatch" ||
+    reason === "media-type-mismatch"
+  );
 }
 
 function formatWorkflowPortConnectionMenuType(type: unknown) {
@@ -5750,6 +5761,11 @@ function toUiConnectionInvalidReason(
 
   if (reason === "cycle") {
     return "self-connection";
+  }
+
+  // graph-editor's canvas reasons are a closed set; kind-mismatch is the closest for delivery contracts.
+  if (reason === "payload-mode-mismatch" || reason === "media-type-mismatch") {
+    return "kind-mismatch";
   }
 
   return reason;

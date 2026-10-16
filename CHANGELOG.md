@@ -8,6 +8,8 @@
 - Use TypeScript 6's checker for workflow port compatibility, with offline ES2022/DOM libraries, document-owned type declarations, editable port expressions, native diagnostics, and propagated branch/collection output contracts. Legacy port records remain readable and compiled workflows optionally carry declarations. The Pages workbench includes a TypeScript ports example. Type checking remains execution-neutral.
 - Type diagnostics are now the TypeScript compiler's messages (for example `TS2304: Cannot find name 'Missing'.` and `TS2456: Type alias 'A' circularly references itself.`) instead of the former `Missing workflow port type definition` / `Cyclic workflow port type reference` texts. Declarations that reference reserved `__Workflow` checker names are rejected.
 
+- Author buffered and streamed binary ports: `WorkflowEditorPort.payload` (`{ mode: "buffered" | "streamed"; mediaType? }`) is validated after TypeScript assignability. Delivery mode and media mismatches are rejected with distinct reasons and messages, and analysis reports them on existing edges. The compiler copies `payload` onto compiled ports and rejects incompatible edges. The workbench shows payloads in port badges, edits them under **Port delivery** in the node inspector, explains rejections in the port connection menu, and adds a **Binary Audio Ports** example.
+
 ### Patch Changes
 
 - Explain rejected workflow imports: the editor shows the restore error (for example `Unsupported workflow port type at …`) in a dismissible alert beside the save state, and exposes it as `controller.importError` / `actions.dismissImportError` and the `WorkflowEditorImportErrorAlert` chrome component. Rejected files still never reach the library.

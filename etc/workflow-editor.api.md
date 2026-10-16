@@ -625,6 +625,9 @@ export function findWorkflowEditorGroup<TNodeData = Record<string, unknown>, TEd
 // @public (undocumented)
 export function findWorkflowEditorNode<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(document: WorkflowEditorDocument<TNodeData, TEdgeData>, nodeId: string): WorkflowEditorNode<TNodeData> | undefined;
 
+// @public
+export function findWorkflowEditorPortPayloadMismatch(source: Pick<WorkflowEditorPort, "payload">, target: Pick<WorkflowEditorPort, "payload">): WorkflowEditorPortPayloadMismatch | null;
+
 // @public (undocumented)
 export function formatWorkflowEditorArrayConstructorExpression<TNodeData = Record<string, unknown>>(node: WorkflowEditorNode<TNodeData>): string;
 
@@ -633,6 +636,9 @@ export function formatWorkflowEditorObjectConstructorExpression<TNodeData = Reco
 
 // @public (undocumented)
 export function formatWorkflowEditorObjectDecompositionExpression<TNodeData = Record<string, unknown>>(node: WorkflowEditorNode<TNodeData>): string;
+
+// @public
+export function formatWorkflowEditorPortPayload(payload: WorkflowEditorPortPayload): string;
 
 // @public (undocumented)
 export function fromUiWorkflowBuilderEdges<TData = Record<string, unknown>>(uiEdges: GraphCanvasEdge[], previousEdges: Array<WorkflowEditorEdge<TData>>): Array<WorkflowEditorEdge<TData>>;
@@ -699,6 +705,9 @@ export function isWorkflowEditorObjectConstructorSchema(value: unknown): value i
 
 // @public (undocumented)
 export function isWorkflowEditorObjectDecompositionNode<TNodeData = Record<string, unknown>>(node: WorkflowEditorNode<TNodeData>): boolean;
+
+// @public (undocumented)
+export function isWorkflowEditorPortPayloadLike(value: unknown): value is WorkflowEditorPortPayload;
 
 // @public (undocumented)
 export function isWorkflowEditorPortTypeAssignable(source: WorkflowEditorPortType, target: WorkflowEditorPortType, typeDefinitions?: readonly WorkflowEditorTypeDefinition[]): boolean;
@@ -1240,7 +1249,7 @@ export type WorkflowEditorCompositionBoundary = {
 export type WorkflowEditorConnectionInput = GraphEditorConnectionInput;
 
 // @public (undocumented)
-export type WorkflowEditorConnectionInvalidReason = NonNullable<GraphEditorConnectionValidity["reason"]> | "cycle" | "missing-node";
+export type WorkflowEditorConnectionInvalidReason = NonNullable<GraphEditorConnectionValidity["reason"]> | "cycle" | "media-type-mismatch" | "missing-node" | "payload-mode-mismatch";
 
 // @public (undocumented)
 export type WorkflowEditorConnectionValidity = {
@@ -1424,7 +1433,7 @@ export type WorkflowEditorDocumentDiagnostic = {
 };
 
 // @public (undocumented)
-export type WorkflowEditorDocumentDiagnosticCode = "invalid-port-type" | "invalid-type-declarations" | "invalid-document" | "invalid-node" | "invalid-edge" | "duplicate-node-id" | "duplicate-edge-id" | "duplicate-group-id" | "duplicate-group-node" | "missing-edge-node" | "missing-edge-port" | "missing-group-node" | "self-edge" | "cycle" | "invalid-group";
+export type WorkflowEditorDocumentDiagnosticCode = "invalid-port-type" | "invalid-port-payload" | "invalid-type-declarations" | "invalid-document" | "invalid-node" | "invalid-edge" | "duplicate-node-id" | "duplicate-edge-id" | "duplicate-group-id" | "duplicate-group-node" | "missing-edge-node" | "missing-edge-port" | "missing-group-node" | "self-edge" | "cycle" | "invalid-group";
 
 // @public (undocumented)
 export type WorkflowEditorDocumentFile<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>> = {
@@ -1899,12 +1908,31 @@ export type WorkflowEditorPort = Omit<GraphEditorPort<WorkflowEditorPortType>, "
     type: WorkflowEditorPortType;
     optional?: boolean;
     defaultValue?: WorkflowEditorPortDefaultValue;
+    payload?: WorkflowEditorPortPayload;
 };
 
 // @public (undocumented)
 export type WorkflowEditorPortDefaultValue = string | number | boolean | null | WorkflowEditorPortDefaultValue[] | {
     [key: string]: WorkflowEditorPortDefaultValue;
 };
+
+// @public (undocumented)
+export type WorkflowEditorPortPayload = {
+    mode: WorkflowEditorPortPayloadMode;
+    mediaType?: string;
+};
+
+// @public (undocumented)
+export type WorkflowEditorPortPayloadMismatch = {
+    reason: "payload-mode-mismatch" | "media-type-mismatch";
+    message: string;
+};
+
+// @public (undocumented)
+export type WorkflowEditorPortPayloadMode = "buffered" | "streamed";
+
+// @public
+export function workflowEditorPortPayloadMode(port: Pick<WorkflowEditorPort, "payload">): WorkflowEditorPortPayloadMode;
 
 // @public (undocumented)
 export type WorkflowEditorPortProperty = {
@@ -2080,7 +2108,7 @@ export type WorkflowEditorTypeDefinition = {
 
 // @public (undocumented)
 export type WorkflowEditorTypeDiagnostic = {
-    type: "incompatible-port-type" | "missing-type-definition";
+    type: "incompatible-port-type" | "incompatible-payload-mode" | "incompatible-media-type" | "missing-type-definition";
     edgeId?: string;
     sourceNodeId: string;
     sourcePortId: string;

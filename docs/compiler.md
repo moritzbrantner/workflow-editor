@@ -13,3 +13,5 @@ const compiled = compileWorkflowEditorDocument(document);
 The compiler emits `@moritzbrantner/workflow/compiled` version 1: a deterministic, execution-neutral DAG containing executable node kinds, ports, data, edges, and a complete topological order. Editor-only position, viewport, grouping, status, chrome, and layout state are intentionally absent.
 
 Version 1 rejects nested workflow references and embedded compositions instead of giving them implicit runtime semantics. Those features can receive explicit compilation semantics in a later contract version without coupling the runner to editor internals.
+
+Compiled ports carry their declared `cardinality` and delivery `payload` (see [port payloads](port-payloads.md)). Ports without them omit the fields, so existing version 1 consumers and fixtures are unaffected.

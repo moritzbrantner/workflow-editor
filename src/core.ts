@@ -16,6 +16,7 @@ import {
   validateGraphEditorConnection,
   validateGraphEditorDocument,
   wouldCreateGraphEditorCycle,
+  type GraphEditorConnectionValidity,
   type GraphEditorDocumentDiagnostic,
 } from "@moritzbrantner/graph-editor/core";
 import type { GraphEditorOperation } from "@moritzbrantner/graph-editor/operations";
@@ -65,6 +66,10 @@ import type {
   WorkflowEditorTypeValidationOptions,
   WorkflowEditorWorkflowReference,
 } from "./core-types";
+import {
+  findWorkflowEditorPortPayloadMismatch,
+  isWorkflowEditorPortPayloadLike,
+} from "./core-payload";
 import { createWorkflowEditorTypeResolver } from "./core-type-resolver";
 
 export type WorkflowGraphOperation<
@@ -138,6 +143,8 @@ export type {
   WorkflowEditorObjectDecompositionProperty,
   WorkflowEditorPort,
   WorkflowEditorPortDefaultValue,
+  WorkflowEditorPortPayload,
+  WorkflowEditorPortPayloadMode,
   WorkflowEditorPortProperty,
   WorkflowEditorPortType,
   WorkflowEditorSelection,
@@ -150,6 +157,13 @@ export type {
   WorkflowEditorWorkflowReference,
 } from "./core-types";
 export { workflowEditorPortTypeSource } from "./core-type-source";
+export {
+  findWorkflowEditorPortPayloadMismatch,
+  formatWorkflowEditorPortPayload,
+  isWorkflowEditorPortPayloadLike,
+  workflowEditorPortPayloadMode,
+  type WorkflowEditorPortPayloadMismatch,
+} from "./core-payload";
 export {
   defaultWorkflowEditorNodeTemplates,
   workflowEditorCollectionNodeTemplates,
@@ -412,6 +426,17 @@ function workflowEditorTypeShapeDiagnostics(value: unknown): WorkflowEditorDocum
             code: "invalid-port-type",
             path: `nodes.${String(node.id)}.${direction}.${String(port.id)}.type`,
             message: `Unsupported workflow port type at ${String(node.id)}.${String(port.id)}. Use a supported legacy record or { kind: "typescript", source: "..." }.`,
+          });
+        }
+        if (
+          isRecord(port) &&
+          port.payload !== undefined &&
+          !isWorkflowEditorPortPayloadLike(port.payload)
+        ) {
+          diagnostics.push({
+            code: "invalid-port-payload",
+            path: `nodes.${String(node.id)}.${direction}.${String(port.id)}.payload`,
+            message: `Invalid workflow port payload at ${String(node.id)}.${String(port.id)}. Use { mode: "buffered" | "streamed", mediaType?: string }.`,
           });
         }
       }
@@ -1904,13 +1929,23 @@ export function validateWorkflowEditorConnection<
         const targetType = expandsToNewTargetPort
           ? ({ kind: "any" } as const)
           : (targetPort.type as WorkflowEditorPortType);
-        return typeResolver.isAssignable(sourceType, targetType)
-          ? true
-          : {
-              valid: false,
-              reason: "type-mismatch",
-              message: typeResolver.compatibilityErrors(sourceType, targetType).join(" "),
-            };
+        if (!typeResolver.isAssignable(sourceType, targetType)) {
+          return {
+            valid: false,
+            reason: "type-mismatch",
+            message: typeResolver.compatibilityErrors(sourceType, targetType).join(" "),
+          };
+        }
+        // An expanding constructor receives the edge on a newly created input, which assembles a
+        // complete JSON value and therefore has the default (buffered) delivery contract.
+        const payloadMismatch = findWorkflowEditorPortPayloadMismatch(
+          sourcePort as WorkflowEditorPort,
+          expandsToNewTargetPort ? {} : (targetPort as WorkflowEditorPort),
+        );
+        // graph-editor passes the workflow-specific reason through to the validity result.
+        return payloadMismatch
+          ? ({ valid: false, ...payloadMismatch } as unknown as GraphEditorConnectionValidity)
+          : true;
       },
     },
   );
@@ -2026,6 +2061,23 @@ export function analyzeWorkflowEditorPortTypes<
         targetNodeId: edge.targetNodeId,
         targetPortId: edge.targetPortId,
         message: `Output port ${edge.sourceNodeId}.${edge.sourcePortId} is not assignable to input port ${edge.targetNodeId}.${edge.targetPortId}: ${typeResolver.compatibilityErrors(sourcePort.type, targetPort.type).join(" ")}`,
+      });
+      continue;
+    }
+
+    const payloadMismatch = findWorkflowEditorPortPayloadMismatch(sourcePort, targetPort);
+    if (payloadMismatch) {
+      diagnostics.push({
+        type:
+          payloadMismatch.reason === "payload-mode-mismatch"
+            ? "incompatible-payload-mode"
+            : "incompatible-media-type",
+        edgeId: edge.id,
+        sourceNodeId: edge.sourceNodeId,
+        sourcePortId: edge.sourcePortId,
+        targetNodeId: edge.targetNodeId,
+        targetPortId: edge.targetPortId,
+        message: `Connection ${edge.sourceNodeId}.${edge.sourcePortId} → ${edge.targetNodeId}.${edge.targetPortId}: ${payloadMismatch.message}`,
       });
     }
   }

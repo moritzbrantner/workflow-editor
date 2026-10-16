@@ -111,7 +111,11 @@ export type WorkflowEditorTypeValidationOptions = {
 };
 
 export type WorkflowEditorTypeDiagnostic = {
-  type: "incompatible-port-type" | "missing-type-definition";
+  type:
+    | "incompatible-port-type"
+    | "incompatible-payload-mode"
+    | "incompatible-media-type"
+    | "missing-type-definition";
   edgeId?: string;
   sourceNodeId: string;
   sourcePortId: string;
@@ -127,6 +131,16 @@ export type WorkflowEditorPort = Omit<
   type: WorkflowEditorPortType;
   optional?: boolean;
   defaultValue?: WorkflowEditorPortDefaultValue;
+  /** Delivery contract; ports without one deliver a complete (buffered) value. */
+  payload?: WorkflowEditorPortPayload;
+};
+
+export type WorkflowEditorPortPayloadMode = "buffered" | "streamed";
+
+export type WorkflowEditorPortPayload = {
+  mode: WorkflowEditorPortPayloadMode;
+  /** Media annotation such as `audio/wav`; `type/*` matches any subtype. */
+  mediaType?: string;
 };
 
 export type WorkflowEditorWorkflowReference = {
@@ -175,6 +189,7 @@ export type WorkflowEditorDocumentNormalizationMode = "strict" | "repair";
 
 export type WorkflowEditorDocumentDiagnosticCode =
   | "invalid-port-type"
+  | "invalid-port-payload"
   | "invalid-type-declarations"
   | "invalid-document"
   | "invalid-node"
@@ -214,7 +229,9 @@ export type WorkflowEditorConnectionInput = GraphEditorConnectionInput;
 export type WorkflowEditorConnectionInvalidReason =
   | NonNullable<GraphEditorConnectionValidity["reason"]>
   | "cycle"
-  | "missing-node";
+  | "media-type-mismatch"
+  | "missing-node"
+  | "payload-mode-mismatch";
 
 export type WorkflowEditorConnectionValidity = {
   valid: boolean;
