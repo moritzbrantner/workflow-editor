@@ -1,6 +1,5 @@
 import { workflowEditorTypeDefinitionsSource } from "./core-type-source";
-import { analyzeWorkflowEditorPortCardinality } from "./cardinality";
-import type { WorkflowEditorCardinalityPort, WorkflowEditorPortCardinality } from "./cardinality";
+import { findWorkflowEditorPortMinViolations } from "./core-cardinality";
 import {
   analyzeWorkflowEditorPortTypes,
   findWorkflowEditorPortPayloadMismatch,
@@ -17,6 +16,7 @@ import type {
   WorkflowEditorEdge,
   WorkflowEditorNode,
   WorkflowEditorPort,
+  WorkflowEditorPortCardinality,
   WorkflowEditorPortDefaultValue,
   WorkflowEditorPortPayload,
   WorkflowEditorPortType,
@@ -166,7 +166,7 @@ function containsNativeType(type: WorkflowEditorPortType): boolean {
 }
 
 function compilePort(port: WorkflowEditorPort): CompiledWorkflowPort {
-  const cardinality = (port as WorkflowEditorCardinalityPort).cardinality;
+  const cardinality = port.cardinality;
   return {
     id: port.id,
     type: port.type,
@@ -392,7 +392,7 @@ function scopeDiagnostics(
 ): WorkflowEditorCompileDiagnostic[] {
   const prefix = scope.pathPrefix;
   const cardinalityDiagnostics: WorkflowEditorCompileDiagnostic[] =
-    analyzeWorkflowEditorPortCardinality(document).map((diagnostic) => ({
+    findWorkflowEditorPortMinViolations(document).map((diagnostic) => ({
       code: "port-cardinality",
       message: diagnostic.message,
       path: `${prefix}nodes.${diagnostic.nodeId}.${diagnostic.direction === "input" ? "inputs" : "outputs"}.${diagnostic.portId}.cardinality`,

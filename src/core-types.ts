@@ -110,6 +110,11 @@ export type WorkflowEditorTypeValidationOptions = {
   typeDeclarations?: string;
 };
 
+export type WorkflowEditorConnectionValidationOptions = WorkflowEditorTypeValidationOptions & {
+  /** An existing edge being rewired; it is ignored when counting connections. */
+  replacingEdgeId?: string;
+};
+
 export type WorkflowEditorTypeDiagnostic = {
   type:
     | "incompatible-port-type"
@@ -133,6 +138,17 @@ export type WorkflowEditorPort = Omit<
   defaultValue?: WorkflowEditorPortDefaultValue;
   /** Delivery contract; ports without one deliver a complete (buffered) value. */
   payload?: WorkflowEditorPortPayload;
+  /**
+   * Connection bounds. Without it, ordinary inputs accept one connection and outputs are
+   * unbounded. A declared cardinality without `max` is unbounded. An input that accepts more
+   * than one connection must declare an array type `T[]`; each source must be assignable to `T`.
+   */
+  cardinality?: WorkflowEditorPortCardinality;
+};
+
+export type WorkflowEditorPortCardinality = {
+  min?: number;
+  max?: number;
 };
 
 export type WorkflowEditorPortPayloadMode = "buffered" | "streamed";
@@ -201,7 +217,9 @@ export type WorkflowEditorDocumentDiagnosticCode =
   | "missing-group-node"
   | "self-edge"
   | "cycle"
-  | "invalid-group";
+  | "invalid-group"
+  | "port-cardinality-max"
+  | "invalid-port-cardinality";
 
 export type WorkflowEditorDiagnosticSeverity = "error" | "warning";
 
@@ -226,6 +244,8 @@ export type WorkflowEditorValidationPolicy = {
   allowCycles: boolean;
   allowDanglingEdges: boolean;
   allowSelfEdges: boolean;
+  /** Connections beyond a port's `max`; allowed ones are kept as warnings and are repairable. */
+  allowExcessConnections: boolean;
   unknownPortBehavior: "error" | "warning" | "ignore";
 };
 
@@ -252,7 +272,9 @@ export type WorkflowEditorConnectionInvalidReason =
   | "cycle"
   | "media-type-mismatch"
   | "missing-node"
-  | "payload-mode-mismatch";
+  | "payload-mode-mismatch"
+  | "source-cardinality"
+  | "target-cardinality";
 
 export type WorkflowEditorConnectionValidity = {
   valid: boolean;

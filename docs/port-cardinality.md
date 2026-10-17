@@ -1,9 +1,13 @@
 # Workflow port cardinality
 
-Port cardinality is an optional workflow-owned contract for describing how many edges may enter or leave a port. It lives in `@moritzbrantner/workflow-editor/cardinality` rather than the generic graph or editor kernels.
+Port cardinality describes how many connections may enter or leave a port ([Decision Atlas 1.10](DECISION-ATLAS.md) and 6.2). It is the optional `cardinality?: { min?, max? }` field of the core `WorkflowEditorPort`.
 
-A cardinality declaration has optional `min` and `max` bounds. `max: null` means unbounded. Undeclared ordinary input ports retain the existing single-input behavior, while outputs remain unbounded unless a maximum is declared. Dynamic JSON array and object constructor inputs retain their expandable behavior.
+- Without `cardinality`, ordinary inputs accept one connection and outputs are unbounded (automatic fan-out, Decision 1.7). Expandable JSON array/object constructors keep growing a new input per connection.
+- A declared cardinality without `max` is unbounded.
+- An input that accepts more than one connection must declare an array type `T[]`. Each source is checked against the element type `T` with the TypeScript checker; connecting sources never rewrites the declared type. A non-array type with `max > 1` is the `invalid-port-cardinality` document error.
 
-Use `validateWorkflowEditorConnectionWithCardinality` before adding an edge, `connectWorkflowEditorNodesWithCardinality` for a cardinality-aware mutation, and `analyzeWorkflowEditorPortCardinality` to report documents whose current connection counts violate declared bounds.
+`validateWorkflowEditorConnection` enforces limits with the reasons `target-cardinality` and `source-cardinality` and an actionable message (`replacingEdgeId` ignores an edge being rewired). `connectWorkflowEditorNodes` applies the same check.
 
-The workflow compiler rejects unmet cardinality constraints and preserves declared cardinality in compiled ports so downstream runners can inspect the contract without receiving editor-only layout state.
+Document validation reports each edge beyond a port's `max`, in document order, as `port-cardinality-max`. Its severity follows the validation policy's `allowExcessConnections` (warning under `draft`/`import`, error under `strict`/`execution`), and `repairWorkflowEditorDocument` removes the excess edges. Ports below their `min` are reported only by the compiler (`port-cardinality`), which also preserves declared cardinality in compiled ports.
+
+The built-in `control.merge` template has one multi-source input `items: any[]` (`min: 1`); its `out` output is inferred as an array of the union of the connected source types.

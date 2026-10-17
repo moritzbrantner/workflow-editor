@@ -213,6 +213,38 @@ export const defaultWorkflowEditorNodeTemplates: ({
         id: string;
         label: string;
         type: {
+            kind: "array";
+            element: {
+                kind: "any";
+            };
+        };
+        cardinality: {
+            min: number;
+        };
+    }[];
+    outputs: {
+        id: string;
+        label: string;
+        type: {
+            kind: "array";
+            element: {
+                kind: "any";
+            };
+        };
+        metadata: {
+            workflowTypeInference: string;
+        };
+    }[];
+} | {
+    id: string;
+    label: string;
+    description: string;
+    kind: string;
+    category: string;
+    inputs: {
+        id: string;
+        label: string;
+        type: {
             kind: "any";
         };
     }[];
@@ -941,7 +973,7 @@ export function useWorkflowEditorController<TNodeData extends Record<string, unk
 export function useWorkflowWorkbenchController<TNodeData extends Record<string, unknown> = Record<string, unknown>, TEdgeData extends Record<string, unknown> = Record<string, unknown>, TTemplateData = TNodeData>(input: WorkflowWorkbenchControllerProps<TNodeData, TEdgeData, TTemplateData>): WorkflowWorkbenchController<TNodeData, TEdgeData, TTemplateData>;
 
 // @public (undocumented)
-export function validateWorkflowEditorConnection<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(document: WorkflowEditorDocument<TNodeData, TEdgeData>, connection: WorkflowEditorConnectionInput, options?: WorkflowEditorTypeValidationOptions): WorkflowEditorConnectionValidity;
+export function validateWorkflowEditorConnection<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(document: WorkflowEditorDocument<TNodeData, TEdgeData>, connection: WorkflowEditorConnectionInput, options?: WorkflowEditorConnectionValidationOptions): WorkflowEditorConnectionValidity;
 
 // @public
 export function validateWorkflowEditorDocument(value: unknown, options?: WorkflowEditorDocumentValidationOptions): WorkflowEditorDocumentDiagnostic[];
@@ -1272,7 +1304,12 @@ export type WorkflowEditorCompositionBoundary = {
 export type WorkflowEditorConnectionInput = GraphEditorConnectionInput;
 
 // @public (undocumented)
-export type WorkflowEditorConnectionInvalidReason = NonNullable<GraphEditorConnectionValidity["reason"]> | "cycle" | "media-type-mismatch" | "missing-node" | "payload-mode-mismatch";
+export type WorkflowEditorConnectionInvalidReason = NonNullable<GraphEditorConnectionValidity["reason"]> | "cycle" | "media-type-mismatch" | "missing-node" | "payload-mode-mismatch" | "source-cardinality" | "target-cardinality";
+
+// @public (undocumented)
+export type WorkflowEditorConnectionValidationOptions = WorkflowEditorTypeValidationOptions & {
+    replacingEdgeId?: string;
+};
 
 // @public (undocumented)
 export type WorkflowEditorConnectionValidity = {
@@ -1320,6 +1357,38 @@ export const workflowEditorControlFlowNodeTemplates: ({
         label: string;
         type: {
             kind: "any";
+        };
+        metadata: {
+            workflowTypeInference: string;
+        };
+    }[];
+} | {
+    id: string;
+    label: string;
+    description: string;
+    kind: string;
+    category: string;
+    inputs: {
+        id: string;
+        label: string;
+        type: {
+            kind: "array";
+            element: {
+                kind: "any";
+            };
+        };
+        cardinality: {
+            min: number;
+        };
+    }[];
+    outputs: {
+        id: string;
+        label: string;
+        type: {
+            kind: "array";
+            element: {
+                kind: "any";
+            };
         };
         metadata: {
             workflowTypeInference: string;
@@ -1474,7 +1543,7 @@ export type WorkflowEditorDocumentDiagnostic = {
 };
 
 // @public (undocumented)
-export type WorkflowEditorDocumentDiagnosticCode = "invalid-port-type" | "invalid-port-payload" | "invalid-type-declarations" | "invalid-document" | "invalid-node" | "invalid-edge" | "duplicate-node-id" | "duplicate-edge-id" | "duplicate-group-id" | "duplicate-group-node" | "missing-edge-node" | "missing-edge-port" | "missing-group-node" | "self-edge" | "cycle" | "invalid-group";
+export type WorkflowEditorDocumentDiagnosticCode = "invalid-port-type" | "invalid-port-payload" | "invalid-type-declarations" | "invalid-document" | "invalid-node" | "invalid-edge" | "duplicate-node-id" | "duplicate-edge-id" | "duplicate-group-id" | "duplicate-group-node" | "missing-edge-node" | "missing-edge-port" | "missing-group-node" | "self-edge" | "cycle" | "invalid-group" | "port-cardinality-max" | "invalid-port-cardinality";
 
 // @public (undocumented)
 export type WorkflowEditorDocumentFile<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>> = {
@@ -1977,6 +2046,13 @@ export type WorkflowEditorPort = Omit<GraphEditorPort<WorkflowEditorPortType>, "
     optional?: boolean;
     defaultValue?: WorkflowEditorPortDefaultValue;
     payload?: WorkflowEditorPortPayload;
+    cardinality?: WorkflowEditorPortCardinality;
+};
+
+// @public (undocumented)
+export type WorkflowEditorPortCardinality = {
+    min?: number;
+    max?: number;
 };
 
 // @public (undocumented)
@@ -2209,6 +2285,7 @@ export type WorkflowEditorValidationPolicy = {
     allowCycles: boolean;
     allowDanglingEdges: boolean;
     allowSelfEdges: boolean;
+    allowExcessConnections: boolean;
     unknownPortBehavior: "error" | "warning" | "ignore";
 };
 

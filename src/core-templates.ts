@@ -62,19 +62,23 @@ export const workflowEditorControlFlowNodeTemplates = [
   {
     id: "control-flow-merge",
     label: "Merge",
-    description: "Join two branches into one value.",
+    description: "Collect any number of sources into one list.",
     kind: "control.merge",
     category: "Control flow",
     inputs: [
-      { id: "a", label: "A", type: { kind: "any" } },
-      { id: "b", label: "B", type: { kind: "any" } },
+      {
+        id: "items",
+        label: "Items",
+        type: { kind: "array", element: { kind: "any" } },
+        cardinality: { min: 1 },
+      },
     ],
     outputs: [
       {
         id: "out",
         label: "Out",
-        type: { kind: "any" },
-        metadata: { workflowTypeInference: "a,b" },
+        type: { kind: "array", element: { kind: "any" } },
+        metadata: { workflowTypeInference: "items" },
       },
     ],
   },

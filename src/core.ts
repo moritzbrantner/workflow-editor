@@ -42,6 +42,7 @@ import type {
   WorkflowEditorArrayConstructorItem,
   WorkflowEditorCompositionBoundary,
   WorkflowEditorConnectionInput,
+  WorkflowEditorConnectionValidationOptions,
   WorkflowEditorConnectionValidity,
   WorkflowEditorDocument,
   WorkflowEditorDiagnosticSeverity,
@@ -79,6 +80,14 @@ import {
   workflowEditorIterationNodeKind,
 } from "./core-iteration";
 import { createWorkflowEditorTypeResolver } from "./core-type-resolver";
+import {
+  countWorkflowEditorPortConnections,
+  describeWorkflowEditorCardinalityLimit,
+  findWorkflowEditorExcessConnections,
+  isWorkflowEditorMultiSourceInput,
+  resolveWorkflowEditorPortMax,
+  workflowEditorPortElementType,
+} from "./core-cardinality";
 
 export type WorkflowGraphOperation<
   TNodeData = Record<string, unknown>,
@@ -130,6 +139,7 @@ export type {
   WorkflowEditorCompositionBoundary,
   WorkflowEditorConnectionInput,
   WorkflowEditorConnectionInvalidReason,
+  WorkflowEditorConnectionValidationOptions,
   WorkflowEditorConnectionValidity,
   WorkflowEditorDocument,
   WorkflowEditorDocumentDiagnostic,
@@ -152,6 +162,7 @@ export type {
   WorkflowEditorObjectDecompositionOutputOptions,
   WorkflowEditorObjectDecompositionProperty,
   WorkflowEditorPort,
+  WorkflowEditorPortCardinality,
   WorkflowEditorPortDefaultValue,
   WorkflowEditorPortPayload,
   WorkflowEditorPortPayloadMode,
@@ -246,6 +257,7 @@ const strictWorkflowEditorValidationPolicy: WorkflowEditorValidationPolicy = Obj
   allowCycles: false,
   allowDanglingEdges: false,
   allowSelfEdges: false,
+  allowExcessConnections: false,
   unknownPortBehavior: "error",
 });
 
@@ -261,12 +273,14 @@ export const workflowEditorValidationPolicies: Readonly<{
     allowCycles: true,
     allowDanglingEdges: true,
     allowSelfEdges: true,
+    allowExcessConnections: true,
     unknownPortBehavior: "warning",
   }),
   import: Object.freeze({
     allowCycles: false,
     allowDanglingEdges: true,
     allowSelfEdges: true,
+    allowExcessConnections: true,
     unknownPortBehavior: "warning",
   }),
   execution: Object.freeze({ ...strictWorkflowEditorValidationPolicy }),
@@ -285,6 +299,8 @@ function rateWorkflowEditorDiagnostic(
       return { ...diagnostic, severity: severity(policy.allowSelfEdges) };
     case "cycle":
       return { ...diagnostic, severity: severity(policy.allowCycles) };
+    case "port-cardinality-max":
+      return { ...diagnostic, severity: severity(policy.allowExcessConnections) };
     case "missing-edge-port":
       return policy.unknownPortBehavior === "ignore"
         ? null
@@ -324,7 +340,8 @@ export function normalizeWorkflowEditorDocument<
 }
 
 /**
- * Explicitly repairs a document by removing dangling, self, unknown-port and cycle-closing edges.
+ * Explicitly repairs a document by removing dangling, self, unknown-port, cycle-closing and
+ * excess (beyond a port's `max`, later ones in document order) edges.
  * Returns the repaired document and one strict diagnostic per removed edge. Never removes valid
  * edges or nodes and does not mutate its input.
  */
@@ -334,7 +351,13 @@ export function repairWorkflowEditorDocument<
 >(
   document: WorkflowEditorDocument<TNodeData, TEdgeData>,
 ): WorkflowEditorDocumentNormalizationResult<TNodeData, TEdgeData> {
-  const repaired = normalizeWorkflowEditorDocumentContent(document);
+  const structural = normalizeWorkflowEditorDocumentContent(document);
+  const excess = findWorkflowEditorExcessConnections(structural);
+  const excessById = new Map(excess.map((connection) => [connection.edgeId, connection]));
+  const repaired =
+    excess.length === 0
+      ? structural
+      : { ...structural, edges: structural.edges.filter((edge) => !excessById.has(edge.id)) };
   const keptEdgeIds = new Set(repaired.edges.map((edge) => edge.id));
   const strictDiagnostics = validateWorkflowEditorDocument(document);
   const diagnostics: WorkflowEditorDocumentDiagnostic[] = [];
@@ -344,20 +367,32 @@ export function repairWorkflowEditorDocument<
     }
     const edgeId = edge.id;
     const described = strictDiagnostics.filter((diagnostic) => diagnostic.edgeId === edgeId);
+    const excessConnection = excessById.get(edgeId);
     diagnostics.push(
       ...(described.length > 0
         ? described
-        : [
-            {
-              code: "cycle" as const,
-              severity: "error" as const,
-              message: `Removed workflow edge ${edgeId} because it closes a cycle`,
-              path: `$.edges[${index}]`,
-              edgeId,
-              sourceNodeId: typeof edge.sourceNodeId === "string" ? edge.sourceNodeId : undefined,
-              targetNodeId: typeof edge.targetNodeId === "string" ? edge.targetNodeId : undefined,
-            },
-          ]),
+        : excessConnection
+          ? [
+              {
+                code: "port-cardinality-max" as const,
+                severity: "error" as const,
+                message: excessConnection.message,
+                path: `$.edges[${index}]`,
+                nodeId: excessConnection.nodeId,
+                edgeId,
+              },
+            ]
+          : [
+              {
+                code: "cycle" as const,
+                severity: "error" as const,
+                message: `Removed workflow edge ${edgeId} because it closes a cycle`,
+                path: `$.edges[${index}]`,
+                edgeId,
+                sourceNodeId: typeof edge.sourceNodeId === "string" ? edge.sourceNodeId : undefined,
+                targetNodeId: typeof edge.targetNodeId === "string" ? edge.targetNodeId : undefined,
+              },
+            ]),
     );
   });
   return { document: repaired, diagnostics };
@@ -429,6 +464,78 @@ function normalizeWorkflowEditorDocumentContent<
   );
 }
 
+function workflowEditorCardinalityDiagnostics(
+  value: unknown,
+): WorkflowEditorUnratedDocumentDiagnostic[] {
+  if (!isRecord(value) || !Array.isArray(value.nodes) || !Array.isArray(value.edges)) {
+    return [];
+  }
+  const nodes = value.nodes.filter(
+    (node): node is WorkflowEditorNode => isRecord(node) && typeof node.id === "string",
+  );
+  const edges = value.edges.filter(
+    (edge): edge is WorkflowEditorEdge =>
+      isRecord(edge) &&
+      typeof edge.id === "string" &&
+      typeof edge.sourceNodeId === "string" &&
+      typeof edge.targetNodeId === "string",
+  );
+  const diagnostics: WorkflowEditorUnratedDocumentDiagnostic[] = [];
+  let resolver: ReturnType<typeof createWorkflowEditorTypeResolver> | undefined;
+  const isArrayType = (type: WorkflowEditorPortType): boolean => {
+    switch (type?.kind) {
+      case "array":
+      case "ref":
+        // Host type definitions are not visible here; references are checked on connection.
+        return true;
+      case "union":
+      case "intersection":
+        return type.types.length > 0 && type.types.every(isArrayType);
+      case "typescript":
+        resolver ??= createWorkflowEditorTypeResolver(
+          undefined,
+          typeof value.typeDeclarations === "string" ? value.typeDeclarations : undefined,
+        );
+        return (
+          !resolver.isAssignable({ kind: "unknown" }, type) &&
+          resolver.isAssignable(type, { kind: "typescript", source: "readonly unknown[]" }) &&
+          !resolver.isAssignable(type, { kind: "never" })
+        );
+      default:
+        return false;
+    }
+  };
+  nodes.forEach((node, nodeIndex) => {
+    (Array.isArray(node.inputs) ? node.inputs : []).forEach((port, portIndex) => {
+      if (
+        isRecord(port) &&
+        isWorkflowEditorMultiSourceInput(port, node) &&
+        !isArrayType(port.type)
+      ) {
+        diagnostics.push({
+          code: "invalid-port-cardinality",
+          message: `Input ${port.label ?? port.id} (${node.id}.${port.id}) accepts several connections, so its type must be an array T[].`,
+          path: `$.nodes[${nodeIndex}].inputs[${portIndex}].cardinality`,
+          nodeId: node.id,
+        });
+      }
+    });
+  });
+  for (const excess of findWorkflowEditorExcessConnections({ nodes, edges })) {
+    const edge = edges[excess.edgeIndex]!;
+    diagnostics.push({
+      code: "port-cardinality-max",
+      message: excess.message,
+      path: `$.edges[${value.edges.indexOf(edge)}]`,
+      nodeId: excess.nodeId,
+      edgeId: excess.edgeId,
+      sourceNodeId: edge.sourceNodeId,
+      targetNodeId: edge.targetNodeId,
+    });
+  }
+  return diagnostics;
+}
+
 /** Returns every diagnostic with its policy severity; never throws. */
 export function validateWorkflowEditorDocument(
   value: unknown,
@@ -467,7 +574,12 @@ export function validateWorkflowEditorDocument(
       });
     }
   }
-  return [...graphDiagnostics, ...cycleDiagnostics, ...workflowEditorTypeShapeDiagnostics(value)]
+  return [
+    ...graphDiagnostics,
+    ...cycleDiagnostics,
+    ...workflowEditorTypeShapeDiagnostics(value),
+    ...workflowEditorCardinalityDiagnostics(value),
+  ]
     .map((diagnostic) => rateWorkflowEditorDiagnostic(diagnostic, policy))
     .filter((diagnostic): diagnostic is WorkflowEditorDocumentDiagnostic => diagnostic !== null);
 }
@@ -2061,17 +2173,25 @@ export function validateWorkflowEditorConnection<
 >(
   document: WorkflowEditorDocument<TNodeData, TEdgeData>,
   connection: WorkflowEditorConnectionInput,
-  options: WorkflowEditorTypeValidationOptions = {},
+  options: WorkflowEditorConnectionValidationOptions = {},
 ): WorkflowEditorConnectionValidity {
-  document = resolveWorkflowEditorDocumentTypes(document, options);
+  const { replacingEdgeId, ...typeOptions } = options;
+  if (replacingEdgeId !== undefined) {
+    document = { ...document, edges: document.edges.filter((edge) => edge.id !== replacingEdgeId) };
+  }
+  document = resolveWorkflowEditorDocumentTypes(document, typeOptions);
   const context = createWorkflowEditorDocumentContext(document);
+  const sourceNode = context.nodeById.get(connection.sourceNodeId);
   const targetNode = context.nodeById.get(connection.targetNodeId);
+  const sourcePort = sourceNode
+    ? context.getOutputPort(connection.sourceNodeId, connection.sourcePortId)
+    : undefined;
   const targetPort = targetNode
     ? context.getInputPort(connection.targetNodeId, connection.targetPortId)
     : undefined;
   const typeResolver = createWorkflowEditorTypeResolver(
-    options.typeDefinitions,
-    options.typeDeclarations ?? document.typeDeclarations,
+    typeOptions.typeDefinitions,
+    typeOptions.typeDeclarations ?? document.typeDeclarations,
   );
   const expandsToNewTargetPort =
     !!targetNode &&
@@ -2082,18 +2202,25 @@ export function validateWorkflowEditorConnection<
       (isWorkflowEditorObjectConstructorNode(targetNode) &&
         (isWorkflowEditorObjectConstructorAddInput(targetPort) ||
           !!context.getIncomingEdgeToPort(targetNode.id, targetPort.id))));
+  const multiSourceTarget =
+    !!targetNode && !!targetPort && isWorkflowEditorMultiSourceInput(targetPort, targetNode);
 
   const validity = validateGraphEditorConnection<TNodeData, TEdgeData, WorkflowEditorPortType>(
     document,
     connection,
     {
       allowCycles: false,
-      allowOccupiedInputs: expandsToNewTargetPort,
+      // Cardinality is checked below with workflow-specific limits and messages.
+      allowOccupiedInputs: true,
       arePortsCompatible(sourcePort, targetPort) {
         const sourceType = sourcePort.type as WorkflowEditorPortType;
+        const declaredTargetType = targetPort.type as WorkflowEditorPortType;
+        // A multi-source input `T[]` receives each source as one element `T`.
         const targetType = expandsToNewTargetPort
           ? ({ kind: "any" } as const)
-          : (targetPort.type as WorkflowEditorPortType);
+          : multiSourceTarget
+            ? workflowEditorPortElementType(declaredTargetType)
+            : declaredTargetType;
         if (!typeResolver.isAssignable(sourceType, targetType)) {
           return {
             valid: false,
@@ -2115,7 +2242,47 @@ export function validateWorkflowEditorConnection<
     },
   );
 
-  return validity as WorkflowEditorConnectionValidity;
+  if (!validity.valid || !sourceNode || !targetNode || !sourcePort || !targetPort) {
+    return validity as WorkflowEditorConnectionValidity;
+  }
+
+  const targetMax = resolveWorkflowEditorPortMax(targetPort, "input", targetNode);
+  if (
+    !expandsToNewTargetPort &&
+    targetMax !== undefined &&
+    countWorkflowEditorPortConnections(document.edges, targetNode.id, targetPort.id, "input") + 1 >
+      targetMax
+  ) {
+    return {
+      valid: false,
+      reason: "target-cardinality",
+      message: describeWorkflowEditorCardinalityLimit(
+        targetPort,
+        targetNode.id,
+        "input",
+        targetMax,
+      ),
+    };
+  }
+  const sourceMax = resolveWorkflowEditorPortMax(sourcePort, "output", sourceNode);
+  if (
+    sourceMax !== undefined &&
+    countWorkflowEditorPortConnections(document.edges, sourceNode.id, sourcePort.id, "output") + 1 >
+      sourceMax
+  ) {
+    return {
+      valid: false,
+      reason: "source-cardinality",
+      message: describeWorkflowEditorCardinalityLimit(
+        sourcePort,
+        sourceNode.id,
+        "output",
+        sourceMax,
+      ),
+    };
+  }
+
+  return { valid: true };
 }
 
 export function connectWorkflowEditorNodes<
@@ -2170,7 +2337,18 @@ export function analyzeWorkflowEditorPortTypes<
     ...document.edges.flatMap((edge) => {
       const source = context.getOutputPort(edge.sourceNodeId, edge.sourcePortId);
       const target = context.getInputPort(edge.targetNodeId, edge.targetPortId);
-      return source && target ? [{ source: source.type, target: target.type }] : [];
+      const targetNode = context.nodeById.get(edge.targetNodeId);
+      if (!source || !target || !targetNode) {
+        return [];
+      }
+      return [
+        {
+          source: source.type,
+          target: isWorkflowEditorMultiSourceInput(target, targetNode)
+            ? workflowEditorPortElementType(target.type)
+            : target.type,
+        },
+      ];
     }),
   ]);
 
@@ -2214,9 +2392,13 @@ export function analyzeWorkflowEditorPortTypes<
       });
     }
 
+    // A multi-source input `T[]` receives each source as one element `T`.
+    const targetType = isWorkflowEditorMultiSourceInput(targetPort, targetNode)
+      ? workflowEditorPortElementType(targetPort.type)
+      : targetPort.type;
     if (
       uniqueResolutionErrors.length === 0 &&
-      !typeResolver.isAssignable(sourcePort.type, targetPort.type)
+      !typeResolver.isAssignable(sourcePort.type, targetType)
     ) {
       diagnostics.push({
         type: "incompatible-port-type",
@@ -2225,7 +2407,7 @@ export function analyzeWorkflowEditorPortTypes<
         sourcePortId: edge.sourcePortId,
         targetNodeId: edge.targetNodeId,
         targetPortId: edge.targetPortId,
-        message: `Output port ${edge.sourceNodeId}.${edge.sourcePortId} is not assignable to input port ${edge.targetNodeId}.${edge.targetPortId}: ${typeResolver.compatibilityErrors(sourcePort.type, targetPort.type).join(" ")}`,
+        message: `Output port ${edge.sourceNodeId}.${edge.sourcePortId} is not assignable to input port ${edge.targetNodeId}.${edge.targetPortId}: ${typeResolver.compatibilityErrors(sourcePort.type, targetType).join(" ")}`,
       });
       continue;
     }

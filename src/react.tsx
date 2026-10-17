@@ -5456,7 +5456,9 @@ function isExplainedWorkflowConnectionRejection(
   return (
     reason === "type-mismatch" ||
     reason === "payload-mode-mismatch" ||
-    reason === "media-type-mismatch"
+    reason === "media-type-mismatch" ||
+    reason === "target-cardinality" ||
+    reason === "source-cardinality"
   );
 }
 
@@ -5803,6 +5805,10 @@ function toUiConnectionInvalidReason(
   // graph-editor's canvas reasons are a closed set; kind-mismatch is the closest for delivery contracts.
   if (reason === "payload-mode-mismatch" || reason === "media-type-mismatch") {
     return "kind-mismatch";
+  }
+
+  if (reason === "target-cardinality" || reason === "source-cardinality") {
+    return "input-occupied";
   }
 
   return reason;

@@ -890,7 +890,7 @@ describe("removed sidecar cardinality API", () => {
   it("has no ./cardinality module or package entrypoint", async () => {
     const modulePath = "./cardinality";
     await expect(import(/* @vite-ignore */ modulePath)).rejects.toThrow();
-    const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
+    const pkg = JSON.parse(readFileSync(`${process.cwd()}/package.json`, "utf8")) as {
       exports: Record<string, unknown>;
       scripts: Record<string, string>;
     };
