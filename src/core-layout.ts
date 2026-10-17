@@ -2,6 +2,7 @@ import { layoutGraphEditorDocument } from "@moritzbrantner/graph-editor/layout";
 
 import {
   normalizeWorkflowEditorDocument,
+  workflowEditorValidationPolicies,
   type WorkflowEditorDocument,
   type WorkflowEditorNode,
   type WorkflowEditorPortType,
@@ -61,8 +62,8 @@ export function layoutWorkflowEditorDocument<
     ...result,
     document: normalizeWorkflowEditorDocument(
       result.document as WorkflowEditorDocument<TNodeData, TEdgeData>,
-      { allowCycles: true },
-    ),
+      { policy: workflowEditorValidationPolicies.draft },
+    ).document,
   };
 }
 

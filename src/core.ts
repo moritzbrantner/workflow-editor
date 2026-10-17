@@ -17,7 +17,7 @@ import {
   validateGraphEditorDocument,
   wouldCreateGraphEditorCycle,
   type GraphEditorConnectionValidity,
-  type GraphEditorDocumentDiagnostic,
+  type GraphEditorDocument,
 } from "@moritzbrantner/graph-editor/core";
 import type { GraphEditorOperation } from "@moritzbrantner/graph-editor/operations";
 import {
@@ -44,9 +44,12 @@ import type {
   WorkflowEditorConnectionInput,
   WorkflowEditorConnectionValidity,
   WorkflowEditorDocument,
+  WorkflowEditorDiagnosticSeverity,
   WorkflowEditorDocumentDiagnostic,
   WorkflowEditorDocumentNormalizationOptions,
+  WorkflowEditorDocumentNormalizationResult,
   WorkflowEditorDocumentValidationOptions,
+  WorkflowEditorValidationPolicy,
   WorkflowEditorEdge,
   WorkflowEditorGroup,
   WorkflowEditorNode,
@@ -131,9 +134,11 @@ export type {
   WorkflowEditorDocument,
   WorkflowEditorDocumentDiagnostic,
   WorkflowEditorDocumentDiagnosticCode,
-  WorkflowEditorDocumentNormalizationMode,
+  WorkflowEditorDiagnosticSeverity,
   WorkflowEditorDocumentNormalizationOptions,
+  WorkflowEditorDocumentNormalizationResult,
   WorkflowEditorDocumentValidationOptions,
+  WorkflowEditorValidationPolicy,
   WorkflowEditorEdge,
   WorkflowEditorGroup,
   WorkflowEditorNode,
@@ -201,29 +206,6 @@ export class WorkflowEditorDocumentValidationError extends Error {
   }
 }
 
-function normalizeWorkflowEditorGraphDocument<
-  TNodeData = Record<string, unknown>,
-  TEdgeData = Record<string, unknown>,
->(
-  document: WorkflowEditorDocument<TNodeData, TEdgeData>,
-  options: WorkflowEditorDocumentNormalizationOptions,
-): WorkflowEditorDocument<TNodeData, TEdgeData> {
-  try {
-    return normalizeGraphEditorDocument<TNodeData, TEdgeData, WorkflowEditorPortType>(
-      document,
-      options,
-    ) as WorkflowEditorDocument<TNodeData, TEdgeData>;
-  } catch (error) {
-    const diagnostics = (error as { diagnostics?: GraphEditorDocumentDiagnostic[] }).diagnostics;
-    if (Array.isArray(diagnostics)) {
-      throw new WorkflowEditorDocumentValidationError(
-        diagnostics as WorkflowEditorDocumentDiagnostic[],
-      );
-    }
-    throw error;
-  }
-}
-
 export type WorkflowEditorDuplicateNodeOptions = {
   offsetX?: number;
   offsetY?: number;
@@ -258,23 +240,150 @@ export type WorkflowEditorComposeNodesOptions<TNodeData = Record<string, unknown
   createId?: (baseId: string, existingIds: ReadonlySet<string>) => string;
 };
 
+type WorkflowEditorUnratedDocumentDiagnostic = Omit<WorkflowEditorDocumentDiagnostic, "severity">;
+
+const strictWorkflowEditorValidationPolicy: WorkflowEditorValidationPolicy = Object.freeze({
+  allowCycles: false,
+  allowDanglingEdges: false,
+  allowSelfEdges: false,
+  unknownPortBehavior: "error",
+});
+
+/** Named validation policy presets. `strict` is the default everywhere. */
+export const workflowEditorValidationPolicies: Readonly<{
+  strict: WorkflowEditorValidationPolicy;
+  draft: WorkflowEditorValidationPolicy;
+  import: WorkflowEditorValidationPolicy;
+  execution: WorkflowEditorValidationPolicy;
+}> = Object.freeze({
+  strict: strictWorkflowEditorValidationPolicy,
+  draft: Object.freeze({
+    allowCycles: true,
+    allowDanglingEdges: true,
+    allowSelfEdges: true,
+    unknownPortBehavior: "warning",
+  }),
+  import: Object.freeze({
+    allowCycles: false,
+    allowDanglingEdges: true,
+    allowSelfEdges: true,
+    unknownPortBehavior: "warning",
+  }),
+  execution: Object.freeze({ ...strictWorkflowEditorValidationPolicy }),
+});
+
+function rateWorkflowEditorDiagnostic(
+  diagnostic: WorkflowEditorUnratedDocumentDiagnostic,
+  policy: WorkflowEditorValidationPolicy,
+): WorkflowEditorDocumentDiagnostic | null {
+  const severity = (allowed: boolean): WorkflowEditorDiagnosticSeverity =>
+    allowed ? "warning" : "error";
+  switch (diagnostic.code) {
+    case "missing-edge-node":
+      return { ...diagnostic, severity: severity(policy.allowDanglingEdges) };
+    case "self-edge":
+      return { ...diagnostic, severity: severity(policy.allowSelfEdges) };
+    case "cycle":
+      return { ...diagnostic, severity: severity(policy.allowCycles) };
+    case "missing-edge-port":
+      return policy.unknownPortBehavior === "ignore"
+        ? null
+        : { ...diagnostic, severity: policy.unknownPortBehavior };
+    default:
+      return { ...diagnostic, severity: "error" };
+  }
+}
+
+/**
+ * Normalizes a document under a validation policy. Content the policy allows (for example a
+ * dangling edge under `draft`) is kept and reported as warning diagnostics; any error-severity
+ * diagnostic throws a `WorkflowEditorDocumentValidationError`. Normalization never repairs; use
+ * `repairWorkflowEditorDocument` for an explicit repair.
+ */
 export function normalizeWorkflowEditorDocument<
   TNodeData = Record<string, unknown>,
   TEdgeData = Record<string, unknown>,
 >(
   document: WorkflowEditorDocument<TNodeData, TEdgeData>,
   options: WorkflowEditorDocumentNormalizationOptions = {},
+): WorkflowEditorDocumentNormalizationResult<TNodeData, TEdgeData> {
+  const diagnostics = validateWorkflowEditorDocument(document, options);
+  const errors = diagnostics.filter((diagnostic) => diagnostic.severity === "error");
+  if (errors.length > 0) {
+    throw new WorkflowEditorDocumentValidationError(errors);
+  }
+  const normalized = normalizeWorkflowEditorDocumentContent(document);
+  // Keep policy-allowed edges that the structural normalization cannot resolve, in document order.
+  const normalizedEdgeById = new Map(normalized.edges.map((edge) => [edge.id, edge]));
+  const edges = (Array.isArray(document.edges) ? document.edges : []).flatMap((edge) =>
+    isRecord(edge) && typeof edge.id === "string"
+      ? [normalizedEdgeById.get(edge.id) ?? (edge as WorkflowEditorEdge<TEdgeData>)]
+      : [],
+  );
+  return { document: { ...normalized, edges }, diagnostics };
+}
+
+/**
+ * Explicitly repairs a document by removing dangling, self, unknown-port and cycle-closing edges.
+ * Returns the repaired document and one strict diagnostic per removed edge. Never removes valid
+ * edges or nodes and does not mutate its input.
+ */
+export function repairWorkflowEditorDocument<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+>(
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>,
+): WorkflowEditorDocumentNormalizationResult<TNodeData, TEdgeData> {
+  const repaired = normalizeWorkflowEditorDocumentContent(document);
+  const keptEdgeIds = new Set(repaired.edges.map((edge) => edge.id));
+  const strictDiagnostics = validateWorkflowEditorDocument(document);
+  const diagnostics: WorkflowEditorDocumentDiagnostic[] = [];
+  (Array.isArray(document.edges) ? document.edges : []).forEach((edge, index) => {
+    if (!isRecord(edge) || typeof edge.id !== "string" || keptEdgeIds.has(edge.id)) {
+      return;
+    }
+    const edgeId = edge.id;
+    const described = strictDiagnostics.filter((diagnostic) => diagnostic.edgeId === edgeId);
+    diagnostics.push(
+      ...(described.length > 0
+        ? described
+        : [
+            {
+              code: "cycle" as const,
+              severity: "error" as const,
+              message: `Removed workflow edge ${edgeId} because it closes a cycle`,
+              path: `$.edges[${index}]`,
+              edgeId,
+              sourceNodeId: typeof edge.sourceNodeId === "string" ? edge.sourceNodeId : undefined,
+              targetNodeId: typeof edge.targetNodeId === "string" ? edge.targetNodeId : undefined,
+            },
+          ]),
+    );
+  });
+  return { document: repaired, diagnostics };
+}
+
+/** Structural normalization; drops edges it cannot resolve (callers decide whether to keep them). */
+function normalizeWorkflowEditorDocumentContent<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+>(
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>,
 ): WorkflowEditorDocument<TNodeData, TEdgeData> {
   const typeShapeDiagnostics = workflowEditorTypeShapeDiagnostics(document);
   if (typeShapeDiagnostics.length) {
-    throw new WorkflowEditorDocumentValidationError(typeShapeDiagnostics);
+    throw new WorkflowEditorDocumentValidationError(
+      typeShapeDiagnostics.map((diagnostic) => ({ ...diagnostic, severity: "error" as const })),
+    );
   }
-  const mode = options.mode ?? "strict";
-  const graphNormalized = normalizeWorkflowEditorGraphDocument(document, {
-    ...options,
-    allowCycles: options.allowCycles ?? false,
-    mode,
-  });
+  const graphNormalized = normalizeGraphEditorDocument<
+    TNodeData,
+    TEdgeData,
+    WorkflowEditorPortType
+  >(document, { mode: "repair", allowCycles: true }) as WorkflowEditorDocument<
+    TNodeData,
+    TEdgeData
+  >;
 
   let nodes = Array.isArray(graphNormalized.nodes)
     ? graphNormalized.nodes.flatMap((node) =>
@@ -320,19 +429,50 @@ export function normalizeWorkflowEditorDocument<
   );
 }
 
+/** Returns every diagnostic with its policy severity; never throws. */
 export function validateWorkflowEditorDocument(
   value: unknown,
   options: WorkflowEditorDocumentValidationOptions = {},
 ): WorkflowEditorDocumentDiagnostic[] {
-  return [
-    ...validateGraphEditorDocument(value, {
-      ...options,
-      allowCycles: options.allowCycles ?? false,
-    }),
-    ...workflowEditorTypeShapeDiagnostics(value),
-  ] as WorkflowEditorDocumentDiagnostic[];
+  const policy = options.policy ?? strictWorkflowEditorValidationPolicy;
+  const graphDiagnostics = validateGraphEditorDocument(value, {
+    allowCycles: true,
+  }) as WorkflowEditorUnratedDocumentDiagnostic[];
+  const cycleDiagnostics: WorkflowEditorUnratedDocumentDiagnostic[] = [];
+  if (isRecord(value) && Array.isArray(value.nodes) && Array.isArray(value.edges)) {
+    const nodeIds = new Set(
+      value.nodes.flatMap((node) =>
+        isRecord(node) && typeof node.id === "string" ? [node.id] : [],
+      ),
+    );
+    // Self and dangling edges have their own rules; they never count as cycles.
+    const edges = value.edges.filter(
+      (edge) =>
+        isRecord(edge) &&
+        typeof edge.sourceNodeId === "string" &&
+        typeof edge.targetNodeId === "string" &&
+        edge.sourceNodeId !== edge.targetNodeId &&
+        nodeIds.has(edge.sourceNodeId) &&
+        nodeIds.has(edge.targetNodeId),
+    );
+    for (const cycle of detectGraphEditorCycles({
+      nodes: value.nodes,
+      edges,
+    } as unknown as GraphEditorDocument)) {
+      cycleDiagnostics.push({
+        code: "cycle",
+        message: `Workflow graph contains a cycle: ${cycle.join(" -> ")}`,
+        path: "$.edges",
+        nodeId: cycle[0],
+      });
+    }
+  }
+  return [...graphDiagnostics, ...cycleDiagnostics, ...workflowEditorTypeShapeDiagnostics(value)]
+    .map((diagnostic) => rateWorkflowEditorDiagnostic(diagnostic, policy))
+    .filter((diagnostic): diagnostic is WorkflowEditorDocumentDiagnostic => diagnostic !== null);
 }
 
+/** Throws a `WorkflowEditorDocumentValidationError` when any error-severity diagnostic exists. */
 export function assertWorkflowEditorDocument<
   TNodeData = Record<string, unknown>,
   TEdgeData = Record<string, unknown>,
@@ -340,10 +480,12 @@ export function assertWorkflowEditorDocument<
   value: unknown,
   options: WorkflowEditorDocumentValidationOptions = {},
 ): asserts value is WorkflowEditorDocument<TNodeData, TEdgeData> {
-  const diagnostics = validateWorkflowEditorDocument(value, options);
+  const errors = validateWorkflowEditorDocument(value, options).filter(
+    (diagnostic) => diagnostic.severity === "error",
+  );
 
-  if (diagnostics.length > 0) {
-    throw new WorkflowEditorDocumentValidationError(diagnostics);
+  if (errors.length > 0) {
+    throw new WorkflowEditorDocumentValidationError(errors);
   }
 }
 
@@ -416,11 +558,13 @@ function synchronizeWorkflowEditorConstructorTypes<TNodeData>(
   return node;
 }
 
-function workflowEditorTypeShapeDiagnostics(value: unknown): WorkflowEditorDocumentDiagnostic[] {
+function workflowEditorTypeShapeDiagnostics(
+  value: unknown,
+): WorkflowEditorUnratedDocumentDiagnostic[] {
   if (!isRecord(value)) {
     return [];
   }
-  const diagnostics: WorkflowEditorDocumentDiagnostic[] = [];
+  const diagnostics: WorkflowEditorUnratedDocumentDiagnostic[] = [];
   if (value.typeDeclarations !== undefined && typeof value.typeDeclarations !== "string") {
     diagnostics.push({
       code: "invalid-type-declarations",
@@ -579,7 +723,7 @@ export function createWorkflowEditorGroup<
         data: options.data,
       },
     ],
-  });
+  }).document;
 }
 
 export function updateWorkflowEditorGroup<
@@ -596,7 +740,7 @@ export function updateWorkflowEditorGroup<
       groupId,
       patch,
     ) as WorkflowEditorDocument<TNodeData, TEdgeData>,
-  );
+  ).document;
 }
 
 export function ungroupWorkflowEditorGroup<
@@ -611,7 +755,7 @@ export function ungroupWorkflowEditorGroup<
       document,
       groupId,
     ) as WorkflowEditorDocument<TNodeData, TEdgeData>,
-  );
+  ).document;
 }
 
 export function moveWorkflowEditorGroup<
@@ -628,7 +772,7 @@ export function moveWorkflowEditorGroup<
       groupId,
       delta,
     ) as WorkflowEditorDocument<TNodeData, TEdgeData>,
-  );
+  ).document;
 }
 
 export function addWorkflowEditorNode<
@@ -643,7 +787,7 @@ export function addWorkflowEditorNode<
       document,
       node,
     ) as WorkflowEditorDocument<TNodeData, TEdgeData>,
-  );
+  ).document;
 }
 
 export function updateWorkflowEditorNode<
@@ -660,7 +804,7 @@ export function updateWorkflowEditorNode<
       nodeId,
       patch,
     ) as WorkflowEditorDocument<TNodeData, TEdgeData>,
-  );
+  ).document;
 }
 
 export function updateWorkflowEditorNodeWorkflowReference<
@@ -825,7 +969,7 @@ export function removeWorkflowEditorArrayConstructorInput<
     edges: document.edges.filter(
       (edge) => !(edge.targetNodeId === nodeId && edge.targetPortId === portId),
     ),
-  });
+  }).document;
 }
 
 export function formatWorkflowEditorArrayConstructorExpression<TNodeData = Record<string, unknown>>(
@@ -1271,7 +1415,7 @@ export function updateWorkflowEditorObjectConstructorSchema<
     edges: document.edges.filter(
       (edge) => edge.targetNodeId !== nodeId || nextInputIds.has(edge.targetPortId),
     ),
-  });
+  }).document;
 }
 
 export function updateWorkflowEditorObjectConstructorExpression<
@@ -1311,7 +1455,7 @@ export function updateWorkflowEditorObjectConstructorExpression<
       const nextProperty = nextProperties[edge.targetPortId];
       return previousProperty?.sourceExpression === nextProperty?.sourceExpression;
     }),
-  });
+  }).document;
 }
 
 export function removeWorkflowEditorObjectConstructorInput<
@@ -1336,7 +1480,7 @@ export function removeWorkflowEditorObjectConstructorInput<
     edges: document.edges.filter(
       (edge) => !(edge.targetNodeId === nodeId && edge.targetPortId === portId),
     ),
-  });
+  }).document;
 }
 
 export function formatWorkflowEditorObjectConstructorExpression<
@@ -1554,7 +1698,7 @@ export function removeWorkflowEditorObjectDecompositionOutput<
     edges: document.edges.filter(
       (edge) => !(edge.sourceNodeId === nodeId && edge.sourcePortId === portId),
     ),
-  });
+  }).document;
 }
 
 export function formatWorkflowEditorObjectDecompositionExpression<
@@ -1588,7 +1732,7 @@ export function moveWorkflowEditorNode<
       nodeId,
       position,
     ) as WorkflowEditorDocument<TNodeData, TEdgeData>,
-  );
+  ).document;
 }
 
 export function removeWorkflowEditorNode<
@@ -1611,7 +1755,7 @@ export function removeWorkflowEditorNode<
         }),
       )
       .filter((group) => group.nodeIds.length >= 2),
-  });
+  }).document;
 }
 
 export function createWorkflowEditorComposedNode<
@@ -1752,7 +1896,7 @@ export function composeWorkflowEditorNodes<
       .map(cloneWorkflowEditorNode)
       .concat(composedNode),
     edges: visibleEdges.concat(reroutedIncomingEdges, reroutedOutgoingEdges),
-  });
+  }).document;
 }
 
 export function restoreWorkflowEditorComposedNode<
@@ -1878,7 +2022,7 @@ export function restoreWorkflowEditorComposedNode<
       restoredInternalEdges as Array<WorkflowEditorEdge<TEdgeData>>,
       restoredExternalEdges,
     ),
-  });
+  }).document;
 }
 
 export function addWorkflowEditorEdge<
@@ -1893,7 +2037,7 @@ export function addWorkflowEditorEdge<
       document,
       edge,
     ) as WorkflowEditorDocument<TNodeData, TEdgeData>,
-  );
+  ).document;
 }
 
 export function removeWorkflowEditorEdge<
@@ -1908,7 +2052,7 @@ export function removeWorkflowEditorEdge<
       document,
       edgeId,
     ) as WorkflowEditorDocument<TNodeData, TEdgeData>,
-  );
+  ).document;
 }
 
 export function validateWorkflowEditorConnection<
@@ -2152,7 +2296,7 @@ export function duplicateWorkflowEditorNode<
       nodeId,
       options,
     ) as WorkflowEditorDocument<TNodeData, TEdgeData>,
-  );
+  ).document;
 }
 
 export function detectWorkflowEditorCycles<
@@ -3989,15 +4133,13 @@ function normalizeWorkflowEditorNode<TNodeData = Record<string, unknown>>(
 
 function normalizeWorkflowEditorNodeComposition<TNodeData = Record<string, unknown>>(
   composition: WorkflowEditorNodeComposition<TNodeData>,
-  mode: NonNullable<WorkflowEditorDocumentNormalizationOptions["mode"]> = "repair",
+  mode: "strict" | "repair" = "repair",
 ): WorkflowEditorNodeComposition<TNodeData> {
-  const normalizedDocument = normalizeWorkflowEditorDocument(
-    {
-      nodes: composition.nodes,
-      edges: composition.edges,
-    },
-    { mode },
-  );
+  const body = { nodes: composition.nodes, edges: composition.edges };
+  const normalizedDocument =
+    mode === "strict"
+      ? normalizeWorkflowEditorDocument(body).document
+      : repairWorkflowEditorDocument(body).document;
   const nodeIds = new Set(normalizedDocument.nodes.map((node) => node.id));
 
   return {

@@ -581,7 +581,7 @@ describe("iteration documents: normalization and persistence", () => {
     ];
     for (const iterationNode of variants) {
       const document = newtonDocument(iterationNode);
-      const normalized = normalizeWorkflowEditorDocument(document);
+      const normalized = normalizeWorkflowEditorDocument(document).document;
       const node = iterationNodeOf(normalized);
       expect(node.kind).toBe("control.iterate");
       expect(node.composition).toEqual(newtonBody());
@@ -611,7 +611,7 @@ describe("iteration documents: normalization and persistence", () => {
     });
     const document = newtonDocument(node);
 
-    expect(() => normalizeWorkflowEditorDocument(document)).toThrow(
+    expect(() => normalizeWorkflowEditorDocument(document).document).toThrow(
       WorkflowEditorDocumentValidationError,
     );
   });

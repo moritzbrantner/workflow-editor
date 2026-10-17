@@ -85,7 +85,7 @@ const document = normalizeWorkflowEditorDocument<NodeData, EdgeData>({
     },
   ],
   edges: [],
-});
+}).document;
 
 expectType<WorkflowEditorDocument<NodeData, EdgeData>>(document);
 expectAssignable<GraphEditorDocument<NodeData, EdgeData, WorkflowEditorPortType>>(document);

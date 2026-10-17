@@ -438,7 +438,7 @@ function externalAssetHandoffDocument(): ExampleDocument {
         targetPortId: "in",
       },
     ],
-  });
+  }).document;
 }
 
 function boundedApproximationDocument(): ExampleDocument {
@@ -470,7 +470,7 @@ function boundedApproximationDocument(): ExampleDocument {
       edge("target", "value", "refine", "target"),
       edge("refine", "result", "approximation", "in"),
     ],
-  });
+  }).document;
 }
 
 function binaryAudioPortsDocument(): ExampleDocument {
@@ -515,7 +515,7 @@ function binaryAudioPortsDocument(): ExampleDocument {
       edge("recorder", "chunks", "monitor", "audio"),
       edge("recorder", "chunks", "transcribe", "audio"),
     ],
-  });
+  }).document;
 }
 
 function typescriptPortsDocument(): ExampleDocument {
@@ -578,7 +578,7 @@ function typescriptPortsDocument(): ExampleDocument {
       template("control.merge", "merge", "Possible customer", 340, 390),
     ],
     edges: [],
-  });
+  }).document;
 }
 
 function leadIntakeDocument(): ExampleDocument {
@@ -685,7 +685,7 @@ function leadIntakeDocument(): ExampleDocument {
       edge("route", "true", "create-deal", "lead"),
       edge("route", "false", "nurture", "lead"),
     ],
-  });
+  }).document;
 }
 
 function enrichLeadDocument(): ExampleDocument {
@@ -753,7 +753,7 @@ function enrichLeadDocument(): ExampleDocument {
       edge("email-verification", "verified", "merge-profile", "verified"),
       edge("merge-profile", "lead", "return-lead", "lead"),
     ],
-  });
+  }).document;
 }
 
 function campaignPayloadDocument(): ExampleDocument {
@@ -831,7 +831,7 @@ function campaignPayloadDocument(): ExampleDocument {
       edge("vip", "value", "build-payload", "vip"),
       edge("build-payload", "value", "send-webhook", "body"),
     ],
-  });
+  }).document;
 }
 
 function incidentEscalationDocument(): ExampleDocument {
@@ -920,7 +920,7 @@ function incidentEscalationDocument(): ExampleDocument {
       edge("route", "true", "page", "incident"),
       edge("route", "false", "log", "body"),
     ],
-  });
+  }).document;
 }
 
 function approvalChecklistDocument(): ExampleDocument {
@@ -976,7 +976,7 @@ function approvalChecklistDocument(): ExampleDocument {
       edge("request", "request", "record", "request"),
       edge("approval", "approved", "record", "approved"),
     ],
-  });
+  }).document;
 }
 
 function createObjectConstructorNode(

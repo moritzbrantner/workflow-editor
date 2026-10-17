@@ -159,7 +159,7 @@ describe("native type document contracts", () => {
       kind: "legacy-opaque",
     } as unknown as WorkflowEditorPortType;
     expect(validateWorkflowEditorDocument(malformed)[0]?.code).toBe("invalid-port-type");
-    expect(() => normalizeWorkflowEditorDocument(malformed)).toThrow(
+    expect(() => normalizeWorkflowEditorDocument(malformed).document).toThrow(
       "Unsupported workflow port type",
     );
   });
@@ -473,9 +473,9 @@ describe("native type document contracts", () => {
           ? { ...node, outputs: [{ id: "out", label: "Out", type: native("number[]") }] }
           : node,
       ),
-    });
+    }).document;
     expect(output("merge")).toEqual(native('(number[]) | ("none")'));
-    document = normalizeWorkflowEditorDocument({ ...document, edges: [] });
+    document = normalizeWorkflowEditorDocument({ ...document, edges: [] }).document;
     expect(output("branch")).toEqual({ kind: "any" });
     expect(output("filter")).toEqual({ kind: "array", element: { kind: "any" } });
   });
@@ -614,7 +614,7 @@ test("propagates opaque node and port identifiers without composite-key collisio
       targetNodeId: node.id,
       targetPortId: node.inputs[0]!.id,
     })),
-  });
+  }).document;
   expect(document.nodes.find((node) => node.id === "a:b")!.outputs![0]!.type).toEqual(
     native("string"),
   );

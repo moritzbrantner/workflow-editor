@@ -217,7 +217,7 @@ describe("retrospective: rejection is explained deterministically and never muta
       "Cannot find name 'Customer'",
     );
     // A stale declaration is reported; the saved edge is not silently dropped.
-    expect(normalizeWorkflowEditorDocument(withoutCustomer).edges).toHaveLength(1);
+    expect(normalizeWorkflowEditorDocument(withoutCustomer).document.edges).toHaveLength(1);
   });
 });
 

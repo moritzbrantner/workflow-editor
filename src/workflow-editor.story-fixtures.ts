@@ -103,12 +103,12 @@ export const storyWorkflowDocument: StoryWorkflowDocument = normalizeWorkflowEdi
     },
   ],
   viewport: { x: 40, y: 120, zoom: 0.85 },
-});
+}).document;
 
 export const emptyStoryWorkflowDocument: StoryWorkflowDocument = normalizeWorkflowEditorDocument({
   nodes: [],
   edges: [],
-});
+}).document;
 
 export const storyWorkflowNodeTemplates = [
   {

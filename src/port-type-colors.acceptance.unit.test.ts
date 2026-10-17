@@ -190,7 +190,7 @@ function colorDocument(legacyColor?: string): WorkflowEditorDocument {
         targetPortId: "value",
       },
     ],
-  });
+  }).document;
 }
 
 function presentedPortColors(document: WorkflowEditorDocument, colors?: PortTypeColors) {
@@ -315,7 +315,7 @@ describe("issue #60 acceptance: configurable, consistent port type colors", () =
         },
       ],
       edges: [],
-    });
+    }).document;
     // Precondition: TypeScript considers VipCustomer assignable to Customer.
     expect(
       validateWorkflowEditorConnection(subtypeDocument, {

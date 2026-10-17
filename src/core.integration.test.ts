@@ -40,6 +40,7 @@ import {
   moveWorkflowEditorNode,
   moveWorkflowEditorGroup,
   normalizeWorkflowEditorDocument,
+  repairWorkflowEditorDocument,
   normalizeWorkflowEditorSelection,
   parseWorkflowEditorObjectConstructorExpression,
   pasteWorkflowEditorClipboardPayload,
@@ -107,7 +108,7 @@ const document: WorkflowEditorDocument = normalizeWorkflowEditorDocument({
       targetPortId: "in",
     },
   ],
-});
+}).document;
 
 describe("@moritzbrantner/workflow-editor core", () => {
   test("provides built-in control flow, JSON, and collection node templates", () => {
@@ -231,7 +232,7 @@ describe("@moritzbrantner/workflow-editor core", () => {
         },
       ],
       edges: [],
-    });
+    }).document;
 
     expect(
       normalized.nodes.map((node) => [
@@ -318,7 +319,7 @@ describe("@moritzbrantner/workflow-editor core", () => {
         },
       ],
       edges: [],
-    });
+    }).document;
     const filtered = connectWorkflowEditorNodes(collectionDocument, {
       sourceNodeId: "events",
       sourcePortId: "items",
@@ -370,7 +371,7 @@ describe("@moritzbrantner/workflow-editor core", () => {
         },
       ],
       edges: [],
-    });
+    }).document;
 
     const connected = connectWorkflowEditorNodes(objectDocument, {
       sourceNodeId: "employee",
@@ -497,7 +498,7 @@ describe("@moritzbrantner/workflow-editor core", () => {
         },
       ],
       edges: [],
-    });
+    }).document;
     const connected = connectWorkflowEditorNodes(objectDocument, {
       sourceNodeId: "boolean-source",
       sourcePortId: "value",
@@ -598,7 +599,7 @@ describe("@moritzbrantner/workflow-editor core", () => {
           targetPortId: "age",
         },
       ],
-    });
+    }).document;
     const nextDocument = updateWorkflowEditorObjectConstructorSchema(
       objectDocument,
       "employee-object",
@@ -733,7 +734,7 @@ describe("@moritzbrantner/workflow-editor core", () => {
         },
       ],
       edges: [],
-    });
+    }).document;
     const withFirstName = connectWorkflowEditorNodes(objectDocument, {
       sourceNodeId: "employee",
       sourcePortId: "firstName",
@@ -812,7 +813,7 @@ describe("@moritzbrantner/workflow-editor core", () => {
         },
       ],
       edges: [],
-    });
+    }).document;
     const withInput = connectWorkflowEditorNodes(decomposeDocument, {
       sourceNodeId: "lead",
       sourcePortId: "value",
@@ -922,7 +923,7 @@ describe("@moritzbrantner/workflow-editor core", () => {
         },
       ],
       edges: [],
-    });
+    }).document;
 
     const withName = connectWorkflowEditorNodes(arrayDocument, {
       sourceNodeId: "name",
@@ -1004,7 +1005,7 @@ describe("@moritzbrantner/workflow-editor core", () => {
         },
       ],
       edges: [],
-    });
+    }).document;
     const legacyNode = findWorkflowEditorNode(legacy, "legacy-array")!;
 
     expect(getWorkflowEditorArrayConstructorInputs(legacyNode)).toEqual([
@@ -1034,14 +1035,11 @@ describe("@moritzbrantner/workflow-editor core", () => {
     expect(graphIndex.getNodeById("review")?.label).toBe("Human review");
     expect(duplicated.nodes.some((node) => node.id === "review-copy")).toBe(true);
     expect(
-      normalizeWorkflowEditorDocument(
-        {
-          nodes: [{ id: "zoom", label: "Zoom", x: Number.NaN, y: Number.NaN }],
-          edges: [],
-          viewport: { x: Number.NaN, y: Number.NaN, zoom: 10 },
-        },
-        { mode: "repair" },
-      ).viewport,
+      repairWorkflowEditorDocument({
+        nodes: [{ id: "zoom", label: "Zoom", x: Number.NaN, y: Number.NaN }],
+        edges: [],
+        viewport: { x: Number.NaN, y: Number.NaN, zoom: 10 },
+      }).document.viewport,
     ).toEqual({ x: 0, y: 0, zoom: 4 });
 
     const removed = removeWorkflowEditorNode(duplicated, "input");
@@ -1148,7 +1146,7 @@ describe("@moritzbrantner/workflow-editor core", () => {
             targetPortId: "in",
           },
         ],
-      }),
+      }).document,
       { nodeIds: ["a", "c"] },
     );
     expect(selected.document.nodes.find((node) => node.id === "b")).toEqual(
@@ -1226,7 +1224,7 @@ describe("@moritzbrantner/workflow-editor core", () => {
         },
       ],
       edges: [],
-    });
+    }).document;
 
     const result = layoutWorkflowEditorDocument(tallDocument, { nodeSeparation: 0 });
     const first = result.document.nodes.find((node) => node.id === "wide-ports-a")!;
@@ -1307,8 +1305,8 @@ describe("@moritzbrantner/workflow-editor core", () => {
         "self-edge",
       ]),
     );
-    expect(() =>
-      normalizeWorkflowEditorDocument(invalidDocument as WorkflowEditorDocument),
+    expect(
+      () => normalizeWorkflowEditorDocument(invalidDocument as WorkflowEditorDocument).document,
     ).toThrow(WorkflowEditorDocumentValidationError);
 
     const cyclic: WorkflowEditorDocument = {
@@ -1351,7 +1349,7 @@ describe("@moritzbrantner/workflow-editor core", () => {
     expect(validateWorkflowEditorDocument(cyclic).map((diagnostic) => diagnostic.code)).toContain(
       "cycle",
     );
-    expect(normalizeWorkflowEditorDocument(cyclic, { mode: "repair" }).edges).toHaveLength(1);
+    expect(repairWorkflowEditorDocument(cyclic).document.edges).toHaveLength(1);
 
     const missingPort: WorkflowEditorDocument = {
       nodes: [
@@ -1384,10 +1382,10 @@ describe("@moritzbrantner/workflow-editor core", () => {
     expect(
       validateWorkflowEditorDocument(missingPort).map((diagnostic) => diagnostic.code),
     ).toContain("missing-edge-port");
-    expect(() => normalizeWorkflowEditorDocument(missingPort)).toThrow(
+    expect(() => normalizeWorkflowEditorDocument(missingPort).document).toThrow(
       WorkflowEditorDocumentValidationError,
     );
-    expect(normalizeWorkflowEditorDocument(missingPort, { mode: "repair" }).edges).toHaveLength(0);
+    expect(repairWorkflowEditorDocument(missingPort).document.edges).toHaveLength(0);
   });
 
   test("validates connections and detects ordering and cycles", () => {
@@ -1496,7 +1494,7 @@ describe("@moritzbrantner/workflow-editor core", () => {
         document.nodes[1]!,
         document.nodes[2]!,
       ],
-    });
+    }).document;
     const cleared = updateWorkflowEditorNodeWorkflowReference(referenced, "input", null);
 
     expect(hasWorkflowEditorWorkflowReference(referenced.nodes[0]!)).toBe(true);
@@ -1626,7 +1624,7 @@ describe("@moritzbrantner/workflow-editor core", () => {
       expect.arrayContaining(["duplicate-group-id", "duplicate-group-node", "missing-group-node"]),
     );
 
-    const repaired = normalizeWorkflowEditorDocument(invalid, { mode: "repair" });
+    const repaired = repairWorkflowEditorDocument(invalid as WorkflowEditorDocument).document;
     expect(repaired.groups).toEqual([
       expect.objectContaining({ id: "group", nodeIds: ["transform", "output"] }),
     ]);
@@ -1714,7 +1712,7 @@ describe("@moritzbrantner/workflow-editor core", () => {
           targetPortId: "in",
         },
       ],
-    });
+    }).document;
     const cycleConnection = {
       sourceNodeId: "c",
       sourcePortId: "out",
@@ -1730,31 +1728,29 @@ describe("@moritzbrantner/workflow-editor core", () => {
     });
     expect(connectWorkflowEditorNodes(dag, cycleConnection).edges).toHaveLength(2);
 
-    expect(() =>
-      normalizeWorkflowEditorDocument({
-        ...dag,
-        edges: [
-          ...dag.edges,
-          {
-            id: "c-a",
-            ...cycleConnection,
-          },
-        ],
-      }),
+    expect(
+      () =>
+        normalizeWorkflowEditorDocument({
+          ...dag,
+          edges: [
+            ...dag.edges,
+            {
+              id: "c-a",
+              ...cycleConnection,
+            },
+          ],
+        }).document,
     ).toThrow(WorkflowEditorDocumentValidationError);
-    const normalized = normalizeWorkflowEditorDocument(
-      {
-        ...dag,
-        edges: [
-          ...dag.edges,
-          {
-            id: "c-a",
-            ...cycleConnection,
-          },
-        ],
-      },
-      { mode: "repair" },
-    );
+    const normalized = repairWorkflowEditorDocument({
+      ...dag,
+      edges: [
+        ...dag.edges,
+        {
+          id: "c-a",
+          ...cycleConnection,
+        },
+      ],
+    }).document;
 
     expect(normalized.edges.map((edge) => edge.id)).toEqual(["a-b", "b-c"]);
     expect(isWorkflowEditorDirectedAcyclicGraph(normalized)).toBe(true);
@@ -1867,7 +1863,7 @@ describe("@moritzbrantner/workflow-editor core", () => {
         },
       ],
       edges: [],
-    });
+    }).document;
 
     expect(
       validateWorkflowEditorConnection(
@@ -1932,7 +1928,7 @@ describe("@moritzbrantner/workflow-editor core", () => {
           targetPortId: "in",
         },
       ],
-    });
+    }).document;
 
     expect(analyzeWorkflowEditorPortTypes(missingTypeDocument)).toEqual([
       expect.objectContaining({

@@ -91,7 +91,7 @@ function typedDocument(
       },
     ],
     edges,
-  });
+  }).document;
 }
 
 describe("workflow editor port type assignability", () => {
