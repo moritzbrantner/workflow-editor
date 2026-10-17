@@ -104,7 +104,7 @@ import { layoutWorkflowEditorDocument as layoutFromSubpath } from "@moritzbrantn
 import { buildWorkflowEditorDocumentFile } from "@moritzbrantner/workflow-editor/persistence";
 import { workflowEditorShareUrl } from "@moritzbrantner/workflow-editor/share";
 
-const workflowDocument = normalizeWorkflowEditorDocument({ nodes: [], edges: [] });
+const workflowDocument = normalizeWorkflowEditorDocument({ nodes: [], edges: [] }).document;
 const entry = createWorkflowEditorEntry({ id: "demo", name: "Demo", document: workflowDocument });
 const library = createWorkflowEditorLibrary({ documents: [entry], activeDocumentId: "demo" });
 const graphRuntime = createGraphEditorRuntime({ initialDocument: workflowDocument });
