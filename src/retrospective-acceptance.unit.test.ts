@@ -17,11 +17,8 @@ import {
   type WorkflowEditorDocument,
   type WorkflowEditorPortType,
 } from "./index";
-import {
-  connectWorkflowEditorNodesWithCardinality,
-  validateWorkflowEditorConnectionWithCardinality,
-} from "./cardinality";
 import { compileWorkflowEditorDocument } from "./compiler";
+import { workflowEditorPortTypeSource } from "./core-type-source";
 
 const native = (source: string): WorkflowEditorPortType => ({ kind: "typescript", source });
 
@@ -153,9 +150,9 @@ describe("retrospective: user-authored declarations agree with the TypeScript ch
     const document = twoNodes(native(source), native(target), declarations);
     const result = validateWorkflowEditorConnection(document, connection);
     expect(result.valid).toBe(expected);
-    expect(validateWorkflowEditorConnectionWithCardinality(document, connection).valid).toBe(
-      expected,
-    );
+    // Cardinality is enforced by the same core validator (#15); a single free input never
+    // changes the checker verdict.
+    expect(validateWorkflowEditorConnection(document, connection, {}).valid).toBe(expected);
     if (!expected) {
       expect(result).toEqual(expect.objectContaining({ reason: "type-mismatch" }));
     }
@@ -198,7 +195,6 @@ describe("retrospective: rejection is explained deterministically and never muta
 
     const connected = connectWorkflowEditorNodes(document, connection);
     expect(connected.edges).toHaveLength(0);
-    expect(connectWorkflowEditorNodesWithCardinality(document, connection).edges).toHaveLength(0);
     expect(document).toEqual(snapshot);
   });
 
@@ -240,8 +236,9 @@ describe("retrospective: possible branch outputs", () => {
     };
     for (const [sourceNodeId, sourcePortId, targetNodeId, targetPortId] of [
       ["source", "out", "branch", "value"],
-      ["branch", "true", "merge", "a"],
-      ["branch", "false", "merge", "b"],
+      // control.merge has one multi-source `items` input (#15, Decision 1.9/1.10).
+      ["branch", "true", "merge", "items"],
+      ["branch", "false", "merge", "items"],
     ] as const) {
       const next = connectWorkflowEditorNodes(document, {
         sourceNodeId,
@@ -260,10 +257,10 @@ describe("retrospective: possible branch outputs", () => {
     expect(output("branch", "true")).toEqual(native("Status"));
     expect(output("branch", "false")).toEqual(native("Status"));
     const merged = output("merge", "out");
-    expect(merged.kind).toBe("typescript");
-    const mergedSource = (merged as { source: string }).source;
-    expect(oracle(mergedSource, "Status", declarations)).toBe(true);
-    expect(oracle("Status", mergedSource, declarations)).toBe(true);
+    // The merge output is an array of the union of the connected source types: Status[].
+    const mergedSource = workflowEditorPortTypeSource(merged);
+    expect(oracle(mergedSource, "Status[]", declarations)).toBe(true);
+    expect(oracle("Status[]", mergedSource, declarations)).toBe(true);
 
     const compiled = compileWorkflowEditorDocument(document);
     expect(compiled.typeDeclarations).toContain("type Status");

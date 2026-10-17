@@ -27,6 +27,14 @@ async function connect(page: Page, source: string, target: string) {
   await choice.press("Enter");
 }
 
+/** The merge output is an array of the union of its sources; exact syntax is not prescribed. */
+async function expectMergedOut(panel: ReturnType<Page["getByRole"]>, member: string) {
+  const line = panel.getByRole("listitem").filter({ hasText: "Possible customer · Out:" });
+  await expect(line.first()).toContainText(member);
+  await expect(line.first()).toContainText('"anonymous"');
+  await expect(line.first()).toContainText(/\[\]|Array</);
+}
+
 // Exercise this through both the desktop and phone projects, using the actual Pages entry.
 test("authors native types, explains rejection, propagates branches, and reopens exported workflows", async ({
   page,
@@ -88,8 +96,9 @@ test("authors native types, explains rejection, propagates branches, and reopens
   await expect(compatible).toBeFocused();
   await compatible.press("Enter");
   await connect(page, "Start Customer source Value", "Customer branch Value");
-  await connect(page, "Start Customer branch True", "Possible customer A");
-  await connect(page, "Start Fallback Value", "Possible customer B");
+  // control.merge has one multi-source `items` input (#15, Decision 1.9/1.10).
+  await connect(page, "Start Customer branch True", "Possible customer Items");
+  await connect(page, "Start Fallback Value", "Possible customer Items");
   await expect.poll(async () => (await savedDocument(page))?.edges.length).toBe(4);
   if (mobile) {
     await page
@@ -99,10 +108,10 @@ test("authors native types, explains rejection, propagates branches, and reopens
   }
   await page.getByRole("button", { name: "Types", exact: true }).click();
   const panel = page.getByRole("complementary", { name: "Workflow types", exact: true });
-  await expect(panel).toContainText('Possible customer · Out: (Customer) | ("anonymous")');
+  await expectMergedOut(panel, "Customer");
   await page.getByLabel("Output Value TypeScript type", { exact: true }).fill("number");
   await page.getByLabel("Output Value TypeScript type", { exact: true }).press("Enter");
-  await expect(panel).toContainText('Possible customer · Out: (number) | ("anonymous")');
+  await expectMergedOut(panel, "number");
   await expect
     .poll(
       async () =>
@@ -112,7 +121,7 @@ test("authors native types, explains rejection, propagates branches, and reopens
     .toBe("number");
   await page.getByLabel("Output Value TypeScript type", { exact: true }).fill("Customer");
   await page.getByLabel("Output Value TypeScript type", { exact: true }).press("Enter");
-  await expect(panel).toContainText('Possible customer · Out: (Customer) | ("anonymous")');
+  await expectMergedOut(panel, "Customer");
 
   await expect.poll(async () => (await savedDocument(page))?.typeDeclarations).toBe(declarations);
   await page.screenshot({
