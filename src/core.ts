@@ -206,6 +206,14 @@ export {
   workflowEditorControlFlowNodeTemplates,
   workflowEditorJsonNodeTemplates,
 } from "./core-templates";
+export {
+  createWorkflowEditorNodeTemplateRegistry,
+  type WorkflowEditorCompatibleTemplate,
+  type WorkflowEditorNodeTemplateDiagnostic,
+  type WorkflowEditorNodeTemplateDiagnosticCode,
+  type WorkflowEditorNodeTemplateRegistry,
+  type WorkflowEditorNodeTemplateRegistryEntry,
+} from "./core-template-registry";
 
 export class WorkflowEditorDocumentValidationError extends Error {
   override name = "WorkflowEditorDocumentValidationError" as const;

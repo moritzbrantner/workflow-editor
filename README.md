@@ -263,6 +263,11 @@ For smaller changes, use slots on the existing components:
   typed port assignability, constructor expansion, compositions, and nested workflow metadata.
 - Node templates can set `category` or `categoryPath` to group the node palette into flat
   categories or nested category trees.
+- Hosts pass node templates as a plain array. `createWorkflowEditorNodeTemplateRegistry(templates,
+  { typeDefinitions })` validates it (stable `code`/`path` diagnostics for duplicate template or
+  port ids, missing type references, invalid category paths and invalid compositions) and offers
+  lookups by id, category path and TypeScript-compatible port type in both directions. The palette
+  and template catalog use it; invalid templates are listed disabled with their diagnostics.
 - Document validation is configured through one per-rule `WorkflowEditorValidationPolicy`
   (`allowCycles`, `allowDanglingEdges`, `allowSelfEdges`, `unknownPortBehavior`) with the presets
   `workflowEditorValidationPolicies.strict` (the default), `draft`, `import` and `execution`.

@@ -71,8 +71,8 @@ import {
 } from "./react";
 import { formatShortcutLabel } from "./shortcut-label";
 import {
-  analyzeWorkflowEditorPortTypes,
   defaultWorkflowEditorNodeTemplates,
+  createWorkflowEditorNodeTemplateRegistry,
   normalizeWorkflowEditorSelection,
   repairWorkflowEditorDocument,
   resolveWorkflowEditorDocumentTypes,
@@ -82,6 +82,7 @@ import {
   type WorkflowEditorDocument,
   type WorkflowEditorDocumentDiagnostic,
   type WorkflowEditorNodeTemplate,
+  type WorkflowEditorNodeTemplateRegistry,
   type WorkflowEditorNode,
   type WorkflowEditorSelectionState,
   type WorkflowEditorTypeDefinition,
@@ -158,6 +159,8 @@ export type WorkflowEditorCatalogController<
   settingsFields: readonly WorkflowEditorSettingsField<TAppSettings>[];
   typeDefinitions: readonly WorkflowEditorTypeDefinition[];
   nodeTemplates: readonly WorkflowEditorNodeTemplate<TTemplateData>[];
+  /** Validation and lookups for `nodeTemplates`, shared with the palette. */
+  nodeTemplateRegistry: WorkflowEditorNodeTemplateRegistry<TTemplateData>;
   writable: {
     settings: boolean;
     typeDefinitions: boolean;
@@ -471,6 +474,9 @@ function createWorkflowEditorCatalogController<
     settingsFields,
     typeDefinitions,
     nodeTemplates,
+    nodeTemplateRegistry: createWorkflowEditorNodeTemplateRegistry(nodeTemplates, {
+      typeDefinitions,
+    }),
     writable: {
       settings: Boolean(onSettingsChange),
       typeDefinitions: Boolean(onTypeDefinitionsChange),
@@ -2581,9 +2587,26 @@ export function WorkflowEditorNodeTemplatesPanel<
             onClick={() => setSelectedId(template.id)}
           >
             {template.label}
+            {controller.catalog.nodeTemplateRegistry.getEntry(template)?.valid === false ? (
+              <Badge variant="outline" className="ml-auto text-destructive">
+                Invalid
+              </Badge>
+            ) : null}
           </Button>
         ))}
       </div>
+      {selected && controller.catalog.nodeTemplateRegistry.getEntry(selected)?.valid === false ? (
+        <ul
+          aria-label="Template problems"
+          className="list-disc rounded-md border border-destructive/40 bg-destructive/5 py-1.5 pl-6 pr-2 text-xs text-destructive"
+        >
+          {controller.catalog.nodeTemplateRegistry
+            .getEntry(selected)!
+            .diagnostics.map((diagnostic) => (
+              <li key={`${diagnostic.code}:${diagnostic.path}`}>{diagnostic.message}</li>
+            ))}
+        </ul>
+      ) : null}
       {selected ? (
         <WorkflowEditorNodeTemplateForm
           key={selected.id}
@@ -2854,12 +2877,20 @@ function WorkflowEditorNodeTemplateForm<
           ? undefined
           : (composition.value as WorkflowEditorNodeTemplate<TTemplateData>["composition"]),
     };
-    const validation = validateWorkflowEditorNodeTemplateDraft(
-      controller.catalog.nodeTemplates,
-      controller.catalog.typeDefinitions,
-      template.id,
-      next,
+    const index = controller.catalog.nodeTemplates.indexOf(template);
+    const candidates = controller.catalog.nodeTemplates.map((candidate, candidateIndex) =>
+      candidateIndex === index ? next : candidate,
     );
+    const registry = createWorkflowEditorNodeTemplateRegistry(candidates, {
+      typeDefinitions: controller.catalog.typeDefinitions,
+    });
+    const validation =
+      registry.getEntry(next)?.diagnostics[0]?.message ??
+      registry.diagnostics.find(
+        (diagnostic) =>
+          diagnostic.code === "duplicate-template-id" && diagnostic.templateId === next.id,
+      )?.message ??
+      "";
     if (validation) {
       setError(validation);
       return;
@@ -3135,31 +3166,6 @@ function validateWorkflowEditorTypeDefinitionDraft(
     definitions.map((definition) => (definition.name === originalName ? next : definition)),
   ).findResolutionErrors({ kind: "any" });
   return errors[0] ?? "";
-}
-
-function validateWorkflowEditorNodeTemplateDraft<TTemplateData>(
-  templates: readonly WorkflowEditorNodeTemplate<TTemplateData>[],
-  typeDefinitions: readonly WorkflowEditorTypeDefinition[],
-  originalId: string,
-  next: WorkflowEditorNodeTemplate<TTemplateData>,
-) {
-  if (!next.id) {
-    return "Template id is required";
-  }
-
-  if (!next.label) {
-    return "Template label is required";
-  }
-
-  if (templates.some((template) => template.id !== originalId && template.id === next.id)) {
-    return `Duplicate template id: ${next.id}`;
-  }
-
-  const diagnostics = analyzeWorkflowEditorPortTypes(
-    { nodes: [{ ...next, x: 0, y: 0 }], edges: [] },
-    { typeDefinitions },
-  );
-  return diagnostics[0]?.message ?? "";
 }
 
 function selectionStateToSingleSelection<

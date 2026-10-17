@@ -49,83 +49,15 @@ compatibility layer. Cross-document DAG validation for nested references remains
 
 ## Port Cardinality Rules
 
-### Status
-
-The first cardinality/compiler-diagnostic slice shipped in PR #34. Keep the remaining work focused
-on any still-missing repair-mode and UI behavior rather than introducing a second cardinality model.
-
-### Problem
-
-Every compatible edge is currently accepted unless it duplicates an existing edge or creates an
-invalid graph. Hosts need ports that accept only one edge, many edges, or a bounded number of
-connections.
-
-### Proposed API
-
-Extend `WorkflowEditorPort`:
-
-```ts
-type WorkflowEditorPortCardinality = "single" | "many" | { min?: number; max?: number };
-
-type WorkflowEditorPort = {
-  cardinality?: WorkflowEditorPortCardinality;
-};
-```
-
-### Non-Goals
-
-- No automatic edge prioritization.
-- No runtime data fan-in/fan-out execution semantics.
-
-### Acceptance Tests
-
-- A `single` input rejects a second incoming edge.
-- A `many` input preserves current behavior.
-- A bounded port rejects edges past `max`.
-- Repair mode removes edges that violate cardinality only when explicitly configured to repair.
-- UI connection previews surface a cardinality-specific invalid reason.
-
-### Migration Notes
-
-Ports without `cardinality` keep current behavior.
+Delivered by #15 ([Decision Atlas 1.10 and 6.2](DECISION-ATLAS.md)); see
+[`port-cardinality.md`](port-cardinality.md).
 
 ## Typed Node Template Registries
 
-### Problem
-
-Node templates are editable as data, but there is no first-class registry validation surface for
-template ids, port ids, categories, type references, composition payloads, or host metadata.
-
-### Proposed API
-
-Add a headless registry helper:
-
-```ts
-type WorkflowEditorNodeTemplateRegistry<TData = Record<string, unknown>> = {
-  templates: readonly WorkflowEditorNodeTemplate<TData>[];
-  diagnostics: WorkflowEditorNodeTemplateDiagnostic[];
-};
-
-function createWorkflowEditorNodeTemplateRegistry(...): WorkflowEditorNodeTemplateRegistry;
-function validateWorkflowEditorNodeTemplates(...): WorkflowEditorNodeTemplateDiagnostic[];
-```
-
-### Non-Goals
-
-- No schema language beyond the existing TypeScript-like port type objects.
-- No remote template loading protocol.
-
-### Acceptance Tests
-
-- Duplicate template ids are reported.
-- Duplicate port ids inside a template are reported.
-- Missing type refs are reported with paths.
-- Invalid composition documents are reported without mutating input.
-- Editor catalog panels reuse the same validator.
-
-### Migration Notes
-
-Existing `nodeTemplates` arrays remain accepted. Registry helpers are additive.
+Delivered by #16 ([Decision Atlas 5.18](DECISION-ATLAS.md)): `createWorkflowEditorNodeTemplateRegistry`
+derives validation and lookups from the host's template array; the palette and catalog use it and
+show invalid templates disabled with their diagnostics. Published template revisions (#65) extend
+this registry when needed.
 
 ## Keyboard-Only Graph Editing Accessibility
 
