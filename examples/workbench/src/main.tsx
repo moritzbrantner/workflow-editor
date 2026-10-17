@@ -215,6 +215,16 @@ const domainTemplates = [
     inputs: [{ id: "request", label: "Request", type: objectType }],
     outputs: [{ id: "approved", label: "Approved", type: booleanType }],
   },
+  {
+    // Deliberately invalid host template: its port type is not declared, so the palette lists it
+    // disabled with the registry diagnostic instead of hiding it or creating a broken node.
+    id: "template-legacy-contact-sync",
+    label: "Legacy contact sync",
+    description: "Imports contacts from a retired CRM.",
+    kind: "crm.legacy.sync",
+    category: "CRM",
+    inputs: [{ id: "contact", label: "Contact", type: { kind: "ref", name: "LegacyContact" } }],
+  },
 ] satisfies WorkflowEditorNodeTemplate<ExampleNodeData>[];
 
 function newtonSquareRootBody(): WorkflowEditorNodeComposition<ExampleNodeData> {

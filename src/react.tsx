@@ -71,6 +71,7 @@ import {
   toUiWorkflowBuilderNodes,
 } from "./react/workflow-builder-adapters";
 import { WorkflowNode } from "./react/workflow-node";
+import { WorkflowWorkbenchInvalidPaletteTemplate } from "./react/invalid-palette-template";
 import { DefaultWorkflowInspector } from "./react/default-workflow-inspector";
 import {
   createWorkflowWorkbenchPaletteCategoryGroups,
@@ -90,6 +91,8 @@ import {
 } from "./react/overlay-position";
 
 import {
+  createWorkflowEditorNodeTemplateRegistry,
+  type WorkflowEditorNodeTemplateRegistry,
   connectWorkflowEditorNodes,
   copyWorkflowEditorSelection,
   createWorkflowEditorGroup,
@@ -263,6 +266,8 @@ export type WorkflowWorkbenchController<
   palette: {
     groups: Array<WorkflowWorkbenchPaletteCategoryGroup<TTemplateData>>;
     items: ReadonlyArray<WorkflowWorkbenchPaletteItem<TTemplateData>>;
+    /** Validation and lookups for `items`; invalid templates render disabled. */
+    registry: WorkflowEditorNodeTemplateRegistry<TTemplateData>;
     filteredItems: ReadonlyArray<WorkflowWorkbenchPaletteItem<TTemplateData>>;
     minimized: boolean;
     placement: WorkflowWorkbenchPanelPlacement;
@@ -749,6 +754,10 @@ export function WorkflowWorkbench<
       return sourceGroupId && sourceGroupId === targetGroupId ? [edge.id] : [];
     });
   }, [document.edges, minimizedGroups]);
+  const templateRegistry = useMemo(
+    () => createWorkflowEditorNodeTemplateRegistry(nodeTemplates, { typeDefinitions }),
+    [nodeTemplates, typeDefinitions],
+  );
   const filteredNodeTemplates = useMemo(
     () => filterWorkflowWorkbenchPaletteTemplates(nodeTemplates, paletteSearchValue),
     [nodeTemplates, paletteSearchValue],
@@ -1254,7 +1263,8 @@ export function WorkflowWorkbench<
     template: WorkflowWorkbenchPaletteItem<TTemplateData>,
     position?: WorkflowEditorPoint,
   ) => {
-    if (readOnly) {
+    // Invalid templates are listed disabled with their diagnostics and never create nodes.
+    if (readOnly || templateRegistry.getEntry(template)?.valid === false) {
       return;
     }
 
@@ -2137,8 +2147,11 @@ export function WorkflowWorkbench<
     completeOverlayDrag(event, inspectorDragRef, setInspectorDragging);
   };
 
-  const renderPaletteTemplate = (template: WorkflowWorkbenchPaletteItem<TTemplateData>) =>
-    renderNodeTemplate ? (
+  const renderPaletteTemplate = (template: WorkflowWorkbenchPaletteItem<TTemplateData>) => {
+    const entry = templateRegistry.getEntry(template);
+    return entry && !entry.valid ? (
+      <WorkflowWorkbenchInvalidPaletteTemplate key={`invalid-${entry.index}`} entry={entry} />
+    ) : renderNodeTemplate ? (
       <Button
         key={template.id}
         type="button"
@@ -2167,6 +2180,7 @@ export function WorkflowWorkbench<
         onNodeSelect={readOnly ? undefined : () => addTemplateNode(template)}
       />
     );
+  };
 
   const renderPaletteCategoryGroup = (
     group: WorkflowWorkbenchPaletteCategoryGroup<TTemplateData>,
@@ -2417,6 +2431,7 @@ export function WorkflowWorkbench<
     palette: {
       groups: paletteGroups,
       items: nodeTemplates,
+      registry: templateRegistry,
       filteredItems: filteredNodeTemplates,
       minimized: effectivePaletteMinimized,
       placement: effectivePaletteCorner,
@@ -3318,6 +3333,10 @@ export function useWorkflowWorkbenchController<
     const edge = documentContext.edgeById.get(id);
     return edge ? [edge] : [];
   });
+  const templateRegistry = useMemo(
+    () => createWorkflowEditorNodeTemplateRegistry(nodeTemplates, { typeDefinitions }),
+    [nodeTemplates, typeDefinitions],
+  );
   const filteredItems = useMemo(
     () => filterWorkflowWorkbenchPaletteTemplates(nodeTemplates, paletteSearchValue),
     [nodeTemplates, paletteSearchValue],
@@ -3405,7 +3424,8 @@ export function useWorkflowWorkbenchController<
     template: WorkflowWorkbenchPaletteItem<TTemplateData>,
     position?: WorkflowEditorPoint,
   ) => {
-    if (readOnly) {
+    // Invalid templates are listed disabled with their diagnostics and never create nodes.
+    if (readOnly || templateRegistry.getEntry(template)?.valid === false) {
       return;
     }
     const id = createTemplateNodeId(document.nodes, template.id);
@@ -3910,6 +3930,7 @@ export function useWorkflowWorkbenchController<
     palette: {
       groups,
       items: nodeTemplates,
+      registry: templateRegistry,
       filteredItems,
       minimized: paletteMinimized,
       placement: palettePlacement,

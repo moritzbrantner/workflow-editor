@@ -1,6 +1,7 @@
 import { Badge, Button, SearchField } from "@moritzbrantner/ui";
 
 import type { WorkflowWorkbenchController } from "../react";
+import { WorkflowWorkbenchInvalidPaletteTemplate } from "./invalid-palette-template";
 import type { WorkflowWorkbenchPaletteCategoryGroup } from "./palette-model";
 
 export function WorkflowWorkbenchPalette<
@@ -63,18 +64,23 @@ function WorkflowWorkbenchPaletteGroup<
         ) : null}
       </div>
       <div className="grid gap-2">
-        {group.templates.map((template) => (
-          <Button
-            key={template.id}
-            type="button"
-            variant="ghost"
-            className="h-auto justify-start border border-border bg-background px-3 py-2 text-left"
-            disabled={controller.readOnly}
-            onClick={() => controller.actions.addTemplateNode(template)}
-          >
-            {template.label}
-          </Button>
-        ))}
+        {group.templates.map((template) => {
+          const entry = controller.palette.registry.getEntry(template);
+          return entry && !entry.valid ? (
+            <WorkflowWorkbenchInvalidPaletteTemplate key={`invalid-${entry.index}`} entry={entry} />
+          ) : (
+            <Button
+              key={template.id}
+              type="button"
+              variant="ghost"
+              className="h-auto justify-start border border-border bg-background px-3 py-2 text-left"
+              disabled={controller.readOnly}
+              onClick={() => controller.actions.addTemplateNode(template)}
+            >
+              {template.label}
+            </Button>
+          );
+        })}
       </div>
       {group.children.map((child) => (
         <div key={child.id} className="border-l border-border/60 pl-3">
