@@ -210,3 +210,7 @@ expectAssignable<Parameters<typeof WorkflowEditorDocumentMenu<NodeData, EdgeData
 
 expectAssignable<Error>(new WorkflowEditorDocumentValidationError([]));
 expectError(normalizeWorkflowEditorDocument({ nodes: "not nodes", edges: [] }));
+
+// Decision 6.1 (#14): the validation policy is the only configuration surface.
+expectError(normalizeWorkflowEditorDocument(document, { allowCycles: true }));
+expectError(normalizeWorkflowEditorDocument(document, { mode: "repair" }));
