@@ -287,6 +287,12 @@ For smaller changes, use slots on the existing components:
 - Normalization never repairs. `repairWorkflowEditorDocument(document)` explicitly removes
   dangling, self, unknown-port and cycle-closing edges and returns the removed problems as
   diagnostics.
+- Storage adapters return a `WorkflowEditorLibraryLoadResult` (`loaded`, `empty`,
+  `recoverable-error`, `unsupported-future-version`). Unreadable data keeps its raw payload; the
+  editor opens its defaults, pauses autosave and offers "Download saved data", "Restore backup" and
+  "Discard and start fresh". The local-storage adapter keeps the replaced library as one
+  last-known-good backup and throws `WorkflowEditorStorageError` with codes such as
+  `quota-exceeded` on failed writes.
 - Workflow libraries, editing history and imported workflow JSON files use the `import` policy:
   dangling, self and unknown-port edges stay in the document as warnings, the editor lists them
   under "Document problems" and removes them only through its "Repair document" action. Cycles

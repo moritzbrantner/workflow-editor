@@ -83,12 +83,65 @@ export type WorkflowEditorReferenceDiagnostic = {
   path: string[];
 };
 
+export type WorkflowEditorStorageDiagnosticCode =
+  | "storage-unavailable"
+  | "invalid-json"
+  | "invalid-format"
+  | "invalid-entry"
+  | "unsupported-future-version"
+  | "serialization-failed"
+  | "quota-exceeded"
+  | "write-failed";
+
+export type WorkflowEditorStorageDiagnostic = {
+  code: WorkflowEditorStorageDiagnosticCode;
+  message: string;
+  /** JSON path into the stored payload, when the problem has one. */
+  path?: string;
+};
+
+/**
+ * Outcome of reading a stored library. Unreadable payloads keep their raw text so it can be
+ * exported; nothing is discarded silently. A `migrated` outcome joins when schema version 2 exists.
+ */
+export type WorkflowEditorLibraryLoadResult<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+> =
+  | { status: "loaded"; library: WorkflowEditorLibrary<TNodeData, TEdgeData> }
+  | { status: "empty" }
+  | {
+      status: "recoverable-error";
+      raw: string;
+      diagnostics: WorkflowEditorStorageDiagnostic[];
+    }
+  | {
+      status: "unsupported-future-version";
+      raw: string;
+      version: number;
+      diagnostics: WorkflowEditorStorageDiagnostic[];
+    };
+
+/** A failed library write with a structured diagnostic. */
+export class WorkflowEditorStorageError extends Error {
+  override name = "WorkflowEditorStorageError" as const;
+  diagnostic: WorkflowEditorStorageDiagnostic;
+
+  constructor(diagnostic: WorkflowEditorStorageDiagnostic, options?: { cause?: unknown }) {
+    super(diagnostic.message, options);
+    this.diagnostic = diagnostic;
+  }
+}
+
 export type WorkflowEditorStorageAdapter<
   TNodeData = Record<string, unknown>,
   TEdgeData = Record<string, unknown>,
 > = {
-  loadLibrary(): Promise<WorkflowEditorLibrary<TNodeData, TEdgeData> | null>;
+  loadLibrary(): Promise<WorkflowEditorLibraryLoadResult<TNodeData, TEdgeData>>;
+  /** Replaces the stored library; throws `WorkflowEditorStorageError` on failure. */
   saveLibrary(library: WorkflowEditorLibrary<TNodeData, TEdgeData>): Promise<void>;
+  /** The last-known-good library kept before the most recent replacement, if supported. */
+  loadBackup?(): Promise<WorkflowEditorLibraryLoadResult<TNodeData, TEdgeData>>;
 };
 
 export type WorkflowEditorEntryInput<
@@ -558,6 +611,24 @@ export function downloadWorkflowEditorDocumentJson<
   URL.revokeObjectURL(url);
 }
 
+/** Downloads raw stored library data (for example an unreadable payload) for manual recovery. */
+export function downloadWorkflowEditorStoredData(
+  raw: string,
+  filename = "workflow-library-recovery.json",
+) {
+  if (typeof window === "undefined" || typeof globalThis.document === "undefined") {
+    return;
+  }
+  const url = URL.createObjectURL(new Blob([raw], { type: "application/json" }));
+  const anchor = globalThis.document.createElement("a");
+  anchor.href = url;
+  anchor.download = ensureJsonFilename(filename);
+  globalThis.document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
 export async function readWorkflowEditorDocumentFile<
   TNodeData = Record<string, unknown>,
   TEdgeData = Record<string, unknown>,
@@ -571,29 +642,175 @@ export function createLocalStorageWorkflowEditorStorage<
 >(
   storageKey = defaultWorkflowEditorStorageKey,
 ): WorkflowEditorStorageAdapter<TNodeData, TEdgeData> {
+  const backupKey = `${storageKey}.backup`;
+  const read = (key: string): WorkflowEditorLibraryLoadResult<TNodeData, TEdgeData> => {
+    if (typeof window === "undefined") {
+      return { status: "empty" };
+    }
+    let raw: string | null;
+    try {
+      raw = window.localStorage.getItem(key);
+    } catch (error) {
+      return {
+        status: "recoverable-error",
+        raw: "",
+        diagnostics: [
+          {
+            code: "storage-unavailable",
+            message: `Browser storage is unavailable: ${errorMessage(error)}`,
+          },
+        ],
+      };
+    }
+    return raw === null ? { status: "empty" } : parseWorkflowEditorLibrary(raw);
+  };
+
   return {
     async loadLibrary() {
-      if (typeof window === "undefined") {
-        return null;
-      }
-
-      try {
-        const raw = window.localStorage.getItem(storageKey);
-        if (!raw) {
-          return null;
-        }
-        return restoreWorkflowEditorLibrary(JSON.parse(raw));
-      } catch {
-        return null;
-      }
+      return read(storageKey);
+    },
+    async loadBackup() {
+      return read(backupKey);
     },
     async saveLibrary(library) {
       if (typeof window === "undefined") {
         return;
       }
-
-      window.localStorage.setItem(storageKey, JSON.stringify(createWorkflowEditorLibrary(library)));
+      let json: string;
+      try {
+        json = JSON.stringify(createWorkflowEditorLibrary(library));
+      } catch (error) {
+        throw new WorkflowEditorStorageError(
+          {
+            code: "serialization-failed",
+            message: `Workflow library could not be serialized: ${errorMessage(error)}`,
+          },
+          { cause: error },
+        );
+      }
+      try {
+        // Keep the replaced library as the last-known-good backup; never back up unreadable data.
+        const current = window.localStorage.getItem(storageKey);
+        if (
+          current !== null &&
+          current !== json &&
+          parseWorkflowEditorLibrary(current).status === "loaded"
+        ) {
+          window.localStorage.setItem(backupKey, current);
+        }
+        window.localStorage.setItem(storageKey, json);
+      } catch (error) {
+        // DOMException is not an Error subclass in every environment; match by name.
+        const name =
+          typeof error === "object" && error !== null && "name" in error ? String(error.name) : "";
+        throw new WorkflowEditorStorageError(
+          name === "QuotaExceededError"
+            ? {
+                code: "quota-exceeded",
+                message: "Browser storage is full; the library was not saved.",
+              }
+            : name === "SecurityError"
+              ? {
+                  code: "storage-unavailable",
+                  message: "Browser storage is not permitted; the library was not saved.",
+                }
+              : {
+                  code: "write-failed",
+                  message: `Workflow library could not be saved: ${errorMessage(error)}`,
+                },
+          { cause: error },
+        );
+      }
     },
+  };
+}
+
+/** Parses a stored library payload into a load outcome without discarding unreadable data. */
+export function parseWorkflowEditorLibrary<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+>(raw: string): WorkflowEditorLibraryLoadResult<TNodeData, TEdgeData> {
+  const recoverable = (
+    diagnostics: WorkflowEditorStorageDiagnostic[],
+  ): WorkflowEditorLibraryLoadResult<TNodeData, TEdgeData> => ({
+    status: "recoverable-error",
+    raw,
+    diagnostics,
+  });
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch (error) {
+    return recoverable([
+      { code: "invalid-json", message: `Saved library is not valid JSON: ${errorMessage(error)}` },
+    ]);
+  }
+  if (!isRecord(value) || value.format !== workflowEditorLibraryFormat) {
+    return recoverable([
+      {
+        code: "invalid-format",
+        message: "Saved data is not a workflow library.",
+        path: "$.format",
+      },
+    ]);
+  }
+  if (typeof value.version === "number" && value.version > workflowEditorLibraryVersion) {
+    return {
+      status: "unsupported-future-version",
+      raw,
+      version: value.version,
+      diagnostics: [
+        {
+          code: "unsupported-future-version",
+          message: `Saved library uses version ${value.version}; this editor supports version ${workflowEditorLibraryVersion}.`,
+          path: "$.version",
+        },
+      ],
+    };
+  }
+  // Migration hook: older versions are migrated here once a real version 2 exists.
+  if (value.version !== workflowEditorLibraryVersion) {
+    return recoverable([
+      {
+        code: "invalid-format",
+        message: `Saved library has an unknown version ${String(value.version)}.`,
+        path: "$.version",
+      },
+    ]);
+  }
+  if (!Array.isArray(value.documents)) {
+    return recoverable([
+      {
+        code: "invalid-format",
+        message: "Saved library has no document list.",
+        path: "$.documents",
+      },
+    ]);
+  }
+  const diagnostics: WorkflowEditorStorageDiagnostic[] = [];
+  const documents = value.documents.flatMap((entry, index) => {
+    const restored = restoreWorkflowEditorEntry<TNodeData, TEdgeData>(entry);
+    if (!restored) {
+      diagnostics.push({
+        code: "invalid-entry",
+        message: `Saved document ${
+          isRecord(entry) && typeof entry.name === "string" ? `"${entry.name}"` : index + 1
+        } could not be read.`,
+        path: `$.documents[${index}]`,
+      });
+      return [];
+    }
+    return [restored];
+  });
+  if (diagnostics.length > 0) {
+    return recoverable(diagnostics);
+  }
+  return {
+    status: "loaded",
+    library: createWorkflowEditorLibrary({
+      activeDocumentId: typeof value.activeDocumentId === "string" ? value.activeDocumentId : null,
+      documents,
+    }),
   };
 }
 
@@ -602,13 +819,23 @@ export async function loadWorkflowEditorLibrary<
   TEdgeData = Record<string, unknown>,
 >(
   storage: WorkflowEditorStorageAdapter<TNodeData, TEdgeData>,
-  fallback: WorkflowEditorLibrary<TNodeData, TEdgeData> = createWorkflowEditorLibrary(),
-): Promise<WorkflowEditorLibrary<TNodeData, TEdgeData>> {
+): Promise<WorkflowEditorLibraryLoadResult<TNodeData, TEdgeData>> {
   try {
-    const library = await storage.loadLibrary();
-    return library ? createWorkflowEditorLibrary(library) : fallback;
-  } catch {
-    return fallback;
+    const result = await storage.loadLibrary();
+    return result.status === "loaded"
+      ? { status: "loaded", library: createWorkflowEditorLibrary(result.library) }
+      : result;
+  } catch (error) {
+    return {
+      status: "recoverable-error",
+      raw: "",
+      diagnostics: [
+        {
+          code: "storage-unavailable",
+          message: `Workflow library could not be read: ${errorMessage(error)}`,
+        },
+      ],
+    };
   }
 }
 
@@ -620,6 +847,10 @@ export async function saveWorkflowEditorLibrary<
   library: WorkflowEditorLibrary<TNodeData, TEdgeData>,
 ): Promise<void> {
   await storage.saveLibrary(createWorkflowEditorLibrary(library));
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function normalizeWorkflowEditorEntry<
@@ -635,35 +866,6 @@ function normalizeWorkflowEditorEntry<
     document: normalizeWorkflowEditorDocument(entry.document, libraryValidation).document,
     versions: compactSavedVersions(entry.versions ?? [], defaultWorkflowEditorMaxVersions),
   };
-}
-
-function restoreWorkflowEditorLibrary<
-  TNodeData = Record<string, unknown>,
-  TEdgeData = Record<string, unknown>,
->(value: unknown): WorkflowEditorLibrary<TNodeData, TEdgeData> | null {
-  if (!isRecord(value)) {
-    return null;
-  }
-
-  if (
-    value.format !== workflowEditorLibraryFormat ||
-    value.version !== workflowEditorLibraryVersion
-  ) {
-    return null;
-  }
-
-  if (!Array.isArray(value.documents)) {
-    return null;
-  }
-
-  const documents = value.documents
-    .map((entry) => restoreWorkflowEditorEntry<TNodeData, TEdgeData>(entry))
-    .filter((entry): entry is WorkflowEditorLibraryEntry<TNodeData, TEdgeData> => entry !== null);
-
-  return createWorkflowEditorLibrary({
-    activeDocumentId: typeof value.activeDocumentId === "string" ? value.activeDocumentId : null,
-    documents,
-  });
 }
 
 function restoreWorkflowEditorEntry<

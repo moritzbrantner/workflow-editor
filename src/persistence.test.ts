@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 
 import {
   WorkflowEditorDocumentValidationError,
@@ -17,6 +17,7 @@ import {
   listWorkflowEditorDocumentReferenceOptions,
   loadWorkflowEditorLibrary,
   parseWorkflowEditorDocumentFile,
+  parseWorkflowEditorLibrary,
   removeWorkflowEditorEntry,
   renameWorkflowEditorEntry,
   resolveWorkflowEditorDocumentReference,
@@ -25,6 +26,8 @@ import {
   saveWorkflowEditorLibrary,
   upsertWorkflowEditorEntry,
   workflowEditorDocumentFileVersion,
+  workflowEditorLibraryFormat,
+  workflowEditorLibraryVersion,
 } from "@moritzbrantner/workflow-editor/persistence";
 
 const document: WorkflowEditorDocument = normalizeWorkflowEditorDocument({
@@ -238,7 +241,9 @@ describe("@moritzbrantner/workflow-editor persistence", () => {
     const storage = createLocalStorageWorkflowEditorStorage("workflow-editor-reference-test");
 
     await saveWorkflowEditorLibrary(storage, library);
-    const restored = await loadWorkflowEditorLibrary(storage);
+    const loaded = await loadWorkflowEditorLibrary(storage);
+    if (loaded.status !== "loaded") throw new Error(`unexpected ${loaded.status}`);
+    const restored = loaded.library;
     const parent = restored.documents.find((entry) => entry.id === "parent")!;
     const childReference = parent.document.nodes.find((node) => node.id === "nested")!.workflowRef;
 
@@ -288,9 +293,10 @@ describe("@moritzbrantner/workflow-editor persistence", () => {
     );
   });
 
-  test("loads and saves localStorage libraries with corrupt storage fallback", async () => {
+  test("loads and saves localStorage libraries and keeps unreadable data recoverable", async () => {
     window.localStorage.clear();
-    const storage = createLocalStorageWorkflowEditorStorage("workflow-editor-test");
+    const key = "workflow-editor-test";
+    const storage = createLocalStorageWorkflowEditorStorage(key);
     const library = createWorkflowEditorLibrary({
       documents: [
         {
@@ -303,14 +309,80 @@ describe("@moritzbrantner/workflow-editor persistence", () => {
       activeDocumentId: "demo",
     });
 
+    await expect(loadWorkflowEditorLibrary(storage)).resolves.toEqual({ status: "empty" });
     await saveWorkflowEditorLibrary(storage, library);
     await expect(loadWorkflowEditorLibrary(storage)).resolves.toMatchObject({
-      activeDocumentId: "demo",
+      status: "loaded",
+      library: { activeDocumentId: "demo" },
     });
+    // The first save had nothing to back up.
+    await expect(storage.loadBackup!()).resolves.toEqual({ status: "empty" });
 
-    window.localStorage.setItem("workflow-editor-test", "{");
-    const fallback = await loadWorkflowEditorLibrary(storage);
-    expect(fallback.documents).toHaveLength(1);
-    expect(activeWorkflowEditorEntry(fallback)?.name).toBe("Untitled Workflow");
+    // Replacing a readable library keeps the previous one as last-known-good backup.
+    const renamed = renameWorkflowEditorEntry(library, "demo", "Renamed");
+    await saveWorkflowEditorLibrary(storage, renamed);
+    const backup = await storage.loadBackup!();
+    expect(backup.status === "loaded" && activeWorkflowEditorEntry(backup.library)?.name).toBe(
+      "Stored",
+    );
+
+    // Corrupt data is reported with its raw payload, never replaced by an empty library.
+    window.localStorage.setItem(key, "{");
+    await expect(loadWorkflowEditorLibrary(storage)).resolves.toMatchObject({
+      status: "recoverable-error",
+      raw: "{",
+      diagnostics: [expect.objectContaining({ code: "invalid-json" })],
+    });
+    // Saving over unreadable data does not overwrite the last-known-good backup.
+    await saveWorkflowEditorLibrary(storage, library);
+    const kept = await storage.loadBackup!();
+    expect(kept.status === "loaded" && activeWorkflowEditorEntry(kept.library)?.name).toBe(
+      "Stored",
+    );
+  });
+
+  test("classifies future versions, unknown formats and unreadable entries", () => {
+    const future = JSON.stringify({
+      format: workflowEditorLibraryFormat,
+      version: workflowEditorLibraryVersion + 1,
+      documents: [],
+    });
+    expect(parseWorkflowEditorLibrary(future)).toMatchObject({
+      status: "unsupported-future-version",
+      raw: future,
+      version: workflowEditorLibraryVersion + 1,
+    });
+    expect(parseWorkflowEditorLibrary('{"format":"other"}')).toMatchObject({
+      status: "recoverable-error",
+      diagnostics: [expect.objectContaining({ code: "invalid-format" })],
+    });
+    const badEntry = JSON.stringify({
+      format: workflowEditorLibraryFormat,
+      version: workflowEditorLibraryVersion,
+      activeDocumentId: null,
+      documents: [{ id: "broken", name: "Broken", document: { nodes: "nope" } }],
+    });
+    expect(parseWorkflowEditorLibrary(badEntry)).toMatchObject({
+      status: "recoverable-error",
+      raw: badEntry,
+      diagnostics: [expect.objectContaining({ code: "invalid-entry", path: "$.documents[0]" })],
+    });
+  });
+
+  test("reports structured write failures", async () => {
+    const storage = createLocalStorageWorkflowEditorStorage("workflow-editor-quota-test");
+    const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("full", "QuotaExceededError");
+    });
+    try {
+      await expect(
+        saveWorkflowEditorLibrary(storage, createWorkflowEditorLibrary()),
+      ).rejects.toMatchObject({
+        name: "WorkflowEditorStorageError",
+        diagnostic: { code: "quota-exceeded" },
+      });
+    } finally {
+      setItem.mockRestore();
+    }
   });
 });

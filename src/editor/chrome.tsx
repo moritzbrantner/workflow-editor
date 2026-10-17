@@ -25,6 +25,7 @@ export function WorkflowEditorSaveStateBadge<
         {formatSaveState(controller.saveState)}
       </Badge>
       <WorkflowEditorImportErrorAlert controller={controller} />
+      <WorkflowEditorStorageRecoveryAlert controller={controller} />
       <WorkflowEditorDocumentProblems controller={controller} />
     </>
   );
@@ -388,4 +389,79 @@ function formatSaveState(state: WorkflowEditorSaveState) {
     default:
       return state;
   }
+}
+
+/**
+ * Shown when the saved library could not be loaded. The stored data stays untouched until the user
+ * downloads it, restores the last-known-good backup, or explicitly discards it.
+ */
+export function WorkflowEditorStorageRecoveryAlert({
+  controller,
+}: {
+  controller: Pick<WorkflowEditorController, "storageRecovery" | "readOnly"> & {
+    actions: Pick<
+      WorkflowEditorController["actions"],
+      "downloadStoredLibrary" | "discardStoredLibrary" | "restoreBackupLibrary"
+    >;
+  };
+}) {
+  const recovery = controller.storageRecovery;
+  if (!recovery) {
+    return null;
+  }
+
+  return (
+    <section
+      role="alert"
+      aria-label="Saved library could not be loaded"
+      className="flex basis-full flex-col gap-1 rounded-md border border-destructive/40 bg-destructive/5 px-2 py-1.5 text-xs"
+    >
+      <strong className="font-semibold text-destructive">Saved library could not be loaded</strong>
+      <ul className="list-disc pl-4 [overflow-wrap:anywhere]">
+        {recovery.diagnostics.map((diagnostic) => (
+          <li key={`${diagnostic.code}:${diagnostic.path ?? ""}:${diagnostic.message}`}>
+            {diagnostic.message}
+          </li>
+        ))}
+      </ul>
+      <p className="text-muted-foreground">
+        The editor opened its defaults. Your saved data is kept until you choose what to do.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {recovery.raw ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-6 px-2 text-xs"
+            onClick={controller.actions.downloadStoredLibrary}
+          >
+            Download saved data
+          </Button>
+        ) : null}
+        {recovery.backupAvailable && !controller.readOnly ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-6 px-2 text-xs"
+            onClick={() => void controller.actions.restoreBackupLibrary()}
+          >
+            Restore backup
+          </Button>
+        ) : null}
+        {controller.readOnly ? null : (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-6 px-2 text-xs"
+            onClick={controller.actions.discardStoredLibrary}
+          >
+            Discard and start fresh
+          </Button>
+        )}
+      </div>
+    </section>
+  );
 }

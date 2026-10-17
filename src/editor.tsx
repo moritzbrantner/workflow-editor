@@ -1,7 +1,11 @@
 "use client";
 
 import { createWorkflowEditorTypeResolver } from "./core-type-resolver";
-import { WorkflowEditorDocumentProblems, WorkflowEditorImportErrorAlert } from "./editor/chrome";
+import {
+  WorkflowEditorDocumentProblems,
+  WorkflowEditorImportErrorAlert,
+  WorkflowEditorStorageRecoveryAlert,
+} from "./editor/chrome";
 import { NativeWorkflowTypes } from "./editor/native-types";
 import { workflowEditorPortTypeSource } from "./core-type-source";
 
@@ -51,6 +55,9 @@ import {
   resolveWorkflowEditorDocumentReference,
   restoreWorkflowEditorVersion,
   saveWorkflowEditorLibrary,
+  loadWorkflowEditorLibrary,
+  downloadWorkflowEditorStoredData,
+  type WorkflowEditorLibraryLoadResult,
   upsertWorkflowEditorEntry,
   type WorkflowEditorDocumentReferenceOption,
   type WorkflowEditorLibrary,
@@ -94,6 +101,7 @@ export {
   WorkflowEditorDocumentMenu,
   WorkflowEditorDocumentPath,
   WorkflowEditorDocumentProblems,
+  WorkflowEditorStorageRecoveryAlert,
   WorkflowEditorHistoryControls,
   WorkflowEditorImportErrorAlert,
   WorkflowEditorImportExportControls,
@@ -103,6 +111,15 @@ export {
 
 export type WorkflowEditorDocumentPathItem = {
   documentId: string;
+};
+
+/** A stored library that could not be loaded; it stays untouched until the user decides. */
+export type WorkflowEditorStorageRecovery = Exclude<
+  WorkflowEditorLibraryLoadResult,
+  { status: "loaded" } | { status: "empty" }
+> & {
+  /** A readable last-known-good backup, when the storage adapter keeps one. */
+  backupAvailable: boolean;
 };
 
 export type WorkflowEditorSaveState = "loading" | "dirty" | "saving" | "saved" | "error";
@@ -204,6 +221,8 @@ export type WorkflowEditorController<
   documentProblems: WorkflowEditorDocumentDiagnostic[];
   /** Message of the most recent rejected import, cleared by the next import or dismissal. */
   importError: string | null;
+  /** Set while a stored library could not be loaded; autosave is paused until resolved. */
+  storageRecovery: WorkflowEditorStorageRecovery | null;
   library: WorkflowEditorLibrary<TNodeData, TEdgeData>;
   nameDraft: string;
   readOnly: boolean;
@@ -225,6 +244,12 @@ export type WorkflowEditorController<
     renameDocument: () => void;
     /** Explicitly removes the edges listed in `documentProblems`, as one undoable edit. */
     repairDocument: () => void;
+    /** Downloads the unreadable stored library for manual recovery. */
+    downloadStoredLibrary: () => void;
+    /** Drops the unreadable stored library: the in-memory library is saved over it. */
+    discardStoredLibrary: () => void;
+    /** Opens the last-known-good backup and saves it over the unreadable library. */
+    restoreBackupLibrary: () => Promise<void>;
     restoreVersion: () => void;
     saveVersion: () => void;
     selectDocument: (documentId: string) => void;
@@ -646,6 +671,9 @@ export function WorkflowEditor<
   const [library, setLibrary] =
     useState<WorkflowEditorLibrary<TNodeData, TEdgeData>>(fallbackLibrary);
   const [loaded, setLoaded] = useState(false);
+  const [storageRecovery, setStorageRecovery] = useState<WorkflowEditorStorageRecovery | null>(
+    null,
+  );
   const [saveState, setSaveState] = useState<SaveState>("loading");
   const [importError, setImportError] = useState<string | null>(null);
   const [selection, setSelection] = useState<WorkflowEditorSelectionState>(
@@ -688,15 +716,33 @@ export function WorkflowEditor<
     setLoaded(false);
     setSaveState("loading");
 
-    storageAdapter
-      .loadLibrary()
-      .then((storedLibrary) => {
+    loadWorkflowEditorLibrary(storageAdapter)
+      .then((result) => {
         if (canceled) {
           return;
         }
-        const nextLibrary = storedLibrary
-          ? createWorkflowEditorLibrary(storedLibrary)
-          : fallbackLibrary;
+        // Unreadable stored data is kept untouched; the editor opens its defaults in memory.
+        if (result.status === "loaded" || result.status === "empty") {
+          setStorageRecovery(null);
+        } else {
+          setStorageRecovery({ ...result, backupAvailable: false });
+          onError?.(
+            new Error(
+              result.diagnostics[0]?.message ?? "Saved workflow library could not be loaded",
+            ),
+          );
+          void storageAdapter
+            .loadBackup?.()
+            .then((backup) => {
+              if (!canceled && backup.status === "loaded") {
+                setStorageRecovery((current) =>
+                  current ? { ...current, backupAvailable: true } : current,
+                );
+              }
+            })
+            .catch(() => {});
+        }
+        const nextLibrary = result.status === "loaded" ? result.library : fallbackLibrary;
         setLibrary(nextLibrary);
         const nextEntry = activeWorkflowEditorEntry(nextLibrary);
         setDocumentPath(nextEntry ? [{ documentId: nextEntry.id }] : []);
@@ -734,7 +780,8 @@ export function WorkflowEditor<
   }, [fallbackLibrary, onError, storageAdapter]);
 
   useEffect(() => {
-    if (!loaded || readOnly) {
+    // While a stored library awaits recovery, nothing overwrites it.
+    if (!loaded || readOnly || storageRecovery) {
       return;
     }
 
@@ -757,7 +804,7 @@ export function WorkflowEditor<
     return () => {
       canceled = true;
     };
-  }, [library, loaded, onError, onLibraryChange, readOnly, storageAdapter]);
+  }, [library, loaded, onError, onLibraryChange, readOnly, storageAdapter, storageRecovery]);
 
   useEffect(() => {
     setNameDraft(activeEntry?.name ?? "Untitled Workflow");
@@ -799,6 +846,31 @@ export function WorkflowEditor<
   const updateLibrary = (nextLibrary: WorkflowEditorLibrary<TNodeData, TEdgeData>) => {
     setSaveState("dirty");
     setLibrary(nextLibrary);
+  };
+
+  const downloadStoredLibrary = () => {
+    if (storageRecovery) {
+      downloadWorkflowEditorStoredData(storageRecovery.raw);
+    }
+  };
+  const discardStoredLibrary = () => {
+    setStorageRecovery(null);
+    setSaveState("dirty");
+  };
+  const restoreBackupLibrary = async () => {
+    const backup = await storageAdapter.loadBackup?.();
+    if (backup?.status !== "loaded") {
+      onError?.(new Error("No readable backup of the workflow library is available"));
+      return;
+    }
+    const nextEntry = activeWorkflowEditorEntry(backup.library);
+    setLibrary(backup.library);
+    setDocumentPath(nextEntry ? [{ documentId: nextEntry.id }] : []);
+    setHistoryByDocumentId(
+      nextEntry ? { [nextEntry.id]: createWorkflowEditorHistory(nextEntry.document) } : {},
+    );
+    setStorageRecovery(null);
+    setSaveState("dirty");
   };
 
   useEffect(() => {
@@ -1161,6 +1233,7 @@ export function WorkflowEditor<
     documentProblems,
     history,
     importError,
+    storageRecovery,
     library,
     nameDraft,
     readOnly,
@@ -1180,6 +1253,9 @@ export function WorkflowEditor<
       openWorkflowReference,
       redo,
       renameDocument,
+      downloadStoredLibrary,
+      discardStoredLibrary,
+      restoreBackupLibrary,
       repairDocument: () => updateDocument(repairWorkflowEditorDocument(activeDocument).document),
       restoreVersion,
       saveVersion,
@@ -1421,6 +1497,7 @@ export function WorkflowEditor<
             </Badge>
           </div>
           <WorkflowEditorImportErrorAlert controller={editorController} />
+          <WorkflowEditorStorageRecoveryAlert controller={editorController} />
           <WorkflowEditorDocumentProblems controller={editorController} />
         </WorkbenchToolbar>
       ) : (
@@ -1589,6 +1666,7 @@ export function WorkflowEditor<
               </Button>
             </div>
             <WorkflowEditorImportErrorAlert controller={editorController} />
+            <WorkflowEditorStorageRecoveryAlert controller={editorController} />
             <WorkflowEditorDocumentProblems controller={editorController} />
           </WorkbenchToolbar>
         </>
@@ -1759,6 +1837,9 @@ export function useWorkflowEditorController<
   const [library, setLibrary] =
     useState<WorkflowEditorLibrary<TNodeData, TEdgeData>>(fallbackLibrary);
   const [loaded, setLoaded] = useState(false);
+  const [storageRecovery, setStorageRecovery] = useState<WorkflowEditorStorageRecovery | null>(
+    null,
+  );
   const [saveState, setSaveState] = useState<SaveState>("loading");
   const [importError, setImportError] = useState<string | null>(null);
   const [selection, setSelection] = useState<WorkflowEditorSelectionState>(
@@ -1813,19 +1894,62 @@ export function useWorkflowEditorController<
     setLibrary(nextLibrary);
   };
 
+  const downloadStoredLibrary = () => {
+    if (storageRecovery) {
+      downloadWorkflowEditorStoredData(storageRecovery.raw);
+    }
+  };
+  const discardStoredLibrary = () => {
+    setStorageRecovery(null);
+    setSaveState("dirty");
+  };
+  const restoreBackupLibrary = async () => {
+    const backup = await storageAdapter.loadBackup?.();
+    if (backup?.status !== "loaded") {
+      onError?.(new Error("No readable backup of the workflow library is available"));
+      return;
+    }
+    const nextEntry = activeWorkflowEditorEntry(backup.library);
+    setLibrary(backup.library);
+    setDocumentPath(nextEntry ? [{ documentId: nextEntry.id }] : []);
+    setHistoryByDocumentId(
+      nextEntry ? { [nextEntry.id]: createWorkflowEditorHistory(nextEntry.document) } : {},
+    );
+    setStorageRecovery(null);
+    setSaveState("dirty");
+  };
+
   useEffect(() => {
     let canceled = false;
     setLoaded(false);
     setSaveState("loading");
-    storageAdapter
-      .loadLibrary()
-      .then((storedLibrary) => {
+    loadWorkflowEditorLibrary(storageAdapter)
+      .then((result) => {
         if (canceled) {
           return;
         }
-        const nextLibrary = storedLibrary
-          ? createWorkflowEditorLibrary(storedLibrary)
-          : fallbackLibrary;
+        // Unreadable stored data is kept untouched; the editor opens its defaults in memory.
+        if (result.status === "loaded" || result.status === "empty") {
+          setStorageRecovery(null);
+        } else {
+          setStorageRecovery({ ...result, backupAvailable: false });
+          onError?.(
+            new Error(
+              result.diagnostics[0]?.message ?? "Saved workflow library could not be loaded",
+            ),
+          );
+          void storageAdapter
+            .loadBackup?.()
+            .then((backup) => {
+              if (!canceled && backup.status === "loaded") {
+                setStorageRecovery((current) =>
+                  current ? { ...current, backupAvailable: true } : current,
+                );
+              }
+            })
+            .catch(() => {});
+        }
+        const nextLibrary = result.status === "loaded" ? result.library : fallbackLibrary;
         const nextEntry = activeWorkflowEditorEntry(nextLibrary);
         setLibrary(nextLibrary);
         setDocumentPath(nextEntry ? [{ documentId: nextEntry.id }] : []);
@@ -1860,7 +1984,8 @@ export function useWorkflowEditorController<
   }, [fallbackLibrary, onError, storageAdapter]);
 
   useEffect(() => {
-    if (!loaded || readOnly) {
+    // While a stored library awaits recovery, nothing overwrites it.
+    if (!loaded || readOnly || storageRecovery) {
       return;
     }
     let canceled = false;
@@ -1881,7 +2006,7 @@ export function useWorkflowEditorController<
     return () => {
       canceled = true;
     };
-  }, [library, loaded, onError, onLibraryChange, readOnly, storageAdapter]);
+  }, [library, loaded, onError, onLibraryChange, readOnly, storageAdapter, storageRecovery]);
 
   useEffect(() => {
     setNameDraft(activeEntry?.name ?? "Untitled Workflow");
@@ -2185,6 +2310,7 @@ export function useWorkflowEditorController<
     documentProblems,
     history,
     importError,
+    storageRecovery,
     library,
     nameDraft,
     readOnly,
@@ -2204,6 +2330,9 @@ export function useWorkflowEditorController<
       openWorkflowReference,
       redo,
       renameDocument,
+      downloadStoredLibrary,
+      discardStoredLibrary,
+      restoreBackupLibrary,
       repairDocument: () =>
         updateActiveDocument(repairWorkflowEditorDocument(activeDocument).document),
       restoreVersion,
