@@ -1,5 +1,6 @@
 export {
   normalizeWorkflowEditorDocument,
-  type WorkflowEditorDocumentNormalizationMode,
+  repairWorkflowEditorDocument,
   type WorkflowEditorDocumentNormalizationOptions,
+  type WorkflowEditorDocumentNormalizationResult,
 } from "./core";

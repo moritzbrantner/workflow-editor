@@ -185,8 +185,6 @@ export type WorkflowEditorDocument<
   typeDeclarations?: string;
 };
 
-export type WorkflowEditorDocumentNormalizationMode = "strict" | "repair";
-
 export type WorkflowEditorDocumentDiagnosticCode =
   | "invalid-port-type"
   | "invalid-port-payload"
@@ -205,8 +203,11 @@ export type WorkflowEditorDocumentDiagnosticCode =
   | "cycle"
   | "invalid-group";
 
+export type WorkflowEditorDiagnosticSeverity = "error" | "warning";
+
 export type WorkflowEditorDocumentDiagnostic = {
   code: WorkflowEditorDocumentDiagnosticCode;
+  severity: WorkflowEditorDiagnosticSeverity;
   message: string;
   path: string;
   nodeId?: string;
@@ -216,12 +217,32 @@ export type WorkflowEditorDocumentDiagnostic = {
   targetNodeId?: string;
 };
 
-export type WorkflowEditorDocumentValidationOptions = {
-  allowCycles?: boolean;
+/**
+ * Per-rule document validation policy. An allowed condition is reported as a `warning` and its
+ * content is kept; a disallowed condition is an `error`. `unknownPortBehavior: "ignore"` keeps an
+ * edge to an undeclared port without a diagnostic.
+ */
+export type WorkflowEditorValidationPolicy = {
+  allowCycles: boolean;
+  allowDanglingEdges: boolean;
+  allowSelfEdges: boolean;
+  unknownPortBehavior: "error" | "warning" | "ignore";
 };
 
-export type WorkflowEditorDocumentNormalizationOptions = WorkflowEditorDocumentValidationOptions & {
-  mode?: WorkflowEditorDocumentNormalizationMode;
+export type WorkflowEditorDocumentValidationOptions = {
+  /** Defaults to `workflowEditorValidationPolicies.strict`. */
+  policy?: WorkflowEditorValidationPolicy;
+};
+
+export type WorkflowEditorDocumentNormalizationOptions = WorkflowEditorDocumentValidationOptions;
+
+export type WorkflowEditorDocumentNormalizationResult<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+> = {
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>;
+  /** Warning-severity diagnostics for content the policy allowed and kept. */
+  diagnostics: WorkflowEditorDocumentDiagnostic[];
 };
 
 export type WorkflowEditorConnectionInput = GraphEditorConnectionInput;

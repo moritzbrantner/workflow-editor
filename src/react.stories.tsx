@@ -49,7 +49,9 @@ function WorkbenchStory({
   initialSelectedNodeIds?: string[];
   readOnly?: boolean;
 }) {
-  const [document, setDocument] = useState(() => normalizeWorkflowEditorDocument(initialDocument));
+  const [document, setDocument] = useState(
+    () => normalizeWorkflowEditorDocument(initialDocument).document,
+  );
   const [selection, setSelection] = useState<WorkflowEditorSelectionState>({
     ...initialSelection,
     nodeIds: initialSelectedNodeIds,
@@ -95,8 +97,8 @@ export const EmptyDocument: Story = {
 export const WithInlinePanels: Story = {
   render: () => {
     function InlinePanelsStory() {
-      const [document, setDocument] = useState(() =>
-        normalizeWorkflowEditorDocument(storyWorkflowDocument),
+      const [document, setDocument] = useState(
+        () => normalizeWorkflowEditorDocument(storyWorkflowDocument).document,
       );
       const [selection, setSelection] = useState<WorkflowEditorSelectionState>({
         ...initialSelection,
@@ -127,8 +129,8 @@ export const WithInlinePanels: Story = {
 export const HiddenChrome: Story = {
   render: () => {
     function HiddenChromeStory() {
-      const [document, setDocument] = useState(() =>
-        normalizeWorkflowEditorDocument(storyWorkflowDocument),
+      const [document, setDocument] = useState(
+        () => normalizeWorkflowEditorDocument(storyWorkflowDocument).document,
       );
 
       return (

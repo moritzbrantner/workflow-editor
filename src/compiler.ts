@@ -8,6 +8,7 @@ import {
   validateWorkflowEditorIterationNode,
   workflowEditorIterationBound,
   normalizeWorkflowEditorDocument,
+  workflowEditorValidationPolicies,
   resolveWorkflowEditorDocumentTypes,
   WorkflowEditorDocumentValidationError,
 } from "./core";
@@ -321,7 +322,9 @@ export function compileWorkflowEditorDocument<
   let normalized: WorkflowEditorDocument<TNodeData, TEdgeData>;
   try {
     normalized = resolveWorkflowEditorDocumentTypes(
-      normalizeWorkflowEditorDocument(document, { mode: "strict" }),
+      normalizeWorkflowEditorDocument(document, {
+        policy: workflowEditorValidationPolicies.execution,
+      }).document,
       options,
     );
   } catch (error) {

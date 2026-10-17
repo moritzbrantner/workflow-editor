@@ -43,7 +43,7 @@ const document: WorkflowEditorDocument = normalizeWorkflowEditorDocument({
       targetPortId: "in",
     },
   ],
-});
+}).document;
 
 describe("@moritzbrantner/workflow-editor share", () => {
   test("encodes and decodes plain workflow share payloads", async () => {

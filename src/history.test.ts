@@ -49,7 +49,7 @@ const document: WorkflowEditorDocument = normalizeWorkflowEditorDocument({
       targetPortId: "in",
     },
   ],
-});
+}).document;
 
 describe("@moritzbrantner/workflow-editor history", () => {
   test("commits, ignores unchanged documents, undoes, redoes, resets, and limits history", () => {

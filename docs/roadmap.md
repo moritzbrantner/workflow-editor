@@ -40,42 +40,12 @@ runner must execute it without depending on editor internals.
 
 ## Configurable Graph Validation Policies
 
-### Problem
-
-Workflow documents are currently validated with a small set of global options. Hosts need stricter
-or looser policies depending on whether they are editing drafts, importing legacy documents, or
-executing production workflows.
-
-### Proposed API
-
-Add a `validationPolicy` option to document validation and normalization options:
-
-```ts
-type WorkflowEditorValidationPolicy = {
-  allowCycles?: boolean;
-  allowDanglingEdges?: boolean;
-  allowSelfEdges?: boolean;
-  unknownPortBehavior?: "error" | "warning" | "ignore";
-};
-```
-
-Existing scalar options continue to work and take precedence during a deprecation window.
-
-### Non-Goals
-
-- No execution/runtime scheduler changes.
-- No cross-document DAG validation for nested workflow references.
-
-### Acceptance Tests
-
-- Strict mode rejects dangling edges, self edges, and cycles.
-- Draft policy reports warnings without throwing during normalization.
-- Imported malformed JSON still fails strict editor import.
-- Existing `allowCycles` behavior remains compatible.
-
-### Migration Notes
-
-Default behavior remains strict. Existing callers do not need to change.
+Delivered by #14 ([Decision Atlas 6.1](DECISION-ATLAS.md#6-document-validation)): a flat
+`WorkflowEditorValidationPolicy` with `strict` (default), `draft`, `import` and `execution` presets,
+severity on every diagnostic, `normalizeWorkflowEditorDocument` returning `{ document, diagnostics }`,
+explicit `repairWorkflowEditorDocument`, and an editor "Document problems" panel with a
+"Repair document" action. The former `allowCycles` and `mode` options were removed without a
+compatibility layer. Cross-document DAG validation for nested references remains out of scope.
 
 ## Port Cardinality Rules
 

@@ -35,7 +35,7 @@ function documentWith(...sources: WorkflowEditorNode[]): WorkflowEditorDocument 
   return normalizeWorkflowEditorDocument({
     nodes: [...sources, { ...arrayTemplate, id: "array", x: 300, y: 0 } as WorkflowEditorNode],
     edges: [],
-  });
+  }).document;
 }
 
 const toAddItem = (sourceNodeId: string) => ({

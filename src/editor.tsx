@@ -1,7 +1,7 @@
 "use client";
 
 import { createWorkflowEditorTypeResolver } from "./core-type-resolver";
-import { WorkflowEditorImportErrorAlert } from "./editor/chrome";
+import { WorkflowEditorDocumentProblems, WorkflowEditorImportErrorAlert } from "./editor/chrome";
 import { NativeWorkflowTypes } from "./editor/native-types";
 import { workflowEditorPortTypeSource } from "./core-type-source";
 
@@ -74,9 +74,13 @@ import {
   analyzeWorkflowEditorPortTypes,
   defaultWorkflowEditorNodeTemplates,
   normalizeWorkflowEditorSelection,
+  repairWorkflowEditorDocument,
   resolveWorkflowEditorDocumentTypes,
   updateWorkflowEditorNodeWorkflowReference,
+  validateWorkflowEditorDocument,
+  workflowEditorValidationPolicies,
   type WorkflowEditorDocument,
+  type WorkflowEditorDocumentDiagnostic,
   type WorkflowEditorNodeTemplate,
   type WorkflowEditorNode,
   type WorkflowEditorSelectionState,
@@ -88,6 +92,7 @@ export {
   WorkflowEditorDocumentControls,
   WorkflowEditorDocumentMenu,
   WorkflowEditorDocumentPath,
+  WorkflowEditorDocumentProblems,
   WorkflowEditorHistoryControls,
   WorkflowEditorImportErrorAlert,
   WorkflowEditorImportExportControls,
@@ -192,6 +197,8 @@ export type WorkflowEditorController<
   }>;
   documentReferenceOptions?: WorkflowEditorDocumentReferenceOption[];
   history: WorkflowEditorHistoryState<TNodeData, TEdgeData>;
+  /** Warnings the active document keeps under the library `import` validation policy. */
+  documentProblems: WorkflowEditorDocumentDiagnostic[];
   /** Message of the most recent rejected import, cleared by the next import or dismissal. */
   importError: string | null;
   library: WorkflowEditorLibrary<TNodeData, TEdgeData>;
@@ -213,6 +220,8 @@ export type WorkflowEditorController<
     openWorkflowReference: (node: WorkflowEditorNode<TNodeData>) => void;
     redo: () => void;
     renameDocument: () => void;
+    /** Explicitly removes the edges listed in `documentProblems`, as one undoable edit. */
+    repairDocument: () => void;
     restoreVersion: () => void;
     saveVersion: () => void;
     selectDocument: (documentId: string) => void;
@@ -656,6 +665,13 @@ export function WorkflowEditor<
   const history =
     (activeEntry ? historyByDocumentId[activeEntry.id] : undefined) ??
     createWorkflowEditorHistory(activeDocument);
+  const documentProblems = useMemo(
+    () =>
+      validateWorkflowEditorDocument(activeDocument, {
+        policy: workflowEditorValidationPolicies.import,
+      }).filter((diagnostic) => diagnostic.severity === "warning"),
+    [activeDocument],
+  );
   const documentReferenceOptions = enableNestedWorkflows
     ? listWorkflowEditorDocumentReferenceOptions(library)
     : undefined;
@@ -1136,6 +1152,7 @@ export function WorkflowEditor<
     documentPath,
     documentPathEntries,
     documentReferenceOptions,
+    documentProblems,
     history,
     importError,
     library,
@@ -1157,6 +1174,7 @@ export function WorkflowEditor<
       openWorkflowReference,
       redo,
       renameDocument,
+      repairDocument: () => updateDocument(repairWorkflowEditorDocument(activeDocument).document),
       restoreVersion,
       saveVersion,
       selectDocument,
@@ -1397,6 +1415,7 @@ export function WorkflowEditor<
             </Badge>
           </div>
           <WorkflowEditorImportErrorAlert controller={editorController} />
+          <WorkflowEditorDocumentProblems controller={editorController} />
         </WorkbenchToolbar>
       ) : (
         <>
@@ -1564,6 +1583,7 @@ export function WorkflowEditor<
               </Button>
             </div>
             <WorkflowEditorImportErrorAlert controller={editorController} />
+            <WorkflowEditorDocumentProblems controller={editorController} />
           </WorkbenchToolbar>
         </>
       )}
@@ -1757,6 +1777,13 @@ export function useWorkflowEditorController<
   const history =
     (activeEntry ? historyByDocumentId[activeEntry.id] : undefined) ??
     createWorkflowEditorHistory(activeDocument);
+  const documentProblems = useMemo(
+    () =>
+      validateWorkflowEditorDocument(activeDocument, {
+        policy: workflowEditorValidationPolicies.import,
+      }).filter((diagnostic) => diagnostic.severity === "warning"),
+    [activeDocument],
+  );
   const documentReferenceOptions = enableNestedWorkflows
     ? listWorkflowEditorDocumentReferenceOptions(library)
     : undefined;
@@ -2149,6 +2176,7 @@ export function useWorkflowEditorController<
     documentPath,
     documentPathEntries,
     documentReferenceOptions,
+    documentProblems,
     history,
     importError,
     library,
@@ -2170,6 +2198,8 @@ export function useWorkflowEditorController<
       openWorkflowReference,
       redo,
       renameDocument,
+      repairDocument: () =>
+        updateActiveDocument(repairWorkflowEditorDocument(activeDocument).document),
       restoreVersion,
       saveVersion,
       selectDocument,

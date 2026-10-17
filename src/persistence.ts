@@ -1,6 +1,7 @@
 import {
   assertWorkflowEditorDocument,
   normalizeWorkflowEditorDocument,
+  workflowEditorValidationPolicies,
   type WorkflowEditorDocument,
   type WorkflowEditorWorkflowReference,
 } from "./core";
@@ -11,6 +12,13 @@ export const workflowEditorDocumentFileVersion = 1;
 export const workflowEditorLibraryVersion = 1;
 export const defaultWorkflowEditorMaxVersions = 20;
 export const defaultWorkflowEditorStorageKey = "moritzbrantner.workflow-editor.library.v1";
+
+/**
+ * Library entries, saved versions and imported files are user documents: they validate with the
+ * `import` policy, so allowed problems (dangling, self and unknown-port edges) are kept as warnings
+ * instead of being dropped, while cycles and structural errors still fail closed.
+ */
+const libraryValidation = { policy: workflowEditorValidationPolicies.import };
 
 export type WorkflowEditorDocumentFile<
   TNodeData = Record<string, unknown>,
@@ -136,7 +144,8 @@ export function createWorkflowEditorEntry<
   const now = new Date().toISOString();
   const document = normalizeWorkflowEditorDocument(
     input.document ?? createBlankWorkflowEditorDocument<TNodeData, TEdgeData>(),
-  );
+    libraryValidation,
+  ).document;
   const entry: WorkflowEditorLibraryEntry<TNodeData, TEdgeData> = {
     id: input.id ?? createWorkflowEditorId("workflow"),
     name: input.name?.trim() || "Untitled Workflow",
@@ -361,7 +370,7 @@ export function createWorkflowEditorVersion<
     version: versionNumber,
     name: options.name?.trim() || entry.name,
     createdAt,
-    document: normalizeWorkflowEditorDocument(entry.document),
+    document: normalizeWorkflowEditorDocument(entry.document, libraryValidation).document,
   };
 
   return compactWorkflowEditorVersions(
@@ -396,7 +405,7 @@ export function restoreWorkflowEditorVersion<
     ...entry,
     version: version.version,
     updatedAt: new Date().toISOString(),
-    document: normalizeWorkflowEditorDocument(version.document),
+    document: normalizeWorkflowEditorDocument(version.document, libraryValidation).document,
   };
 }
 
@@ -429,7 +438,7 @@ export function buildWorkflowEditorDocumentFile<
     format: workflowEditorDocumentFormat,
     version: workflowEditorDocumentFileVersion,
     exportedAt: options.exportedAt ?? new Date().toISOString(),
-    document: normalizeWorkflowEditorDocument(document),
+    document: normalizeWorkflowEditorDocument(document, libraryValidation).document,
   };
 
   if (options.documentId) {
@@ -485,7 +494,7 @@ export function parseWorkflowEditorDocumentFile<
     throw new Error(`Unsupported workflow document version ${String(parsed.version)}`);
   }
 
-  assertWorkflowEditorDocument<TNodeData, TEdgeData>(parsed.document);
+  assertWorkflowEditorDocument<TNodeData, TEdgeData>(parsed.document, libraryValidation);
 
   return {
     format: workflowEditorDocumentFormat,
@@ -496,7 +505,7 @@ export function parseWorkflowEditorDocumentFile<
     documentName: typeof parsed.documentName === "string" ? parsed.documentName : undefined,
     documentVersion:
       typeof parsed.documentVersion === "number" ? parsed.documentVersion : undefined,
-    document: normalizeWorkflowEditorDocument(parsed.document),
+    document: normalizeWorkflowEditorDocument(parsed.document, libraryValidation).document,
   };
 }
 
@@ -514,14 +523,14 @@ export function restoreWorkflowEditorDocumentFile<
     throw new Error(`Unsupported workflow document version ${String(file.version)}`);
   }
 
-  assertWorkflowEditorDocument<TNodeData, TEdgeData>(file.document);
+  assertWorkflowEditorDocument<TNodeData, TEdgeData>(file.document, libraryValidation);
 
   return {
     exportedAt: file.exportedAt,
     documentId: file.documentId,
     documentName: file.documentName,
     documentVersion: file.documentVersion,
-    document: normalizeWorkflowEditorDocument(file.document),
+    document: normalizeWorkflowEditorDocument(file.document, libraryValidation).document,
   };
 }
 
@@ -623,7 +632,7 @@ function normalizeWorkflowEditorEntry<
     ...entry,
     name: entry.name.trim() || "Untitled Workflow",
     version: Math.max(1, Math.trunc(entry.version)),
-    document: normalizeWorkflowEditorDocument(entry.document),
+    document: normalizeWorkflowEditorDocument(entry.document, libraryValidation).document,
     versions: compactSavedVersions(entry.versions ?? [], defaultWorkflowEditorMaxVersions),
   };
 }
@@ -666,7 +675,7 @@ function restoreWorkflowEditorEntry<
   }
 
   try {
-    assertWorkflowEditorDocument<TNodeData, TEdgeData>(value.document);
+    assertWorkflowEditorDocument<TNodeData, TEdgeData>(value.document, libraryValidation);
   } catch {
     return null;
   }
@@ -712,7 +721,7 @@ function restoreWorkflowEditorSavedVersion<
   }
 
   try {
-    assertWorkflowEditorDocument<TNodeData, TEdgeData>(value.document);
+    assertWorkflowEditorDocument<TNodeData, TEdgeData>(value.document, libraryValidation);
   } catch {
     return null;
   }
@@ -727,7 +736,8 @@ function restoreWorkflowEditorSavedVersion<
     createdAt: typeof value.createdAt === "string" ? value.createdAt : new Date().toISOString(),
     document: normalizeWorkflowEditorDocument(
       value.document as WorkflowEditorDocument<TNodeData, TEdgeData>,
-    ),
+      libraryValidation,
+    ).document,
   };
 }
 
@@ -760,7 +770,7 @@ function normalizeWorkflowEditorSavedVersion<
     version: version.version,
     name: version.name,
     createdAt: version.createdAt,
-    document: normalizeWorkflowEditorDocument(version.document),
+    document: normalizeWorkflowEditorDocument(version.document, libraryValidation).document,
   };
 }
 

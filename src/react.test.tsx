@@ -69,7 +69,7 @@ const document: WorkflowEditorDocument = normalizeWorkflowEditorDocument({
       targetPortId: "in",
     },
   ],
-});
+}).document;
 
 function StatefulWorkbench({
   initialDocument = document,
@@ -773,15 +773,17 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     const handleOpenWorkflowReference = vi.fn();
     render(
       <WorkflowWorkbench
-        document={normalizeWorkflowEditorDocument({
-          nodes: [
-            {
-              ...document.nodes[0]!,
-              workflowRef: { documentId: "child" },
-            },
-          ],
-          edges: [],
-        })}
+        document={
+          normalizeWorkflowEditorDocument({
+            nodes: [
+              {
+                ...document.nodes[0]!,
+                workflowRef: { documentId: "child" },
+              },
+            ],
+            edges: [],
+          }).document
+        }
         selectedNodeId="input"
         documentReferences={[{ id: "child", name: "Child workflow" }]}
         onOpenWorkflowReference={handleOpenWorkflowReference}
@@ -863,7 +865,7 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
         },
       ],
       edges: [],
-    });
+    }).document;
 
     const typeDefinitions: readonly WorkflowEditorTypeDefinition[] = [
       {
@@ -970,7 +972,7 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
         },
       ],
       edges: [],
-    });
+    }).document;
 
     render(
       <WorkflowWorkbench
@@ -1052,7 +1054,7 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
         },
       ],
       edges: [],
-    });
+    }).document;
     const connectedDocument = connectWorkflowEditorNodes(objectDocument, {
       sourceNodeId: "employee",
       sourcePortId: "firstName",
@@ -1074,7 +1076,7 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     const objectDocument = normalizeWorkflowEditorDocument<Record<string, unknown>>({
       nodes: [{ ...objectTemplate, id: "profile", x: 0, y: 0 }],
       edges: [],
-    });
+    }).document;
 
     render(
       <WorkflowWorkbench
@@ -1095,7 +1097,7 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     const objectDocument = normalizeWorkflowEditorDocument<Record<string, unknown>>({
       nodes: [{ ...objectTemplate, id: "profile", x: 0, y: 0 }],
       edges: [],
-    });
+    }).document;
 
     render(
       <WorkflowWorkbench
@@ -1138,7 +1140,7 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     const objectDocument = normalizeWorkflowEditorDocument<Record<string, unknown>>({
       nodes: [{ ...objectTemplate, id: "profile", x: 0, y: 0 }],
       edges: [],
-    });
+    }).document;
 
     render(
       <WorkflowWorkbench
@@ -1174,7 +1176,7 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
         },
       ],
       edges: [],
-    });
+    }).document;
 
     const { unmount } = render(
       <WorkflowWorkbench
@@ -1214,7 +1216,7 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
         },
       ],
       edges: [],
-    });
+    }).document;
 
     const renderedNumber = render(
       <WorkflowWorkbench
@@ -1253,7 +1255,7 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
         },
       ],
       edges: [],
-    });
+    }).document;
 
     render(<WorkflowWorkbench document={nullDocument} selectedNodeId="nothing" />);
 
@@ -1312,7 +1314,7 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
         },
       ],
       edges: [],
-    });
+    }).document;
 
     render(<StatefulWorkbench initialDocument={primitiveDocument} />);
 
@@ -1361,7 +1363,7 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
         },
       ],
       edges: [],
-    });
+    }).document;
 
     render(<StatefulWorkbench initialDocument={primitiveDocument} />);
 
@@ -1553,10 +1555,12 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     const handleDocumentChange = vi.fn();
     render(
       <WorkflowWorkbench
-        document={normalizeWorkflowEditorDocument({
-          nodes: [{ id: "decision", label: "Decision", x: 0, y: 0 }],
-          edges: [],
-        })}
+        document={
+          normalizeWorkflowEditorDocument({
+            nodes: [{ id: "decision", label: "Decision", x: 0, y: 0 }],
+            edges: [],
+          }).document
+        }
         nodeTemplates={[{ id: "decision", label: "Decision" }]}
         onDocumentChange={handleDocumentChange}
       />,
@@ -1604,7 +1608,7 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
       nodes: document.nodes.map((node, index) =>
         Object.assign({}, node, { kind: index < 2 ? "io" : "terminal" }),
       ),
-    });
+    }).document;
 
     render(<WorkbenchPanelHarness panel="types" initialDocument={typedDocument} />);
 
@@ -1629,7 +1633,7 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
         },
       ],
       edges: [],
-    });
+    }).document;
 
     render(<WorkbenchPanelHarness panel="composed" initialDocument={composedDocument} />);
 
@@ -1698,7 +1702,7 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
         document.nodes[1]!,
         document.nodes[2]!,
       ],
-    });
+    }).document;
 
     const { unmount } = render(
       <ModularWorkbenchChromeHarness

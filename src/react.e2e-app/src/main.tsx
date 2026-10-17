@@ -53,7 +53,7 @@ const initialDocument: WorkflowEditorDocument = normalizeWorkflowEditorDocument(
       targetPortId: "in",
     },
   ],
-});
+}).document;
 
 const initialLibrary = createWorkflowEditorLibrary({
   activeDocumentId: "demo-workflow",

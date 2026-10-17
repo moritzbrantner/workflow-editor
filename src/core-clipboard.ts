@@ -206,7 +206,7 @@ export function pasteWorkflowEditorClipboardPayload<
       nodes: [...document.nodes, ...nodes],
       edges: [...document.edges, ...edges],
       groups: [...(document.groups ?? []), ...groups],
-    }),
+    }).document,
     nodeIds: nodes.map((node) => node.id),
     edgeIds: edges.map((edge) => edge.id),
     ...(groups.length > 0 ? { groupIds: groups.map((group) => group.id) } : {}),
@@ -262,7 +262,7 @@ export function removeWorkflowEditorSelection<
         }),
       )
       .filter((group) => group.nodeIds.length >= 2),
-  });
+  }).document;
 }
 
 function assertWorkflowEditorClipboardPayload<

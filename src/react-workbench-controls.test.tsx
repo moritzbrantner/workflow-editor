@@ -53,7 +53,7 @@ const document: WorkflowEditorDocument = normalizeWorkflowEditorDocument({
       targetPortId: "in",
     },
   ],
-});
+}).document;
 
 function StatefulWorkbench({
   initialDocument = document,
@@ -291,7 +291,7 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
         },
       ],
       edges: [],
-    });
+    }).document;
 
     render(<WorkflowWorkbench document={typedDocument} onDocumentChange={handleDocumentChange} />);
 
@@ -321,7 +321,7 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
         },
       ],
       edges: [],
-    });
+    }).document;
 
     render(<WorkflowWorkbench document={typedDocument} onDocumentChange={handleDocumentChange} />);
 
@@ -358,7 +358,7 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
         document.nodes[1]!,
         document.nodes[2]!,
       ],
-    });
+    }).document;
     const handleDocumentChange = vi.fn();
     render(
       <WorkflowWorkbench
@@ -433,7 +433,7 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
         { ...decomposeTemplate, id: "decompose", x: 280, y: 0 },
       ],
       edges: [],
-    });
+    }).document;
     const renderedObject = render(
       <StatefulWorkbench
         initialDocument={objectDocument}
@@ -526,7 +526,7 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
         { ...decomposeTemplate, id: "decompose", x: 280, y: 0 },
       ],
       edges: [],
-    });
+    }).document;
 
     readonlyDocument = addWorkflowEditorArrayConstructorInput(readonlyDocument, "array");
     readonlyDocument = addWorkflowEditorObjectConstructorInput(readonlyDocument, "object");
@@ -665,7 +665,7 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
         },
       ],
       edges: [],
-    });
+    }).document;
     const initialLibrary = createWorkflowEditorLibrary({
       activeDocumentId: "recursive",
       documents: [

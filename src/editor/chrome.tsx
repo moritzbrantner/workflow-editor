@@ -25,7 +25,54 @@ export function WorkflowEditorSaveStateBadge<
         {formatSaveState(controller.saveState)}
       </Badge>
       <WorkflowEditorImportErrorAlert controller={controller} />
+      <WorkflowEditorDocumentProblems controller={controller} />
     </>
+  );
+}
+
+/**
+ * Lists problems the active document keeps under the library validation policy (dangling, self and
+ * unknown-port edges). Nothing is removed until the user explicitly repairs the document.
+ */
+export function WorkflowEditorDocumentProblems({
+  controller,
+}: {
+  controller: Pick<WorkflowEditorController, "documentProblems" | "readOnly"> & {
+    actions: Pick<WorkflowEditorController["actions"], "repairDocument">;
+  };
+}) {
+  if (controller.documentProblems.length === 0) {
+    return null;
+  }
+
+  return (
+    <section
+      aria-label="Document problems"
+      className="flex basis-full flex-col gap-1 rounded-md border border-amber-500/50 bg-amber-500/5 px-2 py-1.5 text-xs"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <strong className="font-semibold">Document problems</strong>
+        {controller.readOnly ? null : (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-6 flex-none px-2 text-xs"
+            onClick={controller.actions.repairDocument}
+          >
+            Repair document
+          </Button>
+        )}
+      </div>
+      <ul className="list-disc pl-4 [overflow-wrap:anywhere]">
+        {controller.documentProblems.map((diagnostic, index) => (
+          <li key={`${diagnostic.code}:${diagnostic.edgeId ?? diagnostic.path}:${index}`}>
+            {diagnostic.edgeId ? `Edge ${diagnostic.edgeId}: ` : null}
+            {diagnostic.message}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

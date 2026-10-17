@@ -50,7 +50,7 @@ const document: WorkflowEditorDocument = normalizeWorkflowEditorDocument({
     },
   ],
   viewport: { x: 1, y: 2, zoom: 1.5 },
-});
+}).document;
 
 describe("workflow-builder adapters", () => {
   test("roundtrips workflow nodes, edges, and viewport", () => {
@@ -102,7 +102,7 @@ describe("workflow-builder adapters", () => {
           targetPortId: "in",
         },
       ],
-    });
+    }).document;
 
     const uiNodes = toUiWorkflowBuilderNodes(typedDocument.nodes);
     const outputPorts = uiNodes[0]!.outputs!;
@@ -175,7 +175,7 @@ describe("workflow-builder adapters", () => {
         },
       ],
       edges: [],
-    });
+    }).document;
 
     const unconnectedInputs = toUiWorkflowBuilderNodes(
       optionalDocument.nodes,
@@ -217,7 +217,7 @@ describe("workflow-builder adapters", () => {
         document.nodes[1]!,
         document.nodes[2]!,
       ],
-    });
+    }).document;
     const referencedUiNodes = toUiWorkflowBuilderNodes(referenced.nodes);
     referencedUiNodes[0] = { ...referencedUiNodes[0]!, x: 24, y: 36 };
     expect(fromUiWorkflowBuilderNodes(referencedUiNodes, referenced.nodes)[0]?.workflowRef).toEqual(

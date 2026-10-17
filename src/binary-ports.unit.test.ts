@@ -291,10 +291,10 @@ describe("payload shape validation", () => {
     const document = pair(port("out"), port("in"));
     (document.nodes[0]!.outputs![0] as unknown as { payload: unknown }).payload = payload;
 
-    expect(() => normalizeWorkflowEditorDocument(document)).toThrow(
+    expect(() => normalizeWorkflowEditorDocument(document).document).toThrow(
       WorkflowEditorDocumentValidationError,
     );
-    expect(() => normalizeWorkflowEditorDocument(document)).toThrow(
+    expect(() => normalizeWorkflowEditorDocument(document).document).toThrow(
       "Invalid workflow port payload at source.out",
     );
   });
@@ -302,7 +302,7 @@ describe("payload shape validation", () => {
   test("keeps valid payloads unchanged through normalization", () => {
     const normalized = normalizeWorkflowEditorDocument(
       pair(port("out", streamed("audio/wav")), port("in", buffered())),
-    );
+    ).document;
 
     expect(payloadOf(normalized.nodes[0]?.outputs?.[0])).toEqual(streamed("audio/wav"));
     expect(payloadOf(normalized.nodes[1]?.inputs?.[0])).toEqual(buffered());

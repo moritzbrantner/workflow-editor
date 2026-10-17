@@ -66,7 +66,7 @@ const document: WorkflowEditorDocument = normalizeWorkflowEditorDocument({
       targetPortId: "in",
     },
   ],
-});
+}).document;
 
 const editorTestStorage = {
   loadLibrary: vi.fn(async () => null),
@@ -184,7 +184,7 @@ describe("@moritzbrantner/workflow-editor editor shell", () => {
         createWorkflowEditorEntry({
           id: "secondary",
           name: "Secondary",
-          document: normalizeWorkflowEditorDocument({ nodes: [], edges: [] }),
+          document: normalizeWorkflowEditorDocument({ nodes: [], edges: [] }).document,
         }),
       ],
     });

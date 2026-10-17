@@ -1,4 +1,11 @@
-import { normalizeWorkflowEditorDocument, type WorkflowEditorDocument } from "./core";
+import {
+  normalizeWorkflowEditorDocument,
+  workflowEditorValidationPolicies,
+  type WorkflowEditorDocument,
+} from "./core";
+
+// Editing history holds user documents, so it keeps import-policy warnings rather than dropping them.
+const historyValidation = { policy: workflowEditorValidationPolicies.import };
 
 export const defaultWorkflowEditorHistoryLimit = 100;
 
@@ -23,7 +30,7 @@ export function createWorkflowEditorHistory<
 ): WorkflowEditorHistoryState<TNodeData, TEdgeData> {
   return {
     past: [],
-    present: normalizeWorkflowEditorDocument(document),
+    present: normalizeWorkflowEditorDocument(document, historyValidation).document,
     future: [],
   };
 }
@@ -36,7 +43,7 @@ export function commitWorkflowEditorHistory<
   document: WorkflowEditorDocument<TNodeData, TEdgeData>,
   options: WorkflowEditorHistoryOptions = {},
 ): WorkflowEditorHistoryState<TNodeData, TEdgeData> {
-  const nextDocument = normalizeWorkflowEditorDocument(document);
+  const nextDocument = normalizeWorkflowEditorDocument(document, historyValidation).document;
   if (documentsEqual(history.present, nextDocument)) {
     return history;
   }

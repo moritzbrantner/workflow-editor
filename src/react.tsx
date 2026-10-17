@@ -102,6 +102,7 @@ import {
   getWorkflowEditorNodeGroupId,
   isWorkflowEditorObjectConstructorNode,
   normalizeWorkflowEditorDocument,
+  repairWorkflowEditorDocument,
   normalizeWorkflowEditorSelection,
   pasteWorkflowEditorClipboardPayload,
   moveWorkflowEditorGroup,
@@ -456,6 +457,36 @@ function getWorkflowWorkbenchConnectionKey(connection: WorkflowWorkbenchConnecti
   return `${connection.sourceNodeId}:${connection.sourcePortId}->${connection.targetNodeId}:${connection.targetPortId}`;
 }
 
+/**
+ * The graph runtime only holds resolvable edges. Edges the document keeps under its validation
+ * policy (dangling, self and unknown-port edges) are hidden from the canvas and re-attached to every
+ * emitted document, so editing never silently drops them; removing them is an explicit repair.
+ */
+function useWorkflowWorkbenchEditableDocument<
+  TNodeData extends Record<string, unknown>,
+  TEdgeData extends Record<string, unknown>,
+>(sourceDocument: WorkflowEditorDocument<TNodeData, TEdgeData>) {
+  return useMemo(() => {
+    const editable = repairWorkflowEditorDocument(sourceDocument).document;
+    const editableEdgeIds = new Set(editable.edges.map((edge) => edge.id));
+    const retainedEdges = sourceDocument.edges.filter((edge) => !editableEdgeIds.has(edge.id));
+    if (retainedEdges.length === 0) {
+      return {
+        document: sourceDocument,
+        emitDocument: (next: WorkflowEditorDocument<TNodeData, TEdgeData>) => next,
+      };
+    }
+    return {
+      document: editable,
+      emitDocument: (next: WorkflowEditorDocument<TNodeData, TEdgeData>) => {
+        const nextEdgeIds = new Set(next.edges.map((edge) => edge.id));
+        const missing = retainedEdges.filter((edge) => !nextEdgeIds.has(edge.id));
+        return missing.length === 0 ? next : { ...next, edges: [...next.edges, ...missing] };
+      },
+    };
+  }, [sourceDocument]);
+}
+
 function createWorkflowWorkbenchDocumentOperation<
   TNodeData extends Record<string, unknown>,
   TEdgeData extends Record<string, unknown>,
@@ -464,7 +495,7 @@ function createWorkflowWorkbenchDocumentOperation<
   selectionAfter?: WorkflowEditorSelectionState | null,
   history = true,
 ): GraphEditorOperation<TNodeData, TEdgeData, WorkflowEditorPortType> {
-  const normalizedDocument = normalizeWorkflowEditorDocument(document, { mode: "repair" });
+  const normalizedDocument = repairWorkflowEditorDocument(document).document;
 
   return {
     id: "graph.replace-document",
@@ -498,7 +529,7 @@ export function WorkflowWorkbench<
   TEdgeData extends Record<string, unknown> = Record<string, unknown>,
   TTemplateData = TNodeData,
 >({
-  document,
+  document: sourceDocument,
   selectedNodeId,
   selectedEdgeId,
   selectedNodeIds,
@@ -527,6 +558,8 @@ export function WorkflowWorkbench<
   renderInspector,
   renderToolbarActions,
 }: WorkflowWorkbenchProps<TNodeData, TEdgeData, TTemplateData>) {
+  const { document, emitDocument: withRetainedWorkflowEdges } =
+    useWorkflowWorkbenchEditableDocument(sourceDocument);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const paletteRef = useRef<HTMLDivElement | null>(null);
   const inspectorRef = useRef<HTMLDivElement | null>(null);
@@ -644,7 +677,7 @@ export function WorkflowWorkbench<
     [document, rawSelection],
   );
   const normalizedRuntimeDocument = useMemo(
-    () => normalizeWorkflowEditorDocument(document, { mode: "repair" }),
+    () => repairWorkflowEditorDocument(document).document,
     [document],
   );
   const [graphRuntime, setGraphRuntime] = useState<
@@ -750,8 +783,9 @@ export function WorkflowWorkbench<
   };
 
   const emitGraphRuntimeDocument = (nextDocument: WorkflowEditorDocument<TNodeData, TEdgeData>) => {
-    lastEmittedDocumentRef.current = nextDocument;
-    onDocumentChange?.(nextDocument);
+    const emittedDocument = withRetainedWorkflowEdges(nextDocument);
+    lastEmittedDocumentRef.current = emittedDocument;
+    onDocumentChange?.(emittedDocument);
   };
 
   const dispatchGraphOperation = (
@@ -791,7 +825,7 @@ export function WorkflowWorkbench<
   };
 
   useEffect(() => {
-    if (lastEmittedDocumentRef.current === document) {
+    if (lastEmittedDocumentRef.current === sourceDocument) {
       lastEmittedDocumentRef.current = null;
       return;
     }
@@ -799,7 +833,7 @@ export function WorkflowWorkbench<
     setGraphRuntime((current) =>
       resetGraphEditorRuntime(current, normalizedRuntimeDocument, { selection }),
     );
-  }, [document, normalizedRuntimeDocument]);
+  }, [sourceDocument, normalizedRuntimeDocument]);
 
   useEffect(() => {
     latestSelectionRef.current = selection;
@@ -2723,7 +2757,7 @@ export function WorkflowWorkbench<
                     edges: document.edges.filter(
                       (edge) => nodeIds.has(edge.sourceNodeId) && nodeIds.has(edge.targetNodeId),
                     ),
-                  });
+                  }).document;
                   const snappedDocument = movedNodeIds.reduce(
                     (currentDocument, nodeId) =>
                       snapWorkflowEditorNodePositionToCompatiblePort(currentDocument, nodeId, {
@@ -2775,7 +2809,7 @@ export function WorkflowWorkbench<
                     normalizeWorkflowEditorDocument({
                       ...document,
                       edges: fromUiWorkflowBuilderEdges(edges, document.edges),
-                    }),
+                    }).document,
                   );
                 }
               }}
@@ -3116,7 +3150,7 @@ export function useWorkflowWorkbenchController<
   TEdgeData extends Record<string, unknown> = Record<string, unknown>,
   TTemplateData = TNodeData,
 >({
-  document,
+  document: sourceDocument,
   selectedNodeId,
   selectedEdgeId,
   selectedNodeIds,
@@ -3145,6 +3179,8 @@ export function useWorkflowWorkbenchController<
   TEdgeData,
   TTemplateData
 >): WorkflowWorkbenchController<TNodeData, TEdgeData, TTemplateData> {
+  const { document, emitDocument: withRetainedWorkflowEdges } =
+    useWorkflowWorkbenchEditableDocument(sourceDocument);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [internalSelection, setInternalSelection] = useState<WorkflowEditorSelectionState>(
     emptyWorkflowEditorSelection,
@@ -3220,7 +3256,7 @@ export function useWorkflowWorkbenchController<
     [document, rawSelection],
   );
   const normalizedRuntimeDocument = useMemo(
-    () => normalizeWorkflowEditorDocument(document, { mode: "repair" }),
+    () => repairWorkflowEditorDocument(document).document,
     [document],
   );
   const [graphRuntime, setGraphRuntime] = useState<
@@ -3234,7 +3270,7 @@ export function useWorkflowWorkbenchController<
   const lastEmittedDocumentRef = useRef<WorkflowEditorDocument<TNodeData, TEdgeData> | null>(null);
   const latestSelectionRef = useRef<WorkflowEditorSelectionState>(selection);
   useEffect(() => {
-    if (lastEmittedDocumentRef.current === document) {
+    if (lastEmittedDocumentRef.current === sourceDocument) {
       lastEmittedDocumentRef.current = null;
       return;
     }
@@ -3242,7 +3278,7 @@ export function useWorkflowWorkbenchController<
     setGraphRuntime((current) =>
       resetGraphEditorRuntime(current, normalizedRuntimeDocument, { selection }),
     );
-  }, [document, normalizedRuntimeDocument]);
+  }, [sourceDocument, normalizedRuntimeDocument]);
   useEffect(() => {
     latestSelectionRef.current = selection;
     setGraphRuntime((current) =>
@@ -3292,8 +3328,9 @@ export function useWorkflowWorkbenchController<
   );
 
   const emitGraphRuntimeDocument = (nextDocument: WorkflowEditorDocument<TNodeData, TEdgeData>) => {
-    lastEmittedDocumentRef.current = nextDocument;
-    onDocumentChange?.(nextDocument);
+    const emittedDocument = withRetainedWorkflowEdges(nextDocument);
+    lastEmittedDocumentRef.current = emittedDocument;
+    onDocumentChange?.(emittedDocument);
   };
 
   const dispatchGraphOperation = (

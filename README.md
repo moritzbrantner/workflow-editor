@@ -103,8 +103,9 @@ import type { GraphEditorOperation } from "@moritzbrantner/graph-editor/operatio
 - `toUiWorkflowBuilderNodes(...)`, `fromUiWorkflowBuilderNodes(...)`,
   `toUiWorkflowBuilderEdges(...)`, `fromUiWorkflowBuilderEdges(...)`, and
   `toUiWorkflowBuilderViewport(...)` for React/workbench UI adapters.
-- `validateWorkflowEditorDocument(...)`, `assertWorkflowEditorDocument(...)`, and
-  `WorkflowEditorDocumentValidationError` for strict document validation diagnostics.
+- `validateWorkflowEditorDocument(...)`, `assertWorkflowEditorDocument(...)`,
+  `repairWorkflowEditorDocument(...)`, `workflowEditorValidationPolicies` and
+  `WorkflowEditorDocumentValidationError` for policy-based document validation diagnostics.
 - `createWorkflowEditorLibrary(...)`, `createLocalStorageWorkflowEditorStorage(...)`,
   `buildWorkflowEditorDocumentFile(...)`, and `parseWorkflowEditorDocumentFile(...)`
   for headless persistence.
@@ -135,7 +136,7 @@ const initialLibrary = createWorkflowEditorLibrary({
       document: normalizeWorkflowEditorDocument({
         nodes: [],
         edges: [],
-      }),
+      }).document,
     }),
   ],
   activeDocumentId: "demo",
@@ -262,22 +263,29 @@ For smaller changes, use slots on the existing components:
   typed port assignability, constructor expansion, compositions, and nested workflow metadata.
 - Node templates can set `category` or `categoryPath` to group the node palette into flat
   categories or nested category trees.
-- `normalizeWorkflowEditorDocument(...)` validates strictly by default and throws
-  `WorkflowEditorDocumentValidationError` when nodes, edges, ids, endpoints, or graph
-  cycles are invalid. Use `validateWorkflowEditorDocument(...)` to inspect diagnostics
-  without throwing.
-- To accept older or partially invalid graph data and preserve the previous pruning behavior,
-  use repair mode:
+- Document validation is configured through one per-rule `WorkflowEditorValidationPolicy`
+  (`allowCycles`, `allowDanglingEdges`, `allowSelfEdges`, `unknownPortBehavior`) with the presets
+  `workflowEditorValidationPolicies.strict` (the default), `draft`, `import` and `execution`.
+  An allowed condition is reported as a `warning` diagnostic and its content is kept; a disallowed
+  one is an `error`. Every diagnostic carries a stable `code`, `severity`, `path` and related ids.
 
   ```ts
-  const document = normalizeWorkflowEditorDocument(importedDocument, { mode: "repair" });
+  const { document, diagnostics } = normalizeWorkflowEditorDocument(importedDocument, {
+    policy: workflowEditorValidationPolicies.import,
+  });
   ```
 
-  Repair mode normalizes node coordinates and viewport values, removes dangling/self/cycle-forming
-  edges, and syncs built-in object-constructor and object-decomposition nodes.
+  `normalizeWorkflowEditorDocument(...)` returns `{ document, diagnostics }` (the warnings) and
+  throws `WorkflowEditorDocumentValidationError` when any error-severity diagnostic exists.
+  `validateWorkflowEditorDocument(...)` returns all diagnostics without throwing.
 
-- Imported workflow JSON files are validated strictly. Malformed workflow documents fail with
-  validation diagnostics instead of being silently repaired.
+- Normalization never repairs. `repairWorkflowEditorDocument(document)` explicitly removes
+  dangling, self, unknown-port and cycle-closing edges and returns the removed problems as
+  diagnostics.
+- Workflow libraries, editing history and imported workflow JSON files use the `import` policy:
+  dangling, self and unknown-port edges stay in the document as warnings, the editor lists them
+  under "Document problems" and removes them only through its "Repair document" action. Cycles
+  and malformed documents are still rejected. The compiler validates with the `execution` policy.
 - Workflow ports use serializable `type` objects checked by TypeScript instead of port-level
   `kind` strings. `validateWorkflowEditorConnection(...)` accepts an optional
   `typeDefinitions` registry and allows an output to connect to an input when the

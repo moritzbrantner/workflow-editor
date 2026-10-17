@@ -61,7 +61,7 @@ const document: WorkflowEditorDocument = normalizeWorkflowEditorDocument({
       targetPortId: "in",
     },
   ],
-});
+}).document;
 
 describe("@moritzbrantner/workflow-editor persistence", () => {
   test("builds, parses, and restores workflow document files", () => {
@@ -215,7 +215,7 @@ describe("@moritzbrantner/workflow-editor persistence", () => {
         },
       ],
       edges: [],
-    });
+    }).document;
     const childDocument = normalizeWorkflowEditorDocument({
       nodes: [
         {
@@ -227,7 +227,7 @@ describe("@moritzbrantner/workflow-editor persistence", () => {
         },
       ],
       edges: [],
-    });
+    }).document;
     const library = createWorkflowEditorLibrary({
       activeDocumentId: "parent",
       documents: [
