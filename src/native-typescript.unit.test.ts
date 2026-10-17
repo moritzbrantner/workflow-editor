@@ -61,7 +61,6 @@ import {
   type WorkflowEditorDocument,
 } from "./core";
 import { compileWorkflowEditorDocument } from "./compiler";
-import { workflowEditorPortTypeSource } from "./core-type-source";
 import { buildWorkflowEditorDocumentFile, restoreWorkflowEditorDocumentFile } from "./persistence";
 
 const connection = {
@@ -460,14 +459,8 @@ describe("native type document contracts", () => {
     const output = (id: string) => document.nodes.find((node) => node.id === id)!.outputs![0]!.type;
     expect(output("filter")).toEqual(native("Customer[]"));
     expect(output("branch")).toEqual(native("Customer[]"));
-    const sameType = (actual: WorkflowEditorPortType, expected: string, declarations = "") => {
-      const source = workflowEditorPortTypeSource(actual);
-      return oracle(source, expected, declarations) && oracle(expected, source, declarations);
-    };
     // The merge output is an array of the union of the connected source types.
-    expect(
-      sameType(output("merge"), '(Customer[] | "none")[]', "type Customer = { id: string };"),
-    ).toBe(true);
+    expect(output("merge")).toEqual(native('((Customer[]) | ("none"))[]'));
     document = normalizeWorkflowEditorDocument({
       ...document,
       nodes: document.nodes.map((node) =>
@@ -476,7 +469,7 @@ describe("native type document contracts", () => {
           : node,
       ),
     }).document;
-    expect(sameType(output("merge"), '(number[] | "none")[]')).toBe(true);
+    expect(output("merge")).toEqual(native('((number[]) | ("none"))[]'));
     document = normalizeWorkflowEditorDocument({ ...document, edges: [] }).document;
     expect(output("branch")).toEqual({ kind: "any" });
     expect(output("filter")).toEqual({ kind: "array", element: { kind: "any" } });
