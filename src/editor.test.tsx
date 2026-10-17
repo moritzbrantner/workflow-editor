@@ -69,7 +69,7 @@ const document: WorkflowEditorDocument = normalizeWorkflowEditorDocument({
 }).document;
 
 const editorTestStorage = {
-  loadLibrary: vi.fn(async () => null),
+  loadLibrary: vi.fn(async () => ({ status: "empty" as const })),
   saveLibrary: vi.fn(async () => {}),
 };
 
@@ -170,7 +170,7 @@ afterEach(() => {
 describe("@moritzbrantner/workflow-editor editor shell", () => {
   test("manages documents, versions, and history", async () => {
     const storage = {
-      loadLibrary: vi.fn(async () => null),
+      loadLibrary: vi.fn(async () => ({ status: "empty" as const })),
       saveLibrary: vi.fn(async () => {}),
     };
     const initialLibrary = createWorkflowEditorLibrary({
@@ -265,7 +265,11 @@ describe("@moritzbrantner/workflow-editor editor shell", () => {
       />,
     );
 
-    await waitFor(() => expect(handleLoadError).toHaveBeenCalledWith(loadError));
+    await waitFor(() =>
+      expect(handleLoadError).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining(loadError.message) }),
+      ),
+    );
     cleanup();
 
     const saveError = new Error("save failed");
@@ -274,7 +278,7 @@ describe("@moritzbrantner/workflow-editor editor shell", () => {
     render(
       <WorkflowEditor
         storage={{
-          loadLibrary: vi.fn(async () => null),
+          loadLibrary: vi.fn(async () => ({ status: "empty" as const })),
           saveLibrary: vi.fn(async () => {
             throw saveError;
           }),
@@ -293,7 +297,7 @@ describe("@moritzbrantner/workflow-editor editor shell", () => {
 
     render(
       <WorkflowEditor
-        storage={{ loadLibrary: vi.fn(async () => null), saveLibrary }}
+        storage={{ loadLibrary: vi.fn(async () => ({ status: "empty" as const })), saveLibrary }}
         onError={handleError}
       />,
     );
@@ -332,7 +336,7 @@ describe("@moritzbrantner/workflow-editor editor shell", () => {
       <WorkflowEditor
         initialLibrary={initialLibrary}
         storage={{
-          loadLibrary: vi.fn(async () => null),
+          loadLibrary: vi.fn(async () => ({ status: "empty" as const })),
           saveLibrary: vi.fn(async () => {}),
         }}
         chrome={{
@@ -424,7 +428,7 @@ describe("@moritzbrantner/workflow-editor editor shell", () => {
       <WorkflowEditor
         initialLibrary={initialLibrary}
         storage={{
-          loadLibrary: vi.fn(async () => null),
+          loadLibrary: vi.fn(async () => ({ status: "empty" as const })),
           saveLibrary: vi.fn(async () => {}),
         }}
         chrome={{
@@ -874,5 +878,48 @@ describe("@moritzbrantner/workflow-editor editor shell", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     expect(handleNodeTemplatesChange).toHaveBeenCalled();
+  });
+
+  test("keeps an unreadable stored library until the user recovers or discards it", async () => {
+    const backupLibrary = createWorkflowEditorLibrary({
+      documents: [createWorkflowEditorEntry({ id: "backup", name: "From backup" })],
+      activeDocumentId: "backup",
+    });
+    const saveLibrary = vi.fn(async () => {});
+    const storage = {
+      loadLibrary: vi.fn(async () => ({
+        status: "recoverable-error" as const,
+        raw: "{",
+        diagnostics: [
+          { code: "invalid-json" as const, message: "Saved library is not valid JSON" },
+        ],
+      })),
+      loadBackup: vi.fn(async () => ({ status: "loaded" as const, library: backupLibrary })),
+      saveLibrary,
+    };
+
+    render(<WorkflowEditor storage={storage} />);
+
+    const alert = await screen.findByRole("alert", { name: "Saved library could not be loaded" });
+    expect(alert.textContent).toContain("Saved library is not valid JSON");
+    expect(screen.getByRole("button", { name: "Download saved data" })).toBeTruthy();
+    await screen.findByRole("button", { name: "Restore backup" });
+    expect(saveLibrary).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Restore backup" }));
+    await waitFor(() => expect(saveLibrary).toHaveBeenCalled());
+    expect(saveLibrary.mock.calls.at(-1)?.[0]).toMatchObject({ activeDocumentId: "backup" });
+    expect(screen.queryByRole("alert", { name: "Saved library could not be loaded" })).toBeNull();
+    cleanup();
+
+    const discardSave = vi.fn(async () => {});
+    render(
+      <WorkflowEditor storage={{ loadLibrary: storage.loadLibrary, saveLibrary: discardSave }} />,
+    );
+    await screen.findByRole("alert", { name: "Saved library could not be loaded" });
+    expect(screen.queryByRole("button", { name: "Restore backup" })).toBeNull();
+    expect(discardSave).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Discard and start fresh" }));
+    await waitFor(() => expect(discardSave).toHaveBeenCalled());
   });
 });

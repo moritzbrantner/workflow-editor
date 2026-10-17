@@ -49,7 +49,9 @@ function createMemoryWorkflowEditorStorage(
 
   return {
     async loadLibrary() {
-      return storedLibrary ? createWorkflowEditorLibrary(storedLibrary) : null;
+      return storedLibrary
+        ? { status: "loaded" as const, library: createWorkflowEditorLibrary(storedLibrary) }
+        : { status: "empty" as const };
     },
     async saveLibrary(library) {
       storedLibrary = createWorkflowEditorLibrary(library);

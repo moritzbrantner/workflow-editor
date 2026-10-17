@@ -597,7 +597,7 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
   test("creates and opens referenced workflows with breadcrumbs in the editor shell", async () => {
     const handlePathChange = vi.fn();
     const storage = {
-      loadLibrary: vi.fn(async () => null),
+      loadLibrary: vi.fn(async () => ({ status: "empty" as const })),
       saveLibrary: vi.fn(async () => {}),
     };
     const initialLibrary = createWorkflowEditorLibrary({
@@ -651,7 +651,7 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
 
   test("allows recursive drill-in until the configured editor depth", async () => {
     const storage = {
-      loadLibrary: vi.fn(async () => null),
+      loadLibrary: vi.fn(async () => ({ status: "empty" as const })),
       saveLibrary: vi.fn(async () => {}),
     };
     const recursiveDocument = normalizeWorkflowEditorDocument({

@@ -762,8 +762,10 @@ export function layoutWorkflowEditorDocument<TNodeData = Record<string, unknown>
 // @public (undocumented)
 export function listWorkflowEditorDocumentReferenceOptions<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(library: WorkflowEditorLibrary<TNodeData, TEdgeData>): WorkflowEditorDocumentReferenceOption[];
 
+// Warning: (ae-forgotten-export) The symbol "WorkflowEditorLibraryLoadResult" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
-export function loadWorkflowEditorLibrary<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(storage: WorkflowEditorStorageAdapter<TNodeData, TEdgeData>, fallback?: WorkflowEditorLibrary<TNodeData, TEdgeData>): Promise<WorkflowEditorLibrary<TNodeData, TEdgeData>>;
+export function loadWorkflowEditorLibrary<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(storage: WorkflowEditorStorageAdapter<TNodeData, TEdgeData>): Promise<WorkflowEditorLibraryLoadResult<TNodeData, TEdgeData>>;
 
 // @public (undocumented)
 export function moveWorkflowEditorGroup<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(document: WorkflowEditorDocument<TNodeData, TEdgeData>, groupId: string, delta: {
@@ -940,6 +942,7 @@ export function useWorkflowEditorController<TNodeData extends Record<string, unk
     documentProblems: WorkflowEditorDocumentDiagnostic[];
     history: WorkflowEditorHistoryState<TNodeData, TEdgeData>;
     importError: string | null;
+    storageRecovery: WorkflowEditorStorageRecovery | null;
     library: WorkflowEditorLibrary<TNodeData, TEdgeData>;
     nameDraft: string;
     readOnly: boolean;
@@ -959,6 +962,9 @@ export function useWorkflowEditorController<TNodeData extends Record<string, unk
         openWorkflowReference: (node: WorkflowEditorNode<TNodeData>) => void;
         redo: () => void;
         renameDocument: () => void;
+        downloadStoredLibrary: () => void;
+        discardStoredLibrary: () => void;
+        restoreBackupLibrary: () => Promise<void>;
         repairDocument: () => void;
         restoreVersion: () => void;
         saveVersion: () => void;
@@ -1434,6 +1440,7 @@ export type WorkflowEditorController<TNodeData extends Record<string, unknown> =
     history: WorkflowEditorHistoryState<TNodeData, TEdgeData>;
     documentProblems: WorkflowEditorDocumentDiagnostic[];
     importError: string | null;
+    storageRecovery: WorkflowEditorStorageRecovery | null;
     library: WorkflowEditorLibrary<TNodeData, TEdgeData>;
     nameDraft: string;
     readOnly: boolean;
@@ -1454,6 +1461,9 @@ export type WorkflowEditorController<TNodeData extends Record<string, unknown> =
         redo: () => void;
         renameDocument: () => void;
         repairDocument: () => void;
+        downloadStoredLibrary: () => void;
+        discardStoredLibrary: () => void;
+        restoreBackupLibrary: () => Promise<void>;
         restoreVersion: () => void;
         saveVersion: () => void;
         selectDocument: (documentId: string) => void;
@@ -2274,8 +2284,9 @@ export function workflowEditorShareUrl(origin: string, token: string): string;
 
 // @public (undocumented)
 export type WorkflowEditorStorageAdapter<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>> = {
-    loadLibrary(): Promise<WorkflowEditorLibrary<TNodeData, TEdgeData> | null>;
+    loadLibrary(): Promise<WorkflowEditorLibraryLoadResult<TNodeData, TEdgeData>>;
     saveLibrary(library: WorkflowEditorLibrary<TNodeData, TEdgeData>): Promise<void>;
+    loadBackup?(): Promise<WorkflowEditorLibraryLoadResult<TNodeData, TEdgeData>>;
 };
 
 // @public (undocumented)
@@ -2562,6 +2573,7 @@ export function wouldCreateWorkflowEditorCycle<TNodeData = Record<string, unknow
 //
 // dist/core-template-registry-CMoU4Gla.d.ts:5:5 - (ae-forgotten-export) The symbol "WorkflowEditorNodeTemplateDiagnosticCode" needs to be exported by the entry point index.d.ts
 // dist/editor.d.ts:47:5 - (ae-forgotten-export) The symbol "ChromeController" needs to be exported by the entry point index.d.ts
+// dist/editor.d.ts:260:5 - (ae-forgotten-export) The symbol "WorkflowEditorStorageRecovery" needs to be exported by the entry point index.d.ts
 // dist/react.d.ts:128:9 - (ae-forgotten-export) The symbol "WorkflowWorkbenchPaletteCategoryGroup" needs to be exported by the entry point index.d.ts
 // dist/react.d.ts:135:9 - (ae-forgotten-export) The symbol "WorkflowWorkbenchOverlayPosition" needs to be exported by the entry point index.d.ts
 

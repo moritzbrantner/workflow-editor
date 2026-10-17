@@ -423,7 +423,10 @@ describe("issue #60 acceptance: configurable, consistent port type colors", () =
     const { container } = render(
       createElement(WorkflowEditor, {
         initialLibrary: library,
-        storage: { loadLibrary: vi.fn(async () => null), saveLibrary: vi.fn(async () => {}) },
+        storage: {
+          loadLibrary: vi.fn(async () => ({ status: "empty" as const })),
+          saveLibrary: vi.fn(async () => {}),
+        },
         settings,
         onSettingsChange: () => {},
       }),
