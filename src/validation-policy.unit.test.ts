@@ -92,24 +92,28 @@ function diagnosticsOf(error: WorkflowEditorDocumentValidationError) {
 describe("validation policy presets", () => {
   it("exports the four presets with the approved rule values", () => {
     expect(workflowEditorValidationPolicies.strict).toEqual({
+      allowExcessConnections: false,
       allowCycles: false,
       allowDanglingEdges: false,
       allowSelfEdges: false,
       unknownPortBehavior: "error",
     });
     expect(workflowEditorValidationPolicies.execution).toEqual({
+      allowExcessConnections: false,
       allowCycles: false,
       allowDanglingEdges: false,
       allowSelfEdges: false,
       unknownPortBehavior: "error",
     });
     expect(workflowEditorValidationPolicies.import).toEqual({
+      allowExcessConnections: true,
       allowCycles: false,
       allowDanglingEdges: true,
       allowSelfEdges: true,
       unknownPortBehavior: "warning",
     });
     expect(workflowEditorValidationPolicies.draft).toEqual({
+      allowExcessConnections: true,
       allowCycles: true,
       allowDanglingEdges: true,
       allowSelfEdges: true,
@@ -323,6 +327,8 @@ describe("normalizeWorkflowEditorDocument under the import policy", () => {
         ["missing-edge-node", "edge-dangling"],
         ["missing-edge-port", "edge-unknown-port"],
         ["self-edge", "edge-self"],
+        // #15: the self edge is the second edge into b's single input; import allows the excess.
+        ["port-cardinality-max", "edge-self"],
       ].sort(),
     );
     expect(diagnostics.every((diagnostic) => diagnostic.severity === "warning")).toBe(true);

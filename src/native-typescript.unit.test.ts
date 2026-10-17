@@ -1,7 +1,3 @@
-import {
-  validateWorkflowEditorConnectionWithCardinality,
-  connectWorkflowEditorNodesWithCardinality,
-} from "./cardinality";
 import ts from "typescript";
 import { describe, expect, test } from "vitest";
 import { isWorkflowEditorPortTypeAssignable, type WorkflowEditorPortType } from "./core";
@@ -186,10 +182,10 @@ describe("native type document contracts", () => {
       "Cannot find name 'Customer'",
     );
   });
-  test("cardinality validation uses document and override declarations", () => {
+  test("core connection validation (with cardinality) uses document and override declarations", () => {
     const document = documentWithTypes("Customer", "Customer", "type Customer = { id: string };");
-    expect(validateWorkflowEditorConnectionWithCardinality(document, connection).valid).toBe(true);
-    expect(connectWorkflowEditorNodesWithCardinality(document, connection).edges).toHaveLength(1);
+    expect(validateWorkflowEditorConnection(document, connection).valid).toBe(true);
+    expect(connectWorkflowEditorNodes(document, connection).edges).toHaveLength(1);
     const branchDocument = documentWithTypes("Customer", "number", document.typeDeclarations);
     branchDocument.nodes.push({
       ...defaultWorkflowEditorNodeTemplates.find((template) => template.kind === "control.if")!,
@@ -206,12 +202,9 @@ describe("native type document contracts", () => {
     });
     const branchedConnection = { ...connection, sourceNodeId: "branch", sourcePortId: "true" };
     expect(validateWorkflowEditorConnection(branchDocument, branchedConnection).valid).toBe(false);
-    expect(
-      validateWorkflowEditorConnectionWithCardinality(branchDocument, branchedConnection).valid,
-    ).toBe(false);
 
     expect(
-      validateWorkflowEditorConnectionWithCardinality(
+      validateWorkflowEditorConnection(
         documentWithTypes("Customer", "{ id: string }", "type Customer = { id: number };"),
         connection,
         { typeDeclarations: "type Customer = { id: string };" },
@@ -235,7 +228,7 @@ describe("native type document contracts", () => {
       targetPortId: "object",
     };
     const options = { typeDefinitions: [{ name: "Customer", type: native("{ id: string }") }] };
-    for (const connect of [connectWorkflowEditorNodes, connectWorkflowEditorNodesWithCardinality]) {
+    for (const connect of [connectWorkflowEditorNodes]) {
       const connected = connect(document, connection, options);
       expect(
         connected.nodes
@@ -452,8 +445,9 @@ describe("native type document contracts", () => {
     for (const [sourceNodeId, sourcePortId, targetNodeId, targetPortId] of [
       ["source", "out", "filter", "items"],
       ["filter", "items", "branch", "value"],
-      ["branch", "true", "merge", "a"],
-      ["fallback", "out", "merge", "b"],
+      // control.merge has one multi-source `items` input (#15, Decision 1.9/1.10).
+      ["branch", "true", "merge", "items"],
+      ["fallback", "out", "merge", "items"],
     ]) {
       document = connectWorkflowEditorNodes(document, {
         sourceNodeId: sourceNodeId!,
@@ -465,7 +459,8 @@ describe("native type document contracts", () => {
     const output = (id: string) => document.nodes.find((node) => node.id === id)!.outputs![0]!.type;
     expect(output("filter")).toEqual(native("Customer[]"));
     expect(output("branch")).toEqual(native("Customer[]"));
-    expect(output("merge")).toEqual(native('(Customer[]) | ("none")'));
+    // The merge output is an array of the union of the connected source types.
+    expect(output("merge")).toEqual(native('((Customer[]) | ("none"))[]'));
     document = normalizeWorkflowEditorDocument({
       ...document,
       nodes: document.nodes.map((node) =>
@@ -474,7 +469,7 @@ describe("native type document contracts", () => {
           : node,
       ),
     }).document;
-    expect(output("merge")).toEqual(native('(number[]) | ("none")'));
+    expect(output("merge")).toEqual(native('((number[]) | ("none"))[]'));
     document = normalizeWorkflowEditorDocument({ ...document, edges: [] }).document;
     expect(output("branch")).toEqual({ kind: "any" });
     expect(output("filter")).toEqual({ kind: "array", element: { kind: "any" } });

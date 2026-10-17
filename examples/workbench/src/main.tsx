@@ -674,6 +674,31 @@ function leadIntakeDocument(): ExampleDocument {
         y: 260,
         inputs: [{ id: "lead", label: "Lead", type: leadType }],
       },
+      {
+        id: "routed-leads",
+        label: "Routed leads",
+        description: "Collects every routed lead into one list (up to 3 sources).",
+        kind: "control.merge",
+        category: "Control flow",
+        x: 1420,
+        y: 480,
+        inputs: [
+          {
+            id: "items",
+            label: "Items",
+            type: { kind: "array", element: leadType },
+            cardinality: { min: 1, max: 3 },
+          },
+        ],
+        outputs: [
+          {
+            id: "out",
+            label: "Out",
+            type: { kind: "array", element: leadType },
+            metadata: { workflowTypeInference: "items" },
+          },
+        ],
+      },
     ],
     edges: [
       edge("lead-source", "lead", "dedupe", "lead"),
@@ -684,6 +709,8 @@ function leadIntakeDocument(): ExampleDocument {
       edge("qualification", "qualified", "route", "condition"),
       edge("route", "true", "create-deal", "lead"),
       edge("route", "false", "nurture", "lead"),
+      edge("route", "true", "routed-leads", "items"),
+      edge("route", "false", "routed-leads", "items"),
     ],
   }).document;
 }

@@ -4,6 +4,7 @@ import type {
   WorkflowEditorPortType,
 } from "./core-types";
 import { workflowEditorPortTypeSource } from "./core-type-source";
+import { isWorkflowEditorMultiSourceInput, workflowEditorArrayOfUnion } from "./core-cardinality";
 
 /** Execution-neutral output contracts for built-ins; no runtime branch selection is inferred. */
 export function propagateWorkflowEditorTypes<TNodeData, TEdgeData>(
@@ -11,9 +12,13 @@ export function propagateWorkflowEditorTypes<TNodeData, TEdgeData>(
   synchronizeConstructor?: (node: WorkflowEditorNode<TNodeData>) => WorkflowEditorNode<TNodeData>,
 ): WorkflowEditorDocument<TNodeData, TEdgeData> {
   const nodes = new Map(document.nodes.map((node) => [node.id, node]));
-  const incoming = new Map(
-    document.edges.map((edge) => [JSON.stringify([edge.targetNodeId, edge.targetPortId]), edge]),
-  );
+  const incoming = new Map<string, (typeof document.edges)[number]>();
+  const incomingAll = new Map<string, Array<(typeof document.edges)[number]>>();
+  for (const edge of document.edges) {
+    const key = JSON.stringify([edge.targetNodeId, edge.targetPortId]);
+    incoming.set(key, edge);
+    incomingAll.set(key, [...(incomingAll.get(key) ?? []), edge]);
+  }
   const visited = new Set<string>();
   const visiting = new Set<string>();
   const visit = (id: string) => {
@@ -25,7 +30,21 @@ export function propagateWorkflowEditorTypes<TNodeData, TEdgeData>(
       return;
     }
     visiting.add(id);
+    const sourceType = (edge: (typeof document.edges)[number]) => {
+      visit(edge.sourceNodeId);
+      return nodes.get(edge.sourceNodeId)?.outputs?.find((port) => port.id === edge.sourcePortId)
+        ?.type;
+    };
     const inputType = (portId: string): WorkflowEditorPortType => {
+      const port = node.inputs?.find((candidate) => candidate.id === portId);
+      if (port && isWorkflowEditorMultiSourceInput(port, node)) {
+        // A multi-source input `T[]` collects one element per connected source.
+        const types = (incomingAll.get(JSON.stringify([id, portId])) ?? []).flatMap((edge) => {
+          const type = sourceType(edge);
+          return type ? [type] : [];
+        });
+        return types.length > 0 ? workflowEditorArrayOfUnion(types) : port.type;
+      }
       const edge = incoming.get(JSON.stringify([id, portId]));
       if (edge) {
         visit(edge.sourceNodeId);
