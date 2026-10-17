@@ -186,6 +186,10 @@ This is the repository-owned, feature-oriented source of **owner-approved produc
   Status: owner-approved 2026-10-17 ([#16](https://github.com/moritzbrantner/workflow-editor/issues/16)).  
   Hosts keep passing a `nodeTemplates` array as the only input. Workflow Editor derives a headless registry from it with stable, path-addressed diagnostics (duplicate template or port ids, missing type references, invalid category paths, invalid compositions) and lookups by id, category path and TypeScript-compatible port type in both directions. Palette, catalog panels and contextual node creation (5.5) all use that registry; the editor-only template draft validator is removed. Invalid templates are always shown disabled with their diagnostics, never silently hidden; there is no host exclusion policy. No host node-data validator hook or revision field is added now; #65 extends the same registry for published revisions when needed. This is approved intent, not implementation evidence.
 
+- **5.19 Never lose unreadable saved data; recover it explicitly.**  
+  Status: owner-approved 2026-10-17 ([#17](https://github.com/moritzbrantner/workflow-editor/issues/17)).  
+  Recovery is implemented locally in Workflow Editor persistence (no editor-core E-03 dependency). Loading a stored library distinguishes loaded, empty, recoverable-error and unsupported-future-version outcomes and keeps the raw payload; a migration hook is added only when a real schema version 2 exists. When the saved library cannot be loaded, the editor opens with its defaults in memory and a banner ("Saved library could not be loaded") offering "Download saved data", "Restore backup" when a last-known-good copy exists, and "Discard and start fresh"; stored data is never overwritten until the user chooses. Before each save replaces a valid stored library, its previous value is kept as one last-known-good backup. This is approved intent, not implementation evidence.
+
 ## 6. Document validation
 
 - **6.1 Configure document validation through one per-rule policy and surface problems instead of silently repairing.**  
