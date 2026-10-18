@@ -152,6 +152,15 @@ export function createWorkflowEditorIterationNode<TNodeData = Record<string, unk
 export function createWorkflowEditorLibrary<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(input?: WorkflowEditorLibraryInput<TNodeData, TEdgeData>): WorkflowEditorLibrary<TNodeData, TEdgeData>;
 
 // @public
+export function createWorkflowEditorLibraryReferenceResolver<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(library: WorkflowEditorLibrary<TNodeData, TEdgeData>): (reference: {
+    documentId: string;
+}) => {
+    id: string;
+    version: number;
+    document: WorkflowEditorDocument;
+} | undefined;
+
+// @public
 export function createWorkflowEditorNodeTemplateRegistry<TData = Record<string, unknown>>(templates: readonly WorkflowEditorNodeTemplate<TData>[], options?: WorkflowEditorTypeValidationOptions): WorkflowEditorNodeTemplateRegistry<TData>;
 
 // @public (undocumented)
