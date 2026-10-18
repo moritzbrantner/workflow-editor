@@ -1,3 +1,4 @@
+import type { WorkflowEditorInspectorFieldDefinition } from "./core-inspector-fields";
 import type {
   GraphEditorDocument,
   GraphEditorEdge,
@@ -323,4 +324,6 @@ export type WorkflowEditorNodeTemplate<TData = Record<string, unknown>> = Omit<
   outputs?: WorkflowEditorPort[];
   workflowRef?: WorkflowEditorWorkflowReference;
   composition?: WorkflowEditorNodeComposition<TData>;
+  /** Typed inspector fields for the data of nodes created from this template (matched by kind). */
+  inspectorFields?: WorkflowEditorInspectorFieldDefinition[];
 };
