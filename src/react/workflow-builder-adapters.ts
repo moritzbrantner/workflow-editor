@@ -42,9 +42,11 @@ export function toUiWorkflowBuilderNodes<TData = Record<string, unknown>>(
     return {
       id: node.id,
       label: node.label,
-      description: jsonPrimitiveValue === undefined ? node.description : undefined,
-      kind: node.kind,
-      category: node.category,
+      // Node-face split (#47, Decision Atlas 5.6): description, category and kind are inspector
+      // metadata, so the canvas node does not repeat them. An authored eyebrow still shows.
+      description: undefined,
+      kind: undefined,
+      category: undefined,
       status: node.status,
       eyebrow: node.eyebrow,
       // The iteration summary is derived from its bound and body, so it always wins.
@@ -92,9 +94,10 @@ export function fromUiWorkflowBuilderNodes<TData = Record<string, unknown>>(
     return {
       id: node.id,
       label: node.label,
-      description: node.description,
-      kind: node.kind,
-      category: node.category,
+      // The canvas never edits these (#47), so they come from the document node.
+      description: node.description ?? previousNode?.description,
+      kind: node.kind ?? previousNode?.kind,
+      category: node.category ?? previousNode?.category,
       categoryPath: previousNode?.categoryPath ? [...previousNode.categoryPath] : undefined,
       status: node.status,
       eyebrow: node.eyebrow,
