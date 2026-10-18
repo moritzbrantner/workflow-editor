@@ -16,6 +16,34 @@ Version 1 rejects nested workflow references and embedded compositions instead o
 
 Compiled ports carry their declared `cardinality` and delivery `payload` (see [port payloads](port-payloads.md)). Ports without them omit the fields, so existing version 1 consumers and fixtures are unaffected.
 
+## Version 3: Workflow References (TECH-005, #95)
+
+Pass `resolveWorkflowReference` (for a library, `createWorkflowEditorLibraryReferenceResolver(library)`)
+to compile documents whose top-level nodes reference other Workflow Documents. Without a resolver,
+references are still rejected with `nested-workflow-not-supported`. Documents without references
+keep compiled v1/v2. The shared fixture is `fixtures/compiled-v3-workflow-references.json`.
+
+- **Closure:** each referenced document is resolved once at compile time, frozen as
+  `workflows["<documentId>@<version>"]` and compiled with its own type declarations. Diamond
+  dependencies appear once, and the runner never looks up a library at execution time.
+- **Interface (owner decision 2026-10-18):** a referenced workflow's inputs are its `control.start`
+  output ports and its outputs are its `control.end` input ports, listed in
+  `definition.interface`. The reference node's ports match them by port id:
+  - every reference input must exist on the interface and be assignable to it;
+  - every interface input must be provided;
+  - every reference output must exist and accept the interface output's type.
+
+  A mismatch reports `workflow-reference-interface`.
+
+- **Reference nodes** carry `workflowRef: { workflow: "<documentId>@<version>", maxDepth? }`. The
+  runner runs that definition with the node's inputs as interface inputs and emits its interface
+  outputs on the node's outputs.
+- **Recursion:** a reference cycle (including self-reference) compiles only when at least one
+  reference on it declares a finite `maxDepth`. Otherwise it reports
+  `unbounded-recursive-reference`, and the runner enforces the bound. Missing documents report
+  `missing-workflow-reference`. Diagnostics inside a referenced definition use paths prefixed with
+  `workflows.<key>.`.
+
 ## Human tasks (editor #105, Engine TECH-001)
 
 Nodes of kind `human.task.approval` and `human.task.input` (default templates **Approval** and

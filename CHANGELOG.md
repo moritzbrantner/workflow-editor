@@ -4,6 +4,11 @@
 
 ### Minor Changes
 
+- Compile Workflow References (TECH-005, #95): with `resolveWorkflowReference` (for example `createWorkflowEditorLibraryReferenceResolver(library)`), documents that reference other Workflow Documents compile to **compiled v3**.
+  - v3 freezes each referenced document once as `workflows["<id>@<version>"]` with a typed `control.start` / `control.end` interface.
+  - Reference nodes carry `workflowRef: { workflow, maxDepth? }`.
+  - The compiler reports `missing-workflow-reference`, `workflow-reference-interface` and `unbounded-recursive-reference`.
+  - Documents without references compile as before.
 - Human task nodes (editor #105, Decision Atlas 5.16): the **Approval** (`human.task.approval`, with approved/rejected outputs) and **Human input** (`human.task.input`, with a typed `value` output) default templates.
   - Both compile with a `humanTask` contract (prompt, outcomes or response type) and report `invalid-human-task` diagnostics.
   - `validateWorkflowEditorHumanTaskResponse` checks host responses.

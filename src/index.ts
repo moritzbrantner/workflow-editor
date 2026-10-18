@@ -318,6 +318,7 @@ export {
   createLocalStorageWorkflowEditorStorage,
   createWorkflowEditorEntry,
   createWorkflowEditorLibrary,
+  createWorkflowEditorLibraryReferenceResolver,
   createWorkflowEditorVersion,
   defaultWorkflowEditorMaxVersions,
   defaultWorkflowEditorStorageKey,
