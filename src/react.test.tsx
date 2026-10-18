@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { getWorkflowNodeSize } from "./react/workflow-node";
 import {
   selectionStateToSingleSelection,
@@ -1204,6 +1204,137 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
       "Object properties must use key: value syntax.",
     );
     expect(handleDocumentChange).not.toHaveBeenCalled();
+  });
+
+  test("edits schema-driven inspector fields as one document change", () => {
+    const handleChange = vi.fn();
+    const httpTemplate = {
+      id: "http",
+      label: "HTTP request",
+      kind: "http.request",
+      inspectorFields: [
+        { path: "request.url", label: "URL", kind: "text" as const, required: true },
+        { path: "request.timeoutMs", label: "Timeout", kind: "number" as const, min: 1 },
+        {
+          path: "request.method",
+          label: "Method",
+          kind: "select" as const,
+          options: [
+            { label: "GET", value: "GET" },
+            { label: "POST", value: "POST" },
+          ],
+        },
+        {
+          path: "request.body",
+          label: "Body",
+          kind: "json" as const,
+          visibleWhen: { path: "request.method", equals: ["POST"] },
+        },
+        { path: "auth.token", label: "Token", kind: "secret-ref" as const },
+        { path: "request.headers", label: "Headers", kind: "key-value" as const },
+      ],
+    };
+    const document = normalizeWorkflowEditorDocument({
+      nodes: [
+        {
+          id: "call",
+          label: "Call",
+          kind: "http.request",
+          x: 0,
+          y: 0,
+          data: { request: { method: "GET" }, host: { keep: true } },
+        },
+      ],
+      edges: [],
+    }).document;
+    render(
+      <WorkflowWorkbench
+        document={document}
+        nodeTemplates={[httpTemplate]}
+        selectedNodeId="call"
+        onDocumentChange={handleChange}
+      />,
+    );
+
+    expect(screen.queryAllByLabelText("Body")).toHaveLength(0);
+    expect(screen.getAllByText("URL is required.").length).toBeGreaterThan(0);
+    fireEvent.change(screen.getAllByLabelText("URL *")[0]!, {
+      target: { value: "https://api.example.com" },
+    });
+    fireEvent.change(screen.getAllByLabelText("Timeout")[0]!, { target: { value: "0" } });
+    expect(screen.getAllByText("Timeout must be at least 1.").length).toBeGreaterThan(0);
+    fireEvent.change(screen.getAllByLabelText("Timeout")[0]!, { target: { value: "500" } });
+    fireEvent.change(screen.getAllByLabelText("Token")[0]!, { target: { value: "vault:api" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "Add Headers row" })[0]!);
+    fireEvent.change(screen.getAllByLabelText("Headers key 1")[0]!, {
+      target: { value: "Accept" },
+    });
+    fireEvent.change(screen.getAllByLabelText("Headers value 1")[0]!, {
+      target: { value: "application/json" },
+    });
+    fireEvent.click(screen.getAllByRole("button", { name: "Apply" })[0]!);
+
+    expect(handleChange).toHaveBeenCalledTimes(1);
+    expect(handleChange.mock.calls[0]?.[0].nodes[0].data).toEqual({
+      request: {
+        method: "GET",
+        url: "https://api.example.com",
+        timeoutMs: 500,
+        headers: [{ key: "Accept", value: "application/json" }],
+      },
+      auth: { token: { secretRef: "vault:api" } },
+      host: { keep: true },
+    });
+  });
+
+  test("uses host renderers for inspector fields and edits shared fields across nodes", () => {
+    const handleChange = vi.fn();
+    const template = {
+      id: "task",
+      label: "Task",
+      kind: "task",
+      inspectorFields: [
+        { path: "owner", label: "Owner", kind: "text" as const },
+        { path: "color", label: "Color", kind: "custom" as const, renderer: "swatch" },
+      ],
+    };
+    const document = normalizeWorkflowEditorDocument({
+      nodes: [
+        { id: "a", label: "A", kind: "task", x: 0, y: 0, data: { owner: "ann", color: "red" } },
+        { id: "b", label: "B", kind: "task", x: 0, y: 0, data: { owner: "bob", color: "red" } },
+      ],
+      edges: [],
+    }).document;
+    render(
+      <WorkflowWorkbench
+        document={document}
+        nodeTemplates={[template]}
+        selectedNodeIds={["a", "b"]}
+        onDocumentChange={handleChange}
+        inspectorFieldRenderers={{
+          fields: {
+            swatch: ({ value, onChange }) => (
+              <button type="button" onClick={() => onChange("blue")}>
+                Swatch {String(value)}
+              </button>
+            ),
+          },
+        }}
+      />,
+    );
+
+    const shared = screen.getAllByText("Shared settings (2 nodes)")[0]!.closest("aside")!;
+    expect(shared.textContent).toContain("1 field has mixed values");
+    fireEvent.click(within(shared).getByRole("button", { name: "Swatch red" }));
+    fireEvent.click(within(shared).getByRole("button", { name: "Apply" }));
+
+    expect(handleChange).toHaveBeenCalledTimes(1);
+    expect(
+      handleChange.mock.calls[0]?.[0].nodes.map((node: { data: unknown }) => node.data),
+    ).toEqual([
+      { owner: "ann", color: "blue" },
+      { owner: "bob", color: "blue" },
+    ]);
   });
 
   test("toggles per-node persistence on completion in the inspector", () => {
