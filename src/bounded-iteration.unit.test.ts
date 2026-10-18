@@ -615,13 +615,11 @@ describe("iteration validation", () => {
     expect(codes(api.validateWorkflowEditorIterationNode(node))).toContain("iteration-stop-type");
   });
 
-  test("rejects an iteration node nested in a body", () => {
+  test("accepts an iteration node nested in a body (#97)", () => {
     const node = literalIterationNode();
     const inner = literalIterationNode({ id: "inner", label: "Inner" });
     node.composition!.nodes.push(inner);
-    expect(codes(api.validateWorkflowEditorIterationNode(node))).toContain(
-      "nested-iteration-not-supported",
-    );
+    expect(codes(api.validateWorkflowEditorIterationNode(node))).toEqual([]);
   });
 });
 
@@ -778,10 +776,13 @@ describe("compiling iteration nodes", () => {
       },
     ],
     [
-      "nested-iteration-not-supported",
+      "iteration-bound-invalid",
       () => {
+        // Bounds are checked at every nesting level.
         const node = literalIterationNode();
-        node.composition!.nodes.push(literalIterationNode({ id: "inner", label: "Inner" }));
+        node.composition!.nodes.push(
+          literalIterationNode({ id: "inner", label: "Inner", maxIterations: 0 }),
+        );
         return node;
       },
     ],
@@ -799,5 +800,50 @@ describe("compiling iteration nodes", () => {
   test("still rejects an ordinary composed node", () => {
     const document = newtonDocument(literalIterationNode({ kind: "custom.composite" }));
     expect(() => compileWorkflowEditorDocument(document)).toThrow(WorkflowEditorCompileError);
+  });
+});
+
+describe("nested bounded iteration (#97)", () => {
+  test("compiles an inner iteration inside an outer body with its own bound", () => {
+    const outer = literalIterationNode();
+    outer.composition!.nodes.push(
+      literalIterationNode({ id: "inner", label: "Inner", maxIterations: 3 }),
+    );
+    const compiled = compileWorkflowEditorDocument(newtonDocument(outer));
+    const compiledOuter = compiled.nodes.find((node) => node.id === "refine") as {
+      iteration: {
+        maxIterations: number;
+        body: { nodes: Array<{ id: string; iteration?: { maxIterations: number } }> };
+      };
+    };
+    expect(compiled.version).toBe(2);
+    expect(compiledOuter.iteration.maxIterations).toBe(10);
+    expect(
+      compiledOuter.iteration.body.nodes.find((node) => node.id === "inner")?.iteration
+        ?.maxIterations,
+    ).toBe(3);
+    expect(compiled).toEqual(
+      JSON.parse(
+        readFileSync(resolve(process.cwd(), "fixtures/compiled-v2-nested-iteration.json"), "utf8"),
+      ),
+    );
+  });
+
+  test("reports an inner bound problem at its nested path", () => {
+    const outer = literalIterationNode();
+    outer.composition!.nodes.push(
+      literalIterationNode({ id: "inner", label: "Inner", maxIterations: 0 }),
+    );
+    try {
+      compileWorkflowEditorDocument(newtonDocument(outer));
+      throw new Error("expected a compile error");
+    } catch (error) {
+      expect((error as WorkflowEditorCompileError).diagnostics).toContainEqual(
+        expect.objectContaining({
+          code: "iteration-bound-invalid",
+          path: expect.stringContaining("nodes.refine.composition.nodes.inner"),
+        }),
+      );
+    }
   });
 });

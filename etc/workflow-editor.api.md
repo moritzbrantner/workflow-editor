@@ -109,6 +109,24 @@ export function commitWorkflowEditorHistory<TNodeData = Record<string, unknown>,
 // @public (undocumented)
 export function compactWorkflowEditorVersions<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(entry: WorkflowEditorLibraryEntry<TNodeData, TEdgeData>, maxVersions?: number): WorkflowEditorLibraryEntry<TNodeData, TEdgeData>;
 
+// @public
+export type CompiledWorkflowHumanTask = {
+    kind: "approval";
+    prompt: string;
+    outcomes: ["approved", "rejected"];
+} | {
+    kind: "input";
+    prompt: string;
+    responseType: WorkflowEditorPortType;
+};
+
+// @public
+export function compileWorkflowEditorHumanTask(node: WorkflowEditorNode<unknown>, pathPrefix?: string): {
+    humanTask: CompiledWorkflowHumanTask;
+} | {
+    diagnostics: WorkflowEditorHumanTaskDiagnostic[];
+};
+
 // @public (undocumented)
 export function composeWorkflowEditorNodes<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(document: WorkflowEditorDocument<TNodeData, TEdgeData>, nodeIds: readonly string[], options?: WorkflowEditorComposeNodesOptions<TNodeData>): WorkflowEditorDocument<TNodeData, TEdgeData>;
 
@@ -152,6 +170,15 @@ export function createWorkflowEditorIterationNode<TNodeData = Record<string, unk
 export function createWorkflowEditorLibrary<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(input?: WorkflowEditorLibraryInput<TNodeData, TEdgeData>): WorkflowEditorLibrary<TNodeData, TEdgeData>;
 
 // @public
+export function createWorkflowEditorLibraryReferenceResolver<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(library: WorkflowEditorLibrary<TNodeData, TEdgeData>): (reference: {
+    documentId: string;
+}) => {
+    id: string;
+    version: number;
+    document: WorkflowEditorDocument;
+} | undefined;
+
+// @public
 export function createWorkflowEditorNodeTemplateRegistry<TData = Record<string, unknown>>(templates: readonly WorkflowEditorNodeTemplate<TData>[], options?: WorkflowEditorTypeValidationOptions): WorkflowEditorNodeTemplateRegistry<TData>;
 
 // @public (undocumented)
@@ -178,6 +205,37 @@ export const defaultWorkflowEditorMaxVersions = 20;
 
 // @public (undocumented)
 export const defaultWorkflowEditorNodeTemplates: ({
+    id: string;
+    label: string;
+    description: string;
+    kind: string;
+    category: string;
+    inputs: {
+        id: string;
+        label: string;
+        type: {
+            kind: "any";
+        };
+        optional: true;
+    }[];
+    outputs: {
+        id: string;
+        label: string;
+        type: {
+            kind: "typescript";
+            source: string;
+        };
+    }[];
+    data: {
+        prompt: string;
+    };
+    inspectorFields: {
+        path: string;
+        label: string;
+        kind: "text";
+        required: true;
+    }[];
+} | {
     id: string;
     label: string;
     description: string;
@@ -779,6 +837,11 @@ export function isWorkflowEditorCronExpression(value: string): boolean;
 // @public (undocumented)
 export function isWorkflowEditorDirectedAcyclicGraph<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(document: WorkflowEditorDocument<TNodeData, TEdgeData>): boolean;
 
+// @public (undocumented)
+export function isWorkflowEditorHumanTaskNode(node: {
+    kind?: string;
+}): boolean;
+
 // @public
 export function isWorkflowEditorInspectorFieldPath(path: unknown): path is string;
 
@@ -1097,6 +1160,12 @@ export function validateWorkflowEditorDocument(value: unknown, options?: Workflo
 
 // @public
 export function validateWorkflowEditorFieldValue(field: WorkflowEditorInspectorFieldDefinition, value: unknown): string[];
+
+// @public
+export function validateWorkflowEditorHumanTaskResponse(humanTask: CompiledWorkflowHumanTask, response: unknown, options?: {
+    typeDeclarations?: string;
+    typeDefinitions?: readonly WorkflowEditorTypeDefinition[];
+}): string[];
 
 // @public
 export function validateWorkflowEditorInspectorFieldDefinitions(fields: unknown): WorkflowEditorInspectorFieldDiagnostic[];
@@ -1970,6 +2039,99 @@ export type WorkflowEditorHistoryState<TNodeData = Record<string, unknown>, TEdg
 };
 
 // @public
+export const workflowEditorHumanApprovalKind = "human.task.approval";
+
+// @public
+export type WorkflowEditorHumanApprovalResponse = {
+    decision: "approved" | "rejected";
+    comment?: string;
+};
+
+// @public (undocumented)
+export const workflowEditorHumanInputKind = "human.task.input";
+
+// @public
+export type WorkflowEditorHumanInputResponse<TValue = unknown> = {
+    value: TValue;
+    comment?: string;
+};
+
+// @public (undocumented)
+export type WorkflowEditorHumanTaskDiagnostic = {
+    code: "invalid-human-task";
+    message: string;
+    path: string;
+    nodeId: string;
+    portId?: string;
+};
+
+// @public (undocumented)
+export const workflowEditorHumanTaskNodeTemplates: ({
+    id: string;
+    label: string;
+    description: string;
+    kind: string;
+    category: string;
+    inputs: {
+        id: string;
+        label: string;
+        type: {
+            kind: "any";
+        };
+    }[];
+    outputs: {
+        id: string;
+        label: string;
+        type: {
+            kind: "any";
+        };
+        metadata: {
+            workflowTypeInference: string;
+        };
+    }[];
+    data: {
+        prompt: string;
+    };
+    inspectorFields: {
+        path: string;
+        label: string;
+        kind: "text";
+        required: true;
+    }[];
+} | {
+    id: string;
+    label: string;
+    description: string;
+    kind: string;
+    category: string;
+    inputs: {
+        id: string;
+        label: string;
+        type: {
+            kind: "any";
+        };
+        optional: true;
+    }[];
+    outputs: {
+        id: string;
+        label: string;
+        type: {
+            kind: "typescript";
+            source: string;
+        };
+    }[];
+    data: {
+        prompt: string;
+    };
+    inspectorFields: {
+        path: string;
+        label: string;
+        kind: "text";
+        required: true;
+    }[];
+})[];
+
+// @public
 export function WorkflowEditorImportErrorAlert(input: {
     controller: Pick<WorkflowEditorController, "importError"> & {
         actions: Pick<WorkflowEditorController["actions"], "dismissImportError">;
@@ -2048,7 +2210,9 @@ export type WorkflowEditorIterationDiagnostic = {
 };
 
 // @public (undocumented)
-export type WorkflowEditorIterationDiagnosticCode = "iteration-bound-required" | "iteration-bound-invalid" | "iteration-body-missing" | "iteration-boundary-invalid" | "iteration-state-type" | "iteration-stop-type" | "nested-iteration-not-supported";
+export type WorkflowEditorIterationDiagnosticCode = "iteration-bound-required" | "iteration-bound-invalid" | "iteration-body-missing" | "iteration-boundary-invalid" | "iteration-state-type" | "iteration-stop-type"
+/** @deprecated Nested iterations compile since #97; no longer reported. */
+| "nested-iteration-not-supported";
 
 // @public
 export function workflowEditorIterationMeasurements<TNodeData>(node: WorkflowEditorNode<TNodeData>): Array<{

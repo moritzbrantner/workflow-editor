@@ -231,6 +231,18 @@ export {
 } from "./core-triggers";
 import { normalizeWorkflowEditorTriggers } from "./core-triggers";
 export {
+  compileWorkflowEditorHumanTask,
+  isWorkflowEditorHumanTaskNode,
+  validateWorkflowEditorHumanTaskResponse,
+  workflowEditorHumanApprovalKind,
+  workflowEditorHumanInputKind,
+  workflowEditorHumanTaskNodeTemplates,
+  type CompiledWorkflowHumanTask,
+  type WorkflowEditorHumanApprovalResponse,
+  type WorkflowEditorHumanInputResponse,
+  type WorkflowEditorHumanTaskDiagnostic,
+} from "./core-human-tasks";
+export {
   diffWorkflowEditorDocuments,
   isWorkflowEditorSecretLikePath,
   workflowEditorDiffRedacted,
