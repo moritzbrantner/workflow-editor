@@ -1,3 +1,4 @@
+import type { WorkflowEditorTrigger } from "./core-triggers";
 import type { WorkflowEditorInspectorFieldDefinition } from "./core-inspector-fields";
 import type {
   GraphEditorDocument,
@@ -213,6 +214,8 @@ export type WorkflowEditorDocument<
   nodes: Array<WorkflowEditorNode<TNodeData>>;
   edges: Array<WorkflowEditorEdge<TEdgeData>>;
   typeDeclarations?: string;
+  /** How the workflow may start (#91); a host registers and activates them. */
+  triggers?: WorkflowEditorTrigger[];
 };
 
 export type WorkflowEditorDocumentDiagnosticCode =
