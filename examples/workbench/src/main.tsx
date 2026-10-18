@@ -1029,9 +1029,16 @@ function incidentEscalationDocument(): ExampleDocument {
   }).document;
 }
 
+/**
+ * Human tasks (#105): an approval with approve/reject branches and a typed correction step. The
+ * start/end interface (request in, approved out) matches the Incident Escalation reference node.
+ * Static Pages authors, validates and compiles these tasks; only a connected host runs them.
+ */
 function approvalChecklistDocument(): ExampleDocument {
+  const humanTask = (kind: string) =>
+    defaultWorkflowEditorNodeTemplates.find((template) => template.kind === kind)!;
   return normalizeWorkflowEditorDocument({
-    viewport: { x: 90, y: 40, zoom: 0.95 },
+    viewport: { x: 90, y: 40, zoom: 0.8 },
     nodes: [
       {
         id: "request",
@@ -1048,19 +1055,17 @@ function approvalChecklistDocument(): ExampleDocument {
         kind: "messaging.send",
         category: "Messaging",
         x: 310,
-        y: 0,
+        y: -90,
         inputs: [{ id: "message", label: "Message", type: objectType }],
         outputs: [{ id: "sent", label: "Sent", type: booleanType }],
       },
       {
+        ...humanTask("human.task.approval"),
         id: "approval",
-        label: "Wait for approval",
-        kind: "human.approval",
-        category: "Human task",
+        label: "Approve checklist",
         x: 310,
-        y: 150,
-        inputs: [{ id: "request", label: "Request", type: objectType }],
-        outputs: [{ id: "approved", label: "Approved", type: booleanType }],
+        y: 80,
+        data: { prompt: "Is the incident checklist complete?" },
       },
       {
         id: "record",
@@ -1068,21 +1073,48 @@ function approvalChecklistDocument(): ExampleDocument {
         kind: "integration.api.request",
         category: "Integration",
         x: 670,
-        y: 90,
-        inputs: [
-          { id: "request", label: "Request", type: objectType },
-          { id: "approved", label: "Approved", type: booleanType },
-        ],
-        outputs: [{ id: "record", label: "Record", type: objectType }],
+        y: 0,
+        inputs: [{ id: "request", label: "Request", type: objectType }],
+        outputs: [{ id: "approved", label: "Approved", type: booleanType }],
+      },
+      {
+        ...humanTask("human.task.input"),
+        id: "correction",
+        label: "Request correction",
+        x: 670,
+        y: 200,
+        outputs: [{ id: "value", label: "Missing step", type: stringType }],
+        data: { prompt: "Which checklist step is missing?" },
+      },
+      {
+        id: "resubmit",
+        label: "Resubmit checklist",
+        kind: "messaging.send",
+        category: "Messaging",
+        x: 1000,
+        y: 200,
+        inputs: [{ id: "message", label: "Message", type: stringType }],
+        outputs: [{ id: "sent", label: "Sent", type: booleanType }],
+      },
+      {
+        id: "end",
+        label: "Decision",
+        kind: "control.end",
+        category: "Control flow",
+        x: 1000,
+        y: 0,
+        inputs: [{ id: "approved", label: "Approved", type: booleanType }],
       },
     ],
     edges: [
       edge("request", "request", "notify", "message"),
       edge("request", "request", "approval", "request"),
-      edge("request", "request", "record", "request"),
-      edge("approval", "approved", "record", "approved"),
+      edge("approval", "approved", "record", "request"),
+      edge("approval", "rejected", "correction", "context"),
+      edge("correction", "value", "resubmit", "message"),
+      edge("record", "approved", "end", "approved"),
     ],
-  }).document;
+  }).document as ExampleDocument;
 }
 
 function createObjectConstructorNode(
