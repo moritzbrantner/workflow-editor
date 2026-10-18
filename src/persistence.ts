@@ -1047,3 +1047,27 @@ function createWorkflowEditorId(prefix: string) {
 function ensureJsonFilename(filename: string) {
   return filename.toLowerCase().endsWith(".json") ? filename : `${filename}.json`;
 }
+
+export {
+  applyWorkflowEditorBundleImportPlan,
+  buildWorkflowEditorBundle,
+  collectWorkflowEditorReferenceSites,
+  isWorkflowEditorBundleText,
+  parseWorkflowEditorBundle,
+  planWorkflowEditorBundleImport,
+  stringifyWorkflowEditorBundle,
+  workflowEditorBundleCollisionStrategies,
+  workflowEditorBundleFormat,
+  workflowEditorBundleVersion,
+  type WorkflowEditorBundle,
+  type WorkflowEditorBundleCollisionStrategy,
+  type WorkflowEditorBundleDiagnostic,
+  type WorkflowEditorBundleDiagnosticCode,
+  type WorkflowEditorBundleDocument,
+  type WorkflowEditorBundleImportAction,
+  type WorkflowEditorBundleImportItem,
+  type WorkflowEditorBundleImportPlan,
+  type WorkflowEditorBundleReference,
+  type WorkflowEditorBundleReferenceRewrite,
+  type WorkflowEditorBundleResult,
+} from "./bundle";

@@ -95,6 +95,7 @@ export default defineConfig({
       exclude: [
         "src/**/*.test.{ts,tsx}",
         "src/**/*.stories.{ts,tsx}",
+        "src/**/*.bench.{ts,tsx}",
         "src/.storybook/**",
         "src/**/*.e2e.*",
         "src/react.e2e-app/**",

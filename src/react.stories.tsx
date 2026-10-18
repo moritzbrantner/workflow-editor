@@ -13,6 +13,7 @@ import {
   useWorkflowWorkbenchController,
   type WorkflowWorkbenchProps,
 } from "@moritzbrantner/workflow-editor/react";
+import type { WorkflowExecutionSnapshot } from "@moritzbrantner/workflow-editor/core";
 
 import {
   emptyStoryWorkflowDocument,
@@ -44,10 +45,12 @@ function WorkbenchStory({
   initialDocument = storyWorkflowDocument,
   initialSelectedNodeIds = [],
   readOnly = false,
+  execution,
 }: {
   initialDocument?: StoryWorkflowDocument;
   initialSelectedNodeIds?: string[];
   readOnly?: boolean;
+  execution?: WorkflowExecutionSnapshot;
 }) {
   const [document, setDocument] = useState(
     () => normalizeWorkflowEditorDocument(initialDocument).document,
@@ -69,6 +72,7 @@ function WorkbenchStory({
     typeDefinitions: storyWorkflowTypeDefinitions,
     onDocumentChange: setDocument,
     onSelectionStateChange: setSelection,
+    execution,
   } satisfies WorkflowWorkbenchProps;
 
   return (
@@ -152,4 +156,117 @@ export const HiddenChrome: Story = {
 
     return <HiddenChromeStory />;
   },
+};
+
+const runStartedAt = "2026-10-18T09:00:00.000Z";
+
+/** Live run: the source finished, scoring is running, the rest is queued. */
+export const ExecutionRunning: Story = {
+  render: () => (
+    <WorkbenchStory
+      initialSelectedNodeIds={["score-lead"]}
+      execution={{
+        runId: "run-42",
+        state: "running",
+        mode: "live",
+        nodes: {
+          "lead-source": {
+            state: "succeeded",
+            attempt: 1,
+            durationMs: 420,
+            outputSummary: "1 lead",
+          },
+          "score-lead": { state: "running", attempt: 1, progress: 0.4, startedAt: runStartedAt },
+          approval: { state: "queued" },
+          notify: { state: "queued" },
+        },
+        edges: {
+          "lead-source-score-lead": { state: "transferred", summary: "1 lead" },
+          "score-lead-approval": { state: "idle" },
+        },
+      }}
+    />
+  ),
+};
+
+/** Failed run: scoring failed on its second attempt, so downstream nodes were skipped. */
+export const ExecutionFailed: Story = {
+  render: () => (
+    <WorkbenchStory
+      initialSelectedNodeIds={["score-lead"]}
+      execution={{
+        runId: "run-43",
+        state: "failed",
+        mode: "live",
+        nodes: {
+          "lead-source": { state: "succeeded", attempt: 1, durationMs: 380 },
+          "score-lead": {
+            state: "failed",
+            attempt: 2,
+            durationMs: 1210,
+            errorSummary: "Scoring service returned 503",
+          },
+          approval: { state: "skipped" },
+          notify: { state: "skipped" },
+        },
+        edges: {
+          "lead-source-score-lead": { state: "transferred" },
+          "score-lead-approval": { state: "blocked" },
+        },
+      }}
+    />
+  ),
+};
+
+/** Completed run inspected afterwards, shown as a past run. */
+export const ExecutionCompleted: Story = {
+  render: () => (
+    <WorkbenchStory
+      initialSelectedNodeIds={["notify"]}
+      execution={{
+        runId: "run-41",
+        state: "succeeded",
+        mode: "historical",
+        nodes: {
+          "lead-source": { state: "succeeded", attempt: 1, durationMs: 400 },
+          "score-lead": {
+            state: "succeeded",
+            attempt: 1,
+            durationMs: 950,
+            outputSummary: "Score 87",
+          },
+          approval: {
+            state: "succeeded",
+            attempt: 1,
+            durationMs: 60000,
+            outputSummary: "Approved",
+          },
+          notify: { state: "succeeded", attempt: 1, durationMs: 210, outputSummary: "Sent" },
+        },
+        edges: {
+          "lead-source-score-lead": { state: "transferred" },
+          "score-lead-approval": { state: "transferred" },
+        },
+      }}
+    />
+  ),
+};
+
+/** Mixed states, including a cancelled node, a custom host state and a node without state. */
+export const ExecutionMixed: Story = {
+  render: () => (
+    <WorkbenchStory
+      initialSelectedNodeIds={["approval"]}
+      execution={{
+        runId: "run-44",
+        state: "cancelled",
+        nodes: {
+          "lead-source": { state: "succeeded", attempt: 1 },
+          "score-lead": { state: "cancelled", attempt: 1, errorSummary: "Cancelled by operator" },
+          approval: { state: "awaiting-review" },
+        },
+        edges: { "lead-source-score-lead": { state: "active" } },
+      }}
+    />
+  ),
 };

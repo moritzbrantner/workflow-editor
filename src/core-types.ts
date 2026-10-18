@@ -161,6 +161,11 @@ export type WorkflowEditorPortPayload = {
 
 export type WorkflowEditorWorkflowReference = {
   documentId: string;
+  /**
+   * Finite re-entry bound for a recursive reference (a positive integer). A reference cycle is
+   * bounded when at least one reference on it declares `maxDepth`; unbounded cycles are rejected.
+   */
+  maxDepth?: number;
 };
 
 export type WorkflowEditorCompositionBoundary = {
