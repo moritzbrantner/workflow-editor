@@ -231,6 +231,14 @@ export {
 } from "./core-triggers";
 import { normalizeWorkflowEditorTriggers } from "./core-triggers";
 export {
+  getWorkflowEditorInputDeclarations,
+  resolveWorkflowEditorInputValues,
+  validateWorkflowEditorInputValues,
+  type WorkflowEditorInputDeclaration,
+  type WorkflowEditorInputDiagnostic,
+  type WorkflowEditorInputProfile,
+} from "./core-workflow-inputs";
+export {
   compileWorkflowEditorHumanTask,
   isWorkflowEditorHumanTaskNode,
   validateWorkflowEditorHumanTaskResponse,

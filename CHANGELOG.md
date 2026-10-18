@@ -4,6 +4,12 @@
 
 ### Minor Changes
 
+- Typed workflow inputs and named input profiles (#115, Decision Atlas 5.12):
+  - A document's inputs are its Start node output ports: name, TypeScript type, required state, and default via `optional` / `defaultValue`. This is the same interface Workflow References use.
+  - `getWorkflowEditorInputDeclarations`, `validateWorkflowEditorInputValues` (TypeScript checker) and `resolveWorkflowEditorInputValues` are exported.
+  - Named profiles live on the library entry (`inputProfiles`, never inside the document), with `upsertWorkflowEditorInputProfile` / `removeWorkflowEditorInputProfile`.
+  - Document settings gain an **Inputs** panel with a generated form, inline validation, and save / switch / delete for profiles.
+  - `WorkflowEditor` `onRunWorkflow(values, profile)` is the host Run seam; without it, Pages says runs are unavailable.
 - Document tabs (#100, Decision Atlas 5.14): open workflows are tabs, one per Library Entry. The tabs replace the document select and breadcrumb row (owner decision 2026-10-18, B).
   - Opening a Workflow Reference opens or switches to the child's tab, which shows an "↑ Parent" link back to the opening document. There is no breadcrumb trail (owner decision 2026-10-18, A).
   - Tabs keep each document's draft, history and selection, persist in `library.openDocumentIds` across reloads, and can be closed without losing the document.
