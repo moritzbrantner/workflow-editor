@@ -1,4 +1,4 @@
-// Acceptance for issue #15 / Decision Atlas 1.9 and 1.10 in the Pages workbench. The default
+// Acceptance for issue #15 / Decision Atlas 1.9 and 1.10 in the Pages workbench. The
 // "Lead Intake Automation" document shows a multi-source `control.merge` node, "Routed leads",
 // whose `items: Lead[]` input declares `{ min: 1, max: 3 }`. Through the real port connection
 // menu (the same keyboard affordance the native TypeScript spec uses), compatible sources connect
@@ -94,9 +94,16 @@ async function expectRejected(page: Page, sourcePort: string, target: string) {
 
 async function openLeadIntake(page: Page) {
   await page.goto("http://127.0.0.1:4175/");
-  await expect(
-    page.getByRole("button", { name: "Lead Intake Automation", exact: true }),
-  ).toBeVisible();
+  const leadIntakeTitle = page.getByRole("button", { name: "Lead Intake Automation", exact: true });
+  const defaultTitle = page.getByRole("button", { name: "Sales Data Pipeline", exact: true });
+  await expect(leadIntakeTitle.or(defaultTitle).first()).toBeVisible();
+  if (await defaultTitle.isVisible()) {
+    // First open shows the data pipeline (Decision Atlas 5.4); switch to the lead intake example.
+    await defaultTitle.click();
+    await page.getByLabel("Workflow document", { exact: true }).selectOption("lead-intake");
+    await page.keyboard.press("Escape");
+  }
+  await expect(leadIntakeTitle).toBeVisible();
   await expect(
     page.locator('[data-slot="workflow-builder-node"][data-node-id="routed-leads"]').first(),
   ).toBeAttached();

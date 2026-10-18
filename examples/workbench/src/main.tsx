@@ -25,6 +25,12 @@ import {
   type WorkflowEditorTypeDefinition,
 } from "@moritzbrantner/workflow-editor";
 
+import {
+  dataPipelineDocument,
+  dataPipelineExampleId,
+  mediaPipelineDocument,
+  mediaPipelineExampleId,
+} from "./reference-examples";
 import "./styles.css";
 
 type ExampleNodeData = Record<string, unknown>;
@@ -319,6 +325,26 @@ const nodeTemplates: ReadonlyArray<WorkflowEditorNodeTemplate<ExampleNodeData>> 
 function createExamplesLibrary(): ExampleLibrary {
   const documents = [
     createWorkflowEditorEntry({
+      id: dataPipelineExampleId,
+      name: "Sales Data Pipeline",
+      description:
+        "Source → normalize → validate → branch → warehouse or quarantine; compiled, not executed, in Pages.",
+      tags: ["data", "pipeline", "example"],
+      createdAt: seededAt,
+      updatedAt: seededAt,
+      document: dataPipelineDocument(),
+    }),
+    createWorkflowEditorEntry({
+      id: mediaPipelineExampleId,
+      name: "Product Image Generation",
+      description:
+        "Photo and prompt → one external ComfyUI operation → resize → published artifact; no model runs in Pages.",
+      tags: ["media", "ai", "asset", "example"],
+      createdAt: seededAt,
+      updatedAt: seededAt,
+      document: mediaPipelineDocument(),
+    }),
+    createWorkflowEditorEntry({
       id: "typescript-ports",
       name: "TypeScript ports",
       createdAt: seededAt,
@@ -402,7 +428,8 @@ function createExamplesLibrary(): ExampleLibrary {
   ];
 
   return createWorkflowEditorLibrary({
-    activeDocumentId: "lead-intake",
+    // First-time visitors open into the editable data pipeline (Decision Atlas 5.4).
+    activeDocumentId: dataPipelineExampleId,
     documents,
   });
 }
