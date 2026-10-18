@@ -24,11 +24,30 @@ import type {
   WorkflowEditorTypeValidationOptions,
 } from "./core-types";
 import type { WorkflowEditorIterationDiagnosticCode } from "./core-iteration";
+import { createWorkflowEditorTypeResolver } from "./core-type-resolver";
+
+import {
+  compileWorkflowEditorHumanTask,
+  isWorkflowEditorHumanTaskNode,
+  type CompiledWorkflowHumanTask,
+} from "./core-human-tasks";
+
+export {
+  validateWorkflowEditorHumanTaskResponse,
+  type CompiledWorkflowHumanTask,
+  type WorkflowEditorHumanApprovalResponse,
+  type WorkflowEditorHumanInputResponse,
+} from "./core-human-tasks";
 
 export const compiledWorkflowFormat = "@moritzbrantner/workflow/compiled" as const;
 export const compiledWorkflowVersion = 1 as const;
 /** Emitted only for documents containing bounded iteration; DAG-only documents stay version 1. */
 export const compiledWorkflowIterationVersion = 2 as const;
+/**
+ * Emitted only for documents that reference other Workflow Documents (TECH-005, #95). Adds the
+ * frozen `workflows` dependency closure; documents without references keep version 1 or 2.
+ */
+export const compiledWorkflowReferenceVersion = 3 as const;
 
 export type CompiledWorkflowPort = {
   id: string;
@@ -49,6 +68,8 @@ export type CompiledWorkflowNode<TData extends Record<string, unknown> = Record<
     data?: TData;
     /** Present only when the authored node opts into persisting its result on completion. */
     persistence?: "on-completion";
+    /** Human approval or typed-input task contract (`human.task.*` kinds, editor #105). */
+    humanTask?: CompiledWorkflowHumanTask;
   };
 
 export type CompiledWorkflowEdge = Pick<
@@ -115,9 +136,81 @@ export type CompiledWorkflowV2<
   nodes: Array<CompiledWorkflowNode<TNodeData> | CompiledWorkflowIterationNode<TNodeData>>;
 };
 
+/** A referenced workflow's typed boundary: `control.start` outputs and `control.end` inputs. */
+export type CompiledWorkflowInterfacePort = {
+  /** Port id, matched by the referencing node's port with the same id. */
+  id: string;
+  nodeId: string;
+  portId: string;
+  type: WorkflowEditorPortType;
+};
+
+/** One resolved, immutable Workflow Document in the compiled dependency closure. */
+export type CompiledWorkflowDefinition<
+  TNodeData extends Record<string, unknown> = Record<string, unknown>,
+> = {
+  /** Workflow Document id and the library version that was compiled. */
+  id: string;
+  version: number;
+  nodes: Array<
+    | CompiledWorkflowNode<TNodeData>
+    | CompiledWorkflowIterationNode<TNodeData>
+    | CompiledWorkflowReferenceNode<TNodeData>
+  >;
+  edges: CompiledWorkflowEdge[];
+  order: string[];
+  typeDeclarations?: string;
+  interface: {
+    inputs: CompiledWorkflowInterfacePort[];
+    outputs: CompiledWorkflowInterfacePort[];
+  };
+};
+
+/**
+ * A node that runs another workflow from `workflows`. Its inputs feed the referenced workflow's
+ * interface inputs with the same ids; its outputs carry the interface outputs with the same ids.
+ */
+export type CompiledWorkflowReferenceNode<
+  TNodeData extends Record<string, unknown> = Record<string, unknown>,
+> = CompiledWorkflowNode<TNodeData> & {
+  workflowRef: {
+    /** Key into `workflows`: `<documentId>@<version>`. */
+    workflow: string;
+    /** Finite re-entry bound of a recursive reference; the runner enforces it. */
+    maxDepth?: number;
+  };
+};
+
+export type CompiledWorkflowV3<
+  TNodeData extends Record<string, unknown> = Record<string, unknown>,
+> = Omit<CompiledWorkflowV1<TNodeData>, "version" | "nodes"> & {
+  version: typeof compiledWorkflowReferenceVersion;
+  nodes: Array<
+    | CompiledWorkflowNode<TNodeData>
+    | CompiledWorkflowIterationNode<TNodeData>
+    | CompiledWorkflowReferenceNode<TNodeData>
+  >;
+  /** The frozen dependency closure, keyed `<documentId>@<version>`, each definition once. */
+  workflows: Record<string, CompiledWorkflowDefinition<TNodeData>>;
+};
+
 export type CompiledWorkflow<TNodeData extends Record<string, unknown> = Record<string, unknown>> =
   | CompiledWorkflowV1<TNodeData>
-  | CompiledWorkflowV2<TNodeData>;
+  | CompiledWorkflowV2<TNodeData>
+  | CompiledWorkflowV3<TNodeData>;
+
+/** Resolves a Workflow Reference to an immutable library version at compile time. */
+export type WorkflowEditorWorkflowReferenceResolver = (reference: {
+  documentId: string;
+}) => { id: string; version: number; document: WorkflowEditorDocument } | undefined;
+
+export type WorkflowEditorCompileOptions = WorkflowEditorTypeValidationOptions & {
+  /**
+   * Enables compiling Workflow References (compiled v3). Without it, a reference is reported as
+   * `nested-workflow-not-supported`.
+   */
+  resolveWorkflowReference?: WorkflowEditorWorkflowReferenceResolver;
+};
 
 export type WorkflowEditorCompileDiagnosticCode =
   | "invalid-port-type"
@@ -127,6 +220,10 @@ export type WorkflowEditorCompileDiagnosticCode =
   | "composition-not-supported"
   | "port-cardinality"
   | "invalid-dag"
+  | "missing-workflow-reference"
+  | "workflow-reference-interface"
+  | "unbounded-recursive-reference"
+  | "invalid-human-task"
   | WorkflowEditorIterationDiagnosticCode;
 
 export type WorkflowEditorCompileDiagnostic = {
@@ -225,13 +322,20 @@ function validateExecutableNode(
     });
   }
 
-  if (node.workflowRef) {
+  if (node.workflowRef && !(scope.allowReferences && !scope.inBody)) {
     diagnostics.push({
       code: "nested-workflow-not-supported",
       message: `Workflow node ${node.id} references another workflow; compiler version 1 does not inline nested workflows yet.`,
       path: `nodes.${node.id}.workflowRef`,
       nodeId: node.id,
     });
+  }
+
+  if (isWorkflowEditorHumanTaskNode(node)) {
+    const humanTask = compileWorkflowEditorHumanTask(node, scope.pathPrefix);
+    if ("diagnostics" in humanTask) {
+      diagnostics.push(...humanTask.diagnostics);
+    }
   }
 
   if (iteration) {
@@ -322,7 +426,32 @@ export function compileWorkflowEditorDocument<
   TEdgeData extends Record<string, unknown> = Record<string, unknown>,
 >(
   document: WorkflowEditorDocument<TNodeData, TEdgeData>,
-  options: WorkflowEditorTypeValidationOptions = {},
+  options: WorkflowEditorCompileOptions = {},
+): CompiledWorkflow<TNodeData> {
+  const { resolveWorkflowReference, ...typeOptions } = options;
+  if (resolveWorkflowReference && documentHasTopLevelReferences(document)) {
+    return compileWorkflowEditorReferenceClosure(
+      document as unknown as WorkflowEditorDocument,
+      typeOptions,
+      resolveWorkflowReference,
+    ) as unknown as CompiledWorkflow<TNodeData>;
+  }
+  return compileWorkflowEditorDocumentBase(document, typeOptions, false);
+}
+
+function documentHasTopLevelReferences(document: WorkflowEditorDocument<unknown, unknown>) {
+  return (
+    Array.isArray(document.nodes) && document.nodes.some((node) => node?.workflowRef?.documentId)
+  );
+}
+
+function compileWorkflowEditorDocumentBase<
+  TNodeData extends Record<string, unknown> = Record<string, unknown>,
+  TEdgeData extends Record<string, unknown> = Record<string, unknown>,
+>(
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>,
+  options: WorkflowEditorTypeValidationOptions,
+  allowReferences: boolean,
 ): CompiledWorkflow<TNodeData> {
   let normalized: WorkflowEditorDocument<TNodeData, TEdgeData>;
   try {
@@ -356,6 +485,7 @@ export function compileWorkflowEditorDocument<
     },
     pathPrefix: "",
     inBody: false,
+    allowReferences,
   };
   const diagnostics = scopeDiagnostics(normalized as WorkflowEditorDocument, scope);
   if (diagnostics.length > 0) {
@@ -389,6 +519,8 @@ type CompileScope = {
   /** Prefix that places body diagnostics inside their iteration node. */
   pathPrefix: string;
   inBody: boolean;
+  /** Top-level Workflow References compile into the v3 closure (bodies still reject them). */
+  allowReferences?: boolean;
 };
 
 function scopeDiagnostics(
@@ -468,6 +600,7 @@ function compileScope(document: WorkflowEditorDocument, scope: CompileScope) {
       ...(node.outputs?.length ? { outputs: node.outputs.map(compilePort) } : {}),
       ...(node.data === undefined ? {} : { data: node.data }),
       ...compiledPersistence(node),
+      ...compiledHumanTask(node),
     };
   });
 
@@ -482,6 +615,12 @@ function compileScope(document: WorkflowEditorDocument, scope: CompileScope) {
     }));
 
   return { nodes, edges, order };
+}
+
+function compiledHumanTask(node: WorkflowEditorNode): { humanTask?: CompiledWorkflowHumanTask } {
+  if (!isWorkflowEditorHumanTaskNode(node)) return {};
+  const result = compileWorkflowEditorHumanTask(node);
+  return "humanTask" in result ? { humanTask: result.humanTask } : {};
 }
 
 function compiledPersistence(node: WorkflowEditorNode): { persistence?: "on-completion" } {
@@ -565,3 +704,237 @@ export {
   type WorkflowEditorCompiledSourceMap,
   type WorkflowEditorCompiledWorkflowReport,
 } from "./compiler-report";
+
+type ReferenceEdge = { from: string; to: string; bounded: boolean; nodeId: string; path: string };
+
+const rootWorkflowKey = "<root>";
+
+/**
+ * Compiles a document whose top-level nodes reference other Workflow Documents (TECH-005). Every
+ * referenced definition is resolved once, frozen by `<id>@<version>` and compiled with its own
+ * types; recursive reference cycles need a finite `maxDepth` on one of their references.
+ */
+function compileWorkflowEditorReferenceClosure(
+  root: WorkflowEditorDocument,
+  options: WorkflowEditorTypeValidationOptions,
+  resolve: WorkflowEditorWorkflowReferenceResolver,
+): CompiledWorkflowV3 {
+  const diagnostics: WorkflowEditorCompileDiagnostic[] = [];
+  const workflows = new Map<string, CompiledWorkflowDefinition | null>();
+  const referenceEdges: ReferenceEdge[] = [];
+
+  const compileOne = (
+    document: WorkflowEditorDocument,
+    key: string,
+    pathPrefix: string,
+  ): CompiledWorkflow | undefined => {
+    let compiled: CompiledWorkflow;
+    try {
+      compiled = compileWorkflowEditorDocumentBase(document, options, true);
+    } catch (error) {
+      if (error instanceof WorkflowEditorCompileError) {
+        diagnostics.push(
+          ...error.diagnostics.map((diagnostic) => ({
+            ...diagnostic,
+            path: `${pathPrefix}${diagnostic.path}`,
+          })),
+        );
+        return undefined;
+      }
+      throw error;
+    }
+
+    const declarations = document.typeDeclarations;
+    for (const node of document.nodes) {
+      const reference = node.workflowRef;
+      if (!reference?.documentId) continue;
+      const path = `${pathPrefix}nodes.${node.id}.workflowRef`;
+      const target = resolve({ documentId: reference.documentId });
+      if (!target) {
+        diagnostics.push({
+          code: "missing-workflow-reference",
+          message: `Workflow node ${node.id} references missing workflow "${reference.documentId}".`,
+          path,
+          nodeId: node.id,
+        });
+        continue;
+      }
+      const targetKey = `${target.id}@${target.version}`;
+      referenceEdges.push({
+        from: key,
+        to: targetKey,
+        bounded: typeof reference.maxDepth === "number" && reference.maxDepth > 0,
+        nodeId: node.id,
+        path,
+      });
+      const targetInterface = workflowInterface(target.document);
+      diagnostics.push(
+        ...referenceInterfaceDiagnostics(node, targetInterface, target, {
+          typeDefinitions: options.typeDefinitions,
+          typeDeclarations: [declarations, target.document.typeDeclarations]
+            .filter(Boolean)
+            .join("\n"),
+          path: `${pathPrefix}nodes.${node.id}`,
+        }),
+      );
+      const compiledNode = compiled.nodes.find((candidate) => candidate.id === node.id) as
+        | CompiledWorkflowReferenceNode
+        | undefined;
+      if (compiledNode) {
+        compiledNode.workflowRef = {
+          workflow: targetKey,
+          ...(typeof reference.maxDepth === "number" ? { maxDepth: reference.maxDepth } : {}),
+        };
+      }
+      if (!workflows.has(targetKey)) {
+        workflows.set(targetKey, null);
+        const definition = compileOne(target.document, targetKey, `workflows.${targetKey}.`);
+        if (definition) {
+          const { format: _format, version: _version, ...rest } = definition;
+          workflows.set(targetKey, {
+            id: target.id,
+            version: target.version,
+            ...(rest as Omit<CompiledWorkflowDefinition, "id" | "version" | "interface">),
+            interface: targetInterface,
+          });
+        }
+      }
+    }
+    return compiled;
+  };
+
+  const compiledRoot = compileOne(root, rootWorkflowKey, "");
+  diagnostics.push(...unboundedReferenceCycles(referenceEdges));
+  if (diagnostics.length > 0 || !compiledRoot) {
+    throw new WorkflowEditorCompileError(diagnostics);
+  }
+
+  const { format, version: _version, ...rootRest } = compiledRoot;
+  return {
+    format,
+    version: compiledWorkflowReferenceVersion,
+    ...(rootRest as Omit<CompiledWorkflowV3, "format" | "version" | "workflows">),
+    workflows: Object.fromEntries(
+      [...workflows.entries()]
+        .filter((entry): entry is [string, CompiledWorkflowDefinition] => entry[1] !== null)
+        .sort(([a], [b]) => compareIds(a, b)),
+    ),
+  };
+}
+
+function workflowInterface(
+  document: WorkflowEditorDocument,
+): CompiledWorkflowDefinition["interface"] {
+  const collect = (kind: string, side: "inputs" | "outputs") =>
+    document.nodes
+      .filter((node) => node.kind === kind)
+      .flatMap((node) =>
+        (node[side] ?? []).map((port) => ({
+          id: port.id,
+          nodeId: node.id,
+          portId: port.id,
+          type: port.type,
+        })),
+      )
+      .sort((a, b) => compareIds(a.id, b.id) || compareIds(a.nodeId, b.nodeId));
+  return { inputs: collect("control.start", "outputs"), outputs: collect("control.end", "inputs") };
+}
+
+function referenceInterfaceDiagnostics(
+  node: WorkflowEditorNode,
+  targetInterface: CompiledWorkflowDefinition["interface"],
+  target: { id: string },
+  options: {
+    typeDefinitions?: WorkflowEditorTypeValidationOptions["typeDefinitions"];
+    typeDeclarations: string;
+    path: string;
+  },
+): WorkflowEditorCompileDiagnostic[] {
+  const resolver = createWorkflowEditorTypeResolver(
+    options.typeDefinitions,
+    options.typeDeclarations,
+  );
+  const diagnostics: WorkflowEditorCompileDiagnostic[] = [];
+  const mismatch = (portId: string, side: "inputs" | "outputs", message: string) =>
+    diagnostics.push({
+      code: "workflow-reference-interface",
+      message: `Workflow node ${node.id} → "${target.id}": ${message}`,
+      path: `${options.path}.${side}.${portId}`,
+      nodeId: node.id,
+      portId,
+    });
+
+  for (const [side, interfacePorts, direction] of [
+    ["inputs", targetInterface.inputs, "in"],
+    ["outputs", targetInterface.outputs, "out"],
+  ] as const) {
+    const nodePorts = node[side] ?? [];
+    const duplicates = interfacePorts.filter(
+      (port, index) => interfacePorts.findIndex((other) => other.id === port.id) !== index,
+    );
+    for (const duplicate of duplicates) {
+      mismatch(
+        duplicate.id,
+        side,
+        `the referenced workflow declares ${side === "inputs" ? "input" : "output"} "${duplicate.id}" more than once.`,
+      );
+    }
+    for (const port of nodePorts) {
+      const match = interfacePorts.find((candidate) => candidate.id === port.id);
+      if (!match) {
+        mismatch(
+          port.id,
+          side,
+          `the referenced workflow has no ${side === "inputs" ? "control.start output" : "control.end input"} "${port.id}".`,
+        );
+        continue;
+      }
+      const assignable =
+        direction === "in"
+          ? resolver.isAssignable(port.type, match.type)
+          : resolver.isAssignable(match.type, port.type);
+      if (!assignable) {
+        mismatch(port.id, side, `port "${port.id}" has an incompatible type.`);
+      }
+    }
+    for (const port of interfacePorts) {
+      if (!nodePorts.some((candidate) => candidate.id === port.id) && side === "inputs") {
+        mismatch(port.id, side, `the referenced workflow input "${port.id}" is not provided.`);
+      }
+    }
+  }
+  return diagnostics;
+}
+
+/** Reference cycles where no reference declares a finite `maxDepth`. */
+function unboundedReferenceCycles(edges: ReferenceEdge[]): WorkflowEditorCompileDiagnostic[] {
+  const outgoing = new Map<string, ReferenceEdge[]>();
+  for (const edge of edges) {
+    outgoing.set(edge.from, [...(outgoing.get(edge.from) ?? []), edge]);
+  }
+  const diagnostics: WorkflowEditorCompileDiagnostic[] = [];
+  const visited = new Set<string>();
+  const visit = (key: string, path: ReferenceEdge[]) => {
+    visited.add(key);
+    for (const edge of outgoing.get(key) ?? []) {
+      const start = path.findIndex((step) => step.from === edge.to);
+      if (start !== -1 || edge.to === key) {
+        const cycle = edge.to === key && start === -1 ? [edge] : [...path.slice(start), edge];
+        if (!cycle.some((step) => step.bounded)) {
+          diagnostics.push({
+            code: "unbounded-recursive-reference",
+            message: `Recursive workflow reference ${[...cycle.map((step) => step.from), edge.to].join(" → ")} has no finite maxDepth bound.`,
+            path: edge.path,
+            nodeId: edge.nodeId,
+          });
+        }
+        continue;
+      }
+      if (!visited.has(edge.to)) {
+        visit(edge.to, [...path, edge]);
+      }
+    }
+  };
+  visit(rootWorkflowKey, []);
+  return diagnostics;
+}
