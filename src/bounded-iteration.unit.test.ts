@@ -619,6 +619,10 @@ describe("iteration validation", () => {
     const node = literalIterationNode();
     const inner = literalIterationNode({ id: "inner", label: "Inner" });
     node.composition!.nodes.push(inner);
+    node.composition!.inputBoundaries.push(
+      { wrapperPortId: "state", nodeId: "inner", portId: "state" },
+      { wrapperPortId: "target", nodeId: "inner", portId: "target" },
+    );
     expect(codes(api.validateWorkflowEditorIterationNode(node))).toEqual([]);
   });
 });
@@ -783,6 +787,10 @@ describe("compiling iteration nodes", () => {
         node.composition!.nodes.push(
           literalIterationNode({ id: "inner", label: "Inner", maxIterations: 0 }),
         );
+        node.composition!.inputBoundaries.push(
+          { wrapperPortId: "state", nodeId: "inner", portId: "state" },
+          { wrapperPortId: "target", nodeId: "inner", portId: "target" },
+        );
         return node;
       },
     ],
@@ -809,6 +817,11 @@ describe("nested bounded iteration (#97)", () => {
     outer.composition!.nodes.push(
       literalIterationNode({ id: "inner", label: "Inner", maxIterations: 3 }),
     );
+    // The inner loop is fed from the outer body's boundaries, so the fixture is executable.
+    outer.composition!.inputBoundaries.push(
+      { wrapperPortId: "state", nodeId: "inner", portId: "state" },
+      { wrapperPortId: "target", nodeId: "inner", portId: "target" },
+    );
     const compiled = compileWorkflowEditorDocument(newtonDocument(outer));
     const compiledOuter = compiled.nodes.find((node) => node.id === "refine") as {
       iteration: {
@@ -829,10 +842,23 @@ describe("nested bounded iteration (#97)", () => {
     );
   });
 
+  test("rejects a nested iteration whose inputs are not connected", () => {
+    const outer = literalIterationNode();
+    outer.composition!.nodes.push(literalIterationNode({ id: "inner", label: "Inner" }));
+    expect(codes(api.validateWorkflowEditorIterationNode(outer))).toEqual([
+      "iteration-input-unconnected",
+      "iteration-input-unconnected",
+    ]);
+  });
+
   test("reports an inner bound problem at its nested path", () => {
     const outer = literalIterationNode();
     outer.composition!.nodes.push(
       literalIterationNode({ id: "inner", label: "Inner", maxIterations: 0 }),
+    );
+    outer.composition!.inputBoundaries.push(
+      { wrapperPortId: "state", nodeId: "inner", portId: "state" },
+      { wrapperPortId: "target", nodeId: "inner", portId: "target" },
     );
     try {
       compileWorkflowEditorDocument(newtonDocument(outer));
