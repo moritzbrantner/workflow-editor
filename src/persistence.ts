@@ -1,3 +1,4 @@
+import type { WorkflowEditorInputProfile } from "./core-workflow-inputs";
 import {
   assertWorkflowEditorDocument,
   normalizeWorkflowEditorDocument,
@@ -57,6 +58,8 @@ export type WorkflowEditorLibraryEntry<
   version: number;
   document: WorkflowEditorDocument<TNodeData, TEdgeData>;
   versions: Array<WorkflowEditorSavedVersion<TNodeData, TEdgeData>>;
+  /** Named reusable input values (#115); kept beside, never inside, the document. */
+  inputProfiles?: WorkflowEditorInputProfile[];
 };
 
 export type WorkflowEditorLibrary<
@@ -157,6 +160,7 @@ export type WorkflowEditorEntryInput<
   version?: number;
   document?: WorkflowEditorDocument<TNodeData, TEdgeData>;
   versions?: Array<WorkflowEditorSavedVersion<TNodeData, TEdgeData>>;
+  inputProfiles?: WorkflowEditorInputProfile[];
 };
 
 export type WorkflowEditorLibraryInput<
@@ -218,6 +222,10 @@ export function createWorkflowEditorEntry<
   }
 
   entry.versions = compactSavedVersions(input.versions ?? [], defaultWorkflowEditorMaxVersions);
+  const inputProfiles = normalizeWorkflowEditorInputProfiles(input.inputProfiles);
+  if (inputProfiles.length > 0) {
+    entry.inputProfiles = inputProfiles;
+  }
   return entry;
 }
 
@@ -911,7 +919,49 @@ function restoreWorkflowEditorEntry<
       : undefined,
     document: value.document as WorkflowEditorDocument<TNodeData, TEdgeData>,
     versions,
+    inputProfiles: normalizeWorkflowEditorInputProfiles(value.inputProfiles),
   });
+}
+
+/** Keeps well-formed, uniquely identified profiles with JSON-object values. */
+function normalizeWorkflowEditorInputProfiles(value: unknown): WorkflowEditorInputProfile[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  return value.flatMap((profile) => {
+    if (
+      !isRecord(profile) ||
+      typeof profile.id !== "string" ||
+      !profile.id ||
+      seen.has(profile.id) ||
+      typeof profile.name !== "string" ||
+      !isRecord(profile.values)
+    ) {
+      return [];
+    }
+    seen.add(profile.id);
+    return [{ id: profile.id, name: profile.name.trim() || "Untitled profile", values: { ...profile.values } }];
+  });
+}
+
+/** Adds or replaces a named input profile on a library entry. */
+export function upsertWorkflowEditorInputProfile<TNodeData, TEdgeData>(
+  entry: WorkflowEditorLibraryEntry<TNodeData, TEdgeData>,
+  profile: WorkflowEditorInputProfile,
+): WorkflowEditorLibraryEntry<TNodeData, TEdgeData> {
+  const profiles = entry.inputProfiles ?? [];
+  const next = profiles.some((candidate) => candidate.id === profile.id)
+    ? profiles.map((candidate) => (candidate.id === profile.id ? profile : candidate))
+    : [...profiles, profile];
+  return { ...entry, inputProfiles: normalizeWorkflowEditorInputProfiles(next) };
+}
+
+export function removeWorkflowEditorInputProfile<TNodeData, TEdgeData>(
+  entry: WorkflowEditorLibraryEntry<TNodeData, TEdgeData>,
+  profileId: string,
+): WorkflowEditorLibraryEntry<TNodeData, TEdgeData> {
+  const next = (entry.inputProfiles ?? []).filter((profile) => profile.id !== profileId);
+  const { inputProfiles: _inputProfiles, ...rest } = entry;
+  return next.length ? { ...rest, inputProfiles: next } : rest;
 }
 
 function restoreWorkflowEditorSavedVersion<

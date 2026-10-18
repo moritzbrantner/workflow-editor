@@ -220,6 +220,14 @@ export {
   type WorkflowEditorNodeTemplateRegistryEntry,
 } from "./core-template-registry";
 export {
+  getWorkflowEditorInputDeclarations,
+  resolveWorkflowEditorInputValues,
+  validateWorkflowEditorInputValues,
+  type WorkflowEditorInputDeclaration,
+  type WorkflowEditorInputDiagnostic,
+  type WorkflowEditorInputProfile,
+} from "./core-workflow-inputs";
+export {
   diffWorkflowEditorDocuments,
   isWorkflowEditorSecretLikePath,
   workflowEditorDiffRedacted,
