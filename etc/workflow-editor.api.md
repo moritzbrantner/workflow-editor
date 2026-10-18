@@ -2115,6 +2115,7 @@ export type WorkflowEditorNode<TData = Record<string, unknown>> = Omit<GraphEdit
     outputs?: WorkflowEditorPort[];
     workflowRef?: WorkflowEditorWorkflowReference;
     composition?: WorkflowEditorNodeComposition<TData>;
+    persistence?: WorkflowEditorNodePersistence;
 };
 
 // @public (undocumented)
@@ -2124,6 +2125,9 @@ export type WorkflowEditorNodeComposition<TNodeData = Record<string, unknown>> =
     inputBoundaries: WorkflowEditorCompositionBoundary[];
     outputBoundaries: WorkflowEditorCompositionBoundary[];
 };
+
+// @public (undocumented)
+export type WorkflowEditorNodePersistence = "on-completion";
 
 // @public (undocumented)
 export type WorkflowEditorNodeTemplate<TData = Record<string, unknown>> = Omit<GraphEditorNodeTemplate<TData, WorkflowEditorPortType>, "inputs" | "outputs"> & {
@@ -2790,7 +2794,7 @@ export function wouldCreateWorkflowEditorCycle<TNodeData = Record<string, unknow
 
 // Warnings were encountered during analysis:
 //
-// dist/core-execution-BDcV26dp.d.ts:5:5 - (ae-forgotten-export) The symbol "WorkflowEditorNodeTemplateDiagnosticCode" needs to be exported by the entry point index.d.ts
+// dist/core-execution-BSd1vnUw.d.ts:5:5 - (ae-forgotten-export) The symbol "WorkflowEditorNodeTemplateDiagnosticCode" needs to be exported by the entry point index.d.ts
 // dist/editor.d.ts:88:5 - (ae-forgotten-export) The symbol "ChromeController" needs to be exported by the entry point index.d.ts
 // dist/editor.d.ts:200:5 - (ae-forgotten-export) The symbol "WorkflowEditorBundleActions" needs to be exported by the entry point index.d.ts
 // dist/editor.d.ts:310:5 - (ae-forgotten-export) The symbol "WorkflowEditorBundleImportState" needs to be exported by the entry point index.d.ts

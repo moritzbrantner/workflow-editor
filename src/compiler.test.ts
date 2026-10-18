@@ -189,4 +189,20 @@ describe("compileWorkflowEditorDocument", () => {
       }),
     );
   });
+
+  it("carries the per-node persist-on-completion setting and omits the default", () => {
+    const document: WorkflowEditorDocument = {
+      ...simpleDocument,
+      nodes: simpleDocument.nodes.map((node) =>
+        node.id === "start" ? { ...node, persistence: "on-completion" as const } : node,
+      ),
+    };
+
+    const compiled = compileWorkflowEditorDocument(document);
+    expect(compiled.nodes.find((node) => node.id === "start")?.persistence).toBe("on-completion");
+    expect(compiled.nodes.find((node) => node.id === "end")).not.toHaveProperty("persistence");
+    expect(compileWorkflowEditorDocument(simpleDocument).nodes).not.toContainEqual(
+      expect.objectContaining({ persistence: expect.anything() }),
+    );
+  });
 });
