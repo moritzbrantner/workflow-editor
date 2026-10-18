@@ -1093,6 +1093,7 @@ function App() {
 
   return (
     <main className="grid h-screen min-h-0 min-w-80 overflow-hidden bg-[#f6f7f8] bg-[linear-gradient(180deg,rgba(217,226,236,0.55),rgba(246,247,248,0)_24rem)] p-[0.45rem] font-sans text-[#17202a]">
+      <h1 className="sr-only">Workflow Editor</h1>
       <WorkflowEditor
         key={resetToken}
         storageKey={storageKey}
