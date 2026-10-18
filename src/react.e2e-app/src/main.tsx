@@ -1,4 +1,4 @@
-import "@moritzbrantner/ui/styles.css";
+import "./styles.css";
 
 import { StrictMode, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";

@@ -1,0 +1,6 @@
+@import "@moritzbrantner/ui/styles.css";
+@import "@moritzbrantner/ui/component-sources.css";
+
+/* Workflow and graph-editor component classes. */
+@source "../../**/*.{ts,tsx}";
+@source "../../../node_modules/@moritzbrantner/graph-editor/dist/**/*.js";

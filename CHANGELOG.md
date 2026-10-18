@@ -4,6 +4,12 @@
 
 ### Minor Changes
 
+- Build on current graph-editor (#26): `@moritzbrantner/graph-editor` is now pinned to graph-editor `main` (commit `3f72b6e`) as a git dependency, and `@moritzbrantner/ui` moves to `^1.1.0`.
+  - Keyboard users can move selected nodes with **Shift+Arrow** (coarse) and **Alt+Shift+Arrow** (fine) (#18).
+  - Hosts must import `@moritzbrantner/ui/component-sources.css` next to their theme stylesheet and add an `@source` for graph-editor's `dist` (see the Pages `styles.css`).
+  - `SearchField` now comes from `@moritzbrantner/ui/data`.
+  - Graph validation now requires edge port ids. Workflow ports without a label still load and display their id.
+  - The node palette list is a focusable, labelled region ("Node templates").
 - Document diff and saved-version comparison (W-12): `diffWorkflowEditorDocuments` reports id-matched node, port, edge, group, document and viewport changes with stable paths. Layout-only changes can be included, summarized or ignored, and secret-like fields are redacted by default. The editor adds **Compare** with a summary, a differences list, canvas focus and highlight, and draft ↔ version or version ↔ version selection.
 - **Behavior change:** restoring a saved version now asks for confirmation and is one undoable edit, instead of resetting the undo history (see `docs/document-diff.md`).
 - Schema-driven inspector fields (W-11): node templates declare `inspectorFields` (text, number, boolean, select, multi-select, json, expression, secret-ref, key-value, custom) with paths into node `data`, defaults, required/read-only state, `visibleWhen` conditions and validation hints. One Apply is one undoable edit. Multi-node selections get a shared-fields panel with mixed-value handling; secret fields store references only. Hosts override renderers through `inspectorFieldRenderers`, and invalid definitions are reported as `invalid-inspector-field` template diagnostics. A `workflowRef` edit in the inspector now keeps the reference's `maxDepth` (see `docs/inspector-fields.md`).
