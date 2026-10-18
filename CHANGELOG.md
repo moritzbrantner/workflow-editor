@@ -5,6 +5,7 @@
 ### Minor Changes
 
 - Pages reference examples (W-10, Decisions 5.1/5.2/5.4): **Sales Data Pipeline** (source → transform → validate → branch → output) is now the first-open example, and **Product Image Generation** routes a media input through one opaque external ComfyUI operation to a published artifact. Both have typed ports, an intentionally invalid connection under test, and are compiled but not executed (see `docs/reference-examples.md`). The compact document menu now opens above the node palette.
+- Per-node result persistence (Runner TECH-011, #19): `WorkflowEditorNode.persistence?: "on-completion"` is authored in the node inspector (**Execution → Persist result on completion**). It round-trips through save, export and import, and compiles to `CompiledWorkflowNode.persistence`. Nodes without it compile exactly as before.
 - Export and import portable workflow bundles (W-09): a root document with its complete referenced-document closure, stable ids, versions and reference provenance (see `docs/bundles.md`).
   - `buildWorkflowEditorBundle` reports missing references and unbounded recursive references before export; recursion bounded by the new optional `WorkflowEditorWorkflowReference.maxDepth` keeps its closure and bound.
   - `parseWorkflowEditorBundle` returns structured diagnostics; `planWorkflowEditorBundleImport` previews an import without changing the library, with explicit `reuse`, `replace`, `duplicate` and `abort` collision strategies and deterministic reference rewriting; `applyWorkflowEditorBundleImportPlan` applies it.

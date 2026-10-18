@@ -189,7 +189,15 @@ export type WorkflowEditorNode<TData = Record<string, unknown>> = Omit<
   outputs?: WorkflowEditorPort[];
   workflowRef?: WorkflowEditorWorkflowReference;
   composition?: WorkflowEditorNodeComposition<TData>;
+  /**
+   * When the runner persists this node's result (Runner TECH-011). Absent means the default:
+   * results persist with the terminal run result. `"on-completion"` asks the runner to hand the
+   * result to host persistence as soon as this node completes.
+   */
+  persistence?: WorkflowEditorNodePersistence;
 };
+
+export type WorkflowEditorNodePersistence = "on-completion";
 
 export type WorkflowEditorEdge<TData = Record<string, unknown>> = GraphEditorEdge<TData>;
 
