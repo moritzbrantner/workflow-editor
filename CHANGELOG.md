@@ -4,6 +4,7 @@
 
 ### Minor Changes
 
+- `applyWorkflowRunnerEventToSnapshot` / `createWorkflowExecutionSnapshotFromRunnerEvents` build the execution overlay snapshot from Workflow Runner lifecycle events (#20). The snapshot covers attempts, retries, durations, failures and waiting tasks. Outputs are summarized by port name only.
 - Nested bounded iterations (#97): an iteration body may contain another `control.iterate` node. It compiles into compiled v2 with its own bound and body checks. `nested-iteration-not-supported` is no longer reported.
 - Compile Workflow References (TECH-005, #95): with `resolveWorkflowReference` (for example `createWorkflowEditorLibraryReferenceResolver(library)`), documents that reference other Workflow Documents compile to **compiled v3**.
   - v3 freezes each referenced document once as `workflows["<id>@<version>"]` with a typed `control.start` / `control.end` interface.
