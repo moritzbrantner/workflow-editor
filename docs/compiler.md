@@ -88,3 +88,19 @@ The compiler rejects these cases with structured diagnostics:
 | `nested-iteration-not-supported` | an iteration is nested inside a body           |
 
 Body problems use the usual codes, with paths under `nodes.<id>.composition.`. The shared conformance fixture is `fixtures/compiled-v2-bounded-iteration.json`.
+
+### Measurements (TECH-004, #96)
+
+An iteration body may expose named, typed **measurements** besides `next` and `converged`. These
+are output boundaries whose `wrapperPortId` is an identifier (letters, digits, `_`) and whose
+values are computed by ordinary body nodes.
+
+- They compile to `iteration.body.outputs.measurements: [{ id, nodeId, portId, type }]`, sorted by
+  id. The field is present only when measurements exist, so other compiled v2 output is unchanged.
+- The `result` port type gains `measurements: { <id>: <type>; … }` on both result statuses. The
+  runner reports the last completed iteration's values.
+- A measurement is never a quality or convergence metric. Convergence stays the boolean
+  `converged` output.
+
+Duplicate or malformed names report `iteration-boundary-invalid`. The shared fixture is
+`fixtures/compiled-v2-bounded-iteration-measurements.json`.
