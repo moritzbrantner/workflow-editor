@@ -215,6 +215,19 @@ export {
   type WorkflowEditorNodeTemplateRegistryEntry,
 } from "./core-template-registry";
 
+export {
+  formatWorkflowExecutionDuration,
+  getWorkflowExecutionEdgeStatus,
+  getWorkflowExecutionNodeDuration,
+  getWorkflowExecutionNodePresentation,
+  type WorkflowExecutionEdgeSnapshot,
+  type WorkflowExecutionEdgeState,
+  type WorkflowExecutionNodeSnapshot,
+  type WorkflowExecutionNodeState,
+  type WorkflowExecutionPresentation,
+  type WorkflowExecutionSnapshot,
+} from "./core-execution";
+
 export class WorkflowEditorDocumentValidationError extends Error {
   override name = "WorkflowEditorDocumentValidationError" as const;
   diagnostics: WorkflowEditorDocumentDiagnostic[];
