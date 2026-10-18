@@ -4,6 +4,15 @@
 
 ### Minor Changes
 
+- Dynamic ports are edited on the node (#45, Decision Atlas 5.6), through graph-editor's port-content and body slots:
+  - Object Constructor property names are edited beside their input ports.
+  - Array Constructor item rows can be removed.
+  - Object Decomposition output names are edited beside their outputs.
+  - Each family has a compact **+ Add …** action in the node body.
+  - The object expression editor moved from a portal overlay into the node body.
+
+  All edits use the workflow-core mutation helpers, so port ids, connections and undo stay authoritative. graph-editor is pinned to `f0e70f8`.
+
 - `applyWorkflowRunnerEventToSnapshot` / `createWorkflowExecutionSnapshotFromRunnerEvents` build the execution overlay snapshot from Workflow Runner lifecycle events (#20). The snapshot covers attempts, retries, durations, failures and waiting tasks. Outputs are summarized by port name only.
 - Nested bounded iterations (#97): an iteration body may contain another `control.iterate` node. It compiles into compiled v2 with its own bound and body checks. `nested-iteration-not-supported` is no longer reported.
 - Compile Workflow References (TECH-005, #95): with `resolveWorkflowReference` (for example `createWorkflowEditorLibraryReferenceResolver(library)`), documents that reference other Workflow Documents compile to **compiled v3**.
