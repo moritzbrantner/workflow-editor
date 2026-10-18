@@ -65,12 +65,32 @@ export function dataPipelineDocument(): ExampleDocument {
     viewport: { x: 25, y: 35, zoom: 0.7 },
     nodes: [
       {
+        // Typed workflow inputs (#115): the export date is required, the currency defaults to EUR.
+        id: "parameters",
+        label: "Parameters",
+        description: "Run inputs: fill them in document settings or pick a saved input profile.",
+        kind: "control.start",
+        x: -320,
+        y: 120,
+        outputs: [
+          { id: "exportDate", label: "Export date", type: ts("string") },
+          {
+            id: "currency",
+            label: "Currency",
+            type: ts('"EUR" | "USD"'),
+            optional: true,
+            defaultValue: "EUR",
+          },
+        ],
+      },
+      {
         id: "sales-source",
         label: "Sales CSV",
         description: "Reads the daily sales export.",
         kind: "data.source.csv",
         x: 0,
         y: 120,
+        inputs: [{ id: "exportDate", label: "Export date", type: ts("string") }],
         outputs: [{ id: "rows", label: "Rows", type: ts("SalesCsvRow[]") }],
         data: { path: "exports/sales-2026-10-18.csv" },
       },
@@ -81,7 +101,10 @@ export function dataPipelineDocument(): ExampleDocument {
         kind: "data.transform.map",
         x: 320,
         y: 120,
-        inputs: [{ id: "rows", label: "Rows", type: ts("SalesCsvRow[]") }],
+        inputs: [
+          { id: "rows", label: "Rows", type: ts("SalesCsvRow[]") },
+          { id: "currency", label: "Currency", type: ts('"EUR" | "USD"') },
+        ],
         outputs: [{ id: "records", label: "Records", type: ts("SalesRecord[]") }],
       },
       {
@@ -118,6 +141,8 @@ export function dataPipelineDocument(): ExampleDocument {
       },
     ],
     edges: [
+      link("parameters", "exportDate", "sales-source", "exportDate"),
+      link("parameters", "currency", "normalize", "currency"),
       link("sales-source", "rows", "normalize", "rows"),
       link("normalize", "records", "validate", "records"),
       link("validate", "records", "route", "value"),
