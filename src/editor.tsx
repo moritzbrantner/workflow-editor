@@ -1720,6 +1720,12 @@ export function WorkflowEditor<
           onDocumentChange={updateDocument}
           onSelectionChange={onSelectionChange}
           onSelectionStateChange={(nextSelection) => setSelection(nextSelection)}
+          history={{
+            canUndo: canUndoWorkflowEditorHistory(history),
+            canRedo: canRedoWorkflowEditorHistory(history),
+            undo,
+            redo,
+          }}
           renderNodeTemplate={renderNodeTemplate}
           renderInspector={renderInspector}
           renderToolbarActions={(context) => (

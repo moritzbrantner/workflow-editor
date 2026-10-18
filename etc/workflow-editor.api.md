@@ -2458,6 +2458,14 @@ export type WorkflowWorkbenchController<TNodeData extends Record<string, unknown
 // @public (undocumented)
 export type WorkflowWorkbenchControllerProps<TNodeData extends Record<string, unknown> = Record<string, unknown>, TEdgeData extends Record<string, unknown> = Record<string, unknown>, TTemplateData = TNodeData> = WorkflowWorkbenchProps<TNodeData, TEdgeData, TTemplateData>;
 
+// @public
+export type WorkflowWorkbenchHistoryControls = {
+    canUndo: boolean;
+    canRedo: boolean;
+    undo: () => void;
+    redo: () => void;
+};
+
 // @public (undocumented)
 export function WorkflowWorkbenchInspector<TNodeData extends Record<string, unknown> = Record<string, unknown>, TEdgeData extends Record<string, unknown> = Record<string, unknown>, TTemplateData = TNodeData>(input: {
     controller: WorkflowWorkbenchController<TNodeData, TEdgeData, TTemplateData>;
@@ -2548,6 +2556,7 @@ export type WorkflowWorkbenchProps<TNodeData extends Record<string, unknown> = R
     onViewportChange?: (viewport: WorkflowEditorViewport) => void;
     onOpenWorkflowReference?: (node: WorkflowEditorNode<TNodeData>) => void;
     onCreateWorkflowReference?: (node: WorkflowEditorNode<TNodeData>) => void;
+    history?: WorkflowWorkbenchHistoryControls;
     renderNodeTemplate?: (template: WorkflowWorkbenchPaletteItem<TTemplateData>) => ReactNode;
     renderInspector?: (context: WorkflowWorkbenchInspectorContext<TNodeData, TEdgeData>) => ReactNode;
     renderToolbarActions?: (context: WorkflowWorkbenchInspectorContext<TNodeData, TEdgeData>) => ReactNode;

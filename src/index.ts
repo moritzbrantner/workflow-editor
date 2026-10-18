@@ -193,6 +193,7 @@ export {
   type WorkflowWorkbenchPanelPlacement,
   type WorkflowWorkbenchPanelState,
   type WorkflowWorkbenchPaletteItem,
+  type WorkflowWorkbenchHistoryControls,
   type WorkflowWorkbenchProps,
   type WorkflowWorkbenchSelection,
   type WorkflowGraphWorkbenchController,
