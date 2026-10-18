@@ -29,7 +29,7 @@ const document = normalizeWorkflowEditorDocument({
 }).document;
 
 function snapshotAt(step: number): WorkflowExecutionSnapshot {
-  const nodes: WorkflowExecutionSnapshot["nodes"] = {};
+  const nodes: Record<string, WorkflowExecutionSnapshot["nodes"][string]> = {};
   for (let index = 0; index < nodeCount; index += 1) {
     nodes[`n${index}`] = {
       state: index < step ? "succeeded" : index === step ? "running" : "queued",
