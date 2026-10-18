@@ -1,4 +1,5 @@
-import { Badge, Button, SearchField } from "@moritzbrantner/ui";
+import { Badge, Button } from "@moritzbrantner/ui";
+import { SearchField } from "@moritzbrantner/ui/data";
 
 import type { WorkflowWorkbenchController } from "../react";
 import { WorkflowWorkbenchInvalidPaletteTemplate } from "./invalid-palette-template";

@@ -1,6 +1,7 @@
 import { useState } from "react";
 
-import { Badge, Button, Input, SearchField } from "@moritzbrantner/ui";
+import { Badge, Button, Input } from "@moritzbrantner/ui";
+import { SearchField } from "@moritzbrantner/ui/data";
 
 import {
   duplicateWorkflowEditorNode,
