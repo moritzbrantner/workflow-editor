@@ -27,6 +27,10 @@ import {
   workflowEditorIterationBound,
   workflowEditorPortTypeSource,
   readWorkflowEditorFieldValue,
+  isWorkflowEditorReferenceDepth,
+  syncWorkflowEditorReferenceInterface,
+  workflowEditorReferenceMatchesInterface,
+  type WorkflowEditorWorkflowInterface,
   type WorkflowEditorDocument,
   type WorkflowEditorIterationDiagnostic,
   type WorkflowEditorNode,
@@ -79,6 +83,9 @@ export function DefaultWorkflowInspector<
     });
     const referenceOptions = createWorkflowReferenceOptions(context.documentReferences, node);
     const referencedDocumentId = node.workflowRef?.documentId ?? "";
+    const referencedInterface = context.documentReferences?.find(
+      (reference) => reference.id === referencedDocumentId,
+    )?.interface;
     const referenceMissing =
       referencedDocumentId !== "" &&
       !context.documentReferences?.some((reference) => reference.id === referencedDocumentId);
@@ -117,6 +124,10 @@ export function DefaultWorkflowInspector<
             ...(referenceMissing
               ? { workflowDocumentId: `Missing workflow document: ${referencedDocumentId}` }
               : {}),
+            ...(node.workflowRef?.maxDepth !== undefined &&
+            !isWorkflowEditorReferenceDepth(node.workflowRef.maxDepth)
+              ? { maxDepth: "Use a positive whole number." }
+              : {}),
             ...iteration?.validationMessages,
             ...validateInspectorFieldDrafts(dataFields, currentFieldDrafts),
           }}
@@ -137,6 +148,7 @@ export function DefaultWorkflowInspector<
             status: node.status ?? "idle",
             persistOnCompletion: node.persistence === "on-completion",
             workflowDocumentId: referencedDocumentId,
+            maxDepth: node.workflowRef?.maxDepth ?? "",
             arrayExpression: arrayConstructorExpression,
             objectExpression: objectConstructorExpression,
             objectDecompositionExpression,
@@ -186,6 +198,20 @@ export function DefaultWorkflowInspector<
                         options: referenceOptions,
                         readOnly: context.readOnly,
                       },
+                      ...(referencedDocumentId
+                        ? [
+                            {
+                              id: "maxDepth",
+                              label: "Maximum recursion depth",
+                              description:
+                                "Bounds how often a recursive reference may re-enter. Leave empty when the reference is not recursive.",
+                              type: "number" as const,
+                              min: 1,
+                              step: 1,
+                              readOnly: context.readOnly,
+                            },
+                          ]
+                        : []),
                     ],
                   },
                 ]
@@ -349,9 +375,12 @@ export function DefaultWorkflowInspector<
             if (context.documentReferences) {
               patch.workflowRef =
                 typeof values.workflowDocumentId === "string" && values.workflowDocumentId
-                  ? values.workflowDocumentId === node.workflowRef?.documentId
-                    ? node.workflowRef
-                    : { documentId: values.workflowDocumentId }
+                  ? {
+                      documentId: values.workflowDocumentId,
+                      ...(readWorkflowReferenceDepth(values.maxDepth) !== undefined
+                        ? { maxDepth: readWorkflowReferenceDepth(values.maxDepth) }
+                        : {}),
+                    }
                   : undefined;
             }
 
@@ -517,6 +546,22 @@ export function DefaultWorkflowInspector<
         ) : null}
         {context.documentReferences ? (
           <div className="flex flex-wrap gap-2 px-4 pb-4">
+            {referencedInterface ? (
+              <WorkflowReferenceInterfaceSummary
+                workflowInterface={referencedInterface}
+                matches={workflowEditorReferenceMatchesInterface(node, referencedInterface)}
+                readOnly={context.readOnly || !context.updateDocument}
+                onSync={() =>
+                  context.updateDocument?.(
+                    syncWorkflowEditorReferenceInterface(
+                      context.document,
+                      node.id,
+                      referencedInterface,
+                    ),
+                  )
+                }
+              />
+            ) : null}
             {referencedDocumentId ? (
               <Button
                 type="button"
@@ -798,4 +843,57 @@ function createWorkflowReferenceOptions<TNodeData extends Record<string, unknown
   }
 
   return options;
+}
+
+function readWorkflowReferenceDepth(value: unknown) {
+  if (value === "" || value === undefined || value === null) return undefined;
+  const depth = typeof value === "number" ? value : Number(value);
+  return isWorkflowEditorReferenceDepth(depth) ? depth : undefined;
+}
+
+/** The referenced workflow's start/end interface and a one-step port sync (#95). */
+function WorkflowReferenceInterfaceSummary({
+  workflowInterface,
+  matches,
+  readOnly,
+  onSync,
+}: {
+  workflowInterface: WorkflowEditorWorkflowInterface;
+  matches: boolean;
+  readOnly: boolean;
+  onSync: () => void;
+}) {
+  const list = (ports: WorkflowEditorWorkflowInterface["inputs"]) =>
+    ports.length
+      ? ports
+          .map(
+            (port) =>
+              `${port.id}${port.optional ? "?" : ""}: ${workflowEditorPortTypeSource(port.type)}`,
+          )
+          .join(", ")
+      : "none";
+  return (
+    <section
+      aria-label="Workflow interface"
+      className="grid w-full gap-1 text-xs text-muted-foreground"
+    >
+      <p>
+        <span className="font-medium text-foreground">Inputs</span> {list(workflowInterface.inputs)}
+      </p>
+      <p>
+        <span className="font-medium text-foreground">Outputs</span>{" "}
+        {list(workflowInterface.outputs)}
+      </p>
+      {matches ? (
+        <p>Ports match the workflow interface.</p>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          <span role="status">Ports differ from the workflow interface.</span>
+          <Button type="button" size="sm" variant="outline" disabled={readOnly} onClick={onSync}>
+            Sync ports with interface
+          </Button>
+        </div>
+      )}
+    </section>
+  );
 }

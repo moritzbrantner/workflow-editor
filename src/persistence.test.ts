@@ -268,8 +268,12 @@ describe("@moritzbrantner/workflow-editor persistence", () => {
     const childReference = parent.document.nodes.find((node) => node.id === "nested")!.workflowRef;
 
     expect(listWorkflowEditorDocumentReferenceOptions(restored)).toEqual([
-      { id: "parent", name: "Parent" },
-      { id: "child", name: "Child" },
+      expect.objectContaining({ id: "parent", name: "Parent" }),
+      expect.objectContaining({
+        id: "child",
+        name: "Child",
+        interface: expect.objectContaining({ inputs: expect.any(Array) }),
+      }),
     ]);
     expect(resolveWorkflowEditorDocumentReference(restored, childReference)?.id).toBe("child");
     expect(

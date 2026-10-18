@@ -1,4 +1,4 @@
-import { StrictMode, useEffect, useMemo, useState } from "react";
+import { StrictMode, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 
 import {
@@ -12,6 +12,7 @@ import {
   createWorkflowEditorIterationNode,
   createWorkflowEditorEntry,
   createWorkflowEditorLibrary,
+  createWorkflowEditorLibraryReferenceResolver,
   defaultWorkflowEditorNodeTemplates,
   defaultWorkflowEditorBuiltInSettings,
   normalizeWorkflowEditorDocument,
@@ -1143,6 +1144,8 @@ function App() {
   const [compilation, setCompilation] = useState<CompilationResult | null>(null);
   const [editorSettings, setEditorSettings] = useState(loadWorkbenchSettings);
   const initialLibrary = useMemo(createExamplesLibrary, [resetToken]);
+  // The latest library, so "Compile workflow" can resolve Workflow References (#95).
+  const libraryRef = useRef<WorkflowEditorLibrary | null>(null);
 
   useEffect(() => {
     try {
@@ -1166,6 +1169,9 @@ function App() {
         key={resetToken}
         storageKey={storageKey}
         initialLibrary={initialLibrary}
+        onLibraryChange={(library) => {
+          libraryRef.current = library as unknown as WorkflowEditorLibrary;
+        }}
         settings={editorSettings}
         onSettingsChange={setEditorSettings}
         className="grid h-full min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] gap-[0.35rem] [&_[data-slot='workbench-layout']]:min-h-0 [&_[data-slot='workbench-layout']>div]:min-h-0"
@@ -1179,7 +1185,14 @@ function App() {
           <button
             type="button"
             className="min-h-8 cursor-pointer rounded-[0.4rem] border border-[#aeb9c6] bg-white px-[0.62rem] py-[0.3rem] text-[0.82rem] font-[600] text-[#17202a] hover:bg-[#eef2f6]"
-            onClick={() => setCompilation(compileExample(context.document))}
+            onClick={() =>
+              setCompilation(
+                compileExample(
+                  context.document,
+                  libraryRef.current ?? (initialLibrary as unknown as WorkflowEditorLibrary),
+                ),
+              )
+            }
           >
             Compile workflow
           </button>
@@ -1223,10 +1236,14 @@ type CompilationResult =
   | { ok: false; problems: string[] };
 
 /** Compiles the authored document; Pages has no runner, so nothing is executed. */
-function compileExample(document: ExampleDocument): CompilationResult {
+function compileExample(
+  document: ExampleDocument,
+  library: WorkflowEditorLibrary,
+): CompilationResult {
   try {
     const compiled = compileWorkflowEditorDocument(document as WorkflowEditorDocument, {
       typeDefinitions,
+      resolveWorkflowReference: createWorkflowEditorLibraryReferenceResolver(library),
     });
     const iterations = compiled.nodes.flatMap((node) => ("iteration" in node ? [node] : []));
     const loops = iterations.map(
