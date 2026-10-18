@@ -110,6 +110,7 @@ export {
   type WorkflowEditorIndexedNode,
   type WorkflowEditorNode,
   type WorkflowEditorNodeComposition,
+  type WorkflowEditorNodePersistence,
   type WorkflowEditorNodeTemplate,
   type WorkflowEditorNodeTemplateDiagnostic,
   type WorkflowEditorNodeTemplateRegistry,

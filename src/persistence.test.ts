@@ -86,6 +86,26 @@ describe("@moritzbrantner/workflow-editor persistence", () => {
     expect(restored.document.edges).toHaveLength(1);
   });
 
+  test("round-trips the per-node persistence setting and drops unknown values", () => {
+    const authored = {
+      nodes: [
+        { id: "a", label: "A", x: 0, y: 0, persistence: "on-completion" },
+        { id: "b", label: "B", x: 0, y: 0, persistence: "always" },
+        { id: "c", label: "C", x: 0, y: 0 },
+      ],
+      edges: [],
+    } as unknown as WorkflowEditorDocument;
+
+    const parsed = parseWorkflowEditorDocumentFile(
+      JSON.stringify(buildWorkflowEditorDocumentFile(authored)),
+    );
+    expect(parsed.document.nodes.map((node) => node.persistence)).toEqual([
+      "on-completion",
+      undefined,
+      undefined,
+    ]);
+  });
+
   test("rejects malformed, unknown, and unsupported document files", () => {
     expect(() => parseWorkflowEditorDocumentFile("{")).toThrow("Invalid workflow document JSON");
     expect(() =>

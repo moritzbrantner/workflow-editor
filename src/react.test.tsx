@@ -1160,6 +1160,38 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     expect(handleDocumentChange).not.toHaveBeenCalled();
   });
 
+  test("toggles per-node persistence on completion in the inspector", () => {
+    const handleChange = vi.fn();
+    const document = normalizeWorkflowEditorDocument({
+      nodes: [{ id: "fetch", label: "Fetch", kind: "http.fetch", x: 0, y: 0 }],
+      edges: [],
+    }).document;
+    const { rerender } = render(
+      <WorkflowWorkbench
+        document={document}
+        selectedNodeId="fetch"
+        onDocumentChange={handleChange}
+      />,
+    );
+
+    const toggle = screen.getAllByLabelText("Persist result on completion")[0]!;
+    fireEvent.click(toggle);
+    fireEvent.click(screen.getAllByRole("button", { name: "Apply" })[0]!);
+    const enabled = handleChange.mock.calls.at(-1)?.[0];
+    expect(enabled.nodes[0]).toEqual(expect.objectContaining({ persistence: "on-completion" }));
+
+    rerender(
+      <WorkflowWorkbench
+        document={enabled}
+        selectedNodeId="fetch"
+        onDocumentChange={handleChange}
+      />,
+    );
+    fireEvent.click(screen.getAllByLabelText("Persist result on completion")[0]!);
+    fireEvent.click(screen.getAllByRole("button", { name: "Apply" })[0]!);
+    expect(handleChange.mock.calls.at(-1)?.[0].nodes[0].persistence).toBeUndefined();
+  });
+
   test("edits JSON string and number source values and keeps null read-only", () => {
     const stringChange = vi.fn();
     const stringDocument = normalizeWorkflowEditorDocument({

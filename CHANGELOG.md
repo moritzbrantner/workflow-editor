@@ -4,6 +4,7 @@
 
 ### Minor Changes
 
+- Per-node result persistence (Runner TECH-011, #19): `WorkflowEditorNode.persistence?: "on-completion"` is authored in the node inspector (**Execution → Persist result on completion**). It round-trips through save, export and import, and compiles to `CompiledWorkflowNode.persistence`. Nodes without it compile exactly as before.
 - Author and compile bounded iteration (TECH-002, Decisions 2.6 and 2.8).
   - A `control.iterate` node holds its loop body as its embedded composition, with typed `state`, a required finite `maxIterations`, an optional boolean `converged` stop output, and a generated `result` port typed `{ status: "converged" | "limit-exhausted"; value; iterations; maxIterations }`.
   - `validateWorkflowEditorIterationNode` reports missing or invalid bounds, body, boundary, state-type and stop-type problems, and nested iterations. A cyclic body is rejected on import instead of being repaired.
