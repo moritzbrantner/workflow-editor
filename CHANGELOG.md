@@ -5,7 +5,7 @@
 ### Minor Changes
 
 - Node face versus inspector (#47, Decision Atlas 5.6), documented in `docs/node-editing.md`.
-  - The canvas node no longer repeats description, category or kind: `toUiWorkflowBuilderNodes` omits them, and `fromUiWorkflowBuilderNodes` restores them from the document node.
+  - The canvas node no longer repeats description, category or kind. `toUiWorkflowBuilderNodes` omits the description, and `fromUiWorkflowBuilderNodes` restores it from the document node. The workbench hides the category/kind chip with graph-editor's `showNodeCategory={false}`.
   - The inspector no longer duplicates the on-node JSON source value editor.
   - Nested workflows open from the node menu (**Open workflow**), also in read-only mode.
   - The CSS override that hid the kind chip on JSON nodes is gone.

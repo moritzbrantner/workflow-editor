@@ -19,6 +19,8 @@ repeat a frequent node control without a reason.
 
 The node face shows only what changes the next action: the label, an authored eyebrow or package
 label, runtime status from an execution overlay (idle nodes draw no status dot), ports and the
-node's own editors. Description, category and kind are kept on the document node and shown in the
-inspector. `toUiWorkflowBuilderNodes` leaves them off the canvas node, and
-`fromUiWorkflowBuilderNodes` restores them from the document node.
+node's own editors. Description, category and kind are shown in the inspector instead.
+`toUiWorkflowBuilderNodes` leaves the description off the canvas node, and
+`fromUiWorkflowBuilderNodes` restores it from the document node. The workbench hides the
+category/kind chip with graph-editor's `showNodeCategory={false}`; kind and category stay on the
+canvas node because node geometry depends on them.

@@ -3022,6 +3022,7 @@ export function WorkflowWorkbench<
               readOnly={readOnly}
               showMiniMap
               showPortColumnHeaders={false}
+              showNodeCategory={false}
               enableWheelZoom={false}
               measurePorts="dom"
               surfaceHeight="auto"
