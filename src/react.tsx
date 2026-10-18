@@ -148,6 +148,10 @@ import type { WorkflowWorkbenchInspectorFieldRenderers } from "./react/inspector
 import type { WorkflowWorkbenchTriggerActivation } from "./react/triggers-panel";
 import type { WorkflowWorkbenchInputProfiles } from "./react/inputs-panel";
 import {
+  WorkflowPendingHumanTaskPanel,
+  type WorkflowWorkbenchHumanTasks,
+} from "./react/human-task-panel";
+import {
   formatWorkflowExecutionDuration,
   getWorkflowExecutionEdgeStatus,
   getWorkflowExecutionNodeDuration,
@@ -197,6 +201,11 @@ export {
 } from "./react/workbench-panels";
 export type { WorkflowWorkbenchTriggerActivation } from "./react/triggers-panel";
 export type { WorkflowWorkbenchInputProfiles } from "./react/inputs-panel";
+export type {
+  WorkflowWorkbenchHumanTaskResponse,
+  WorkflowWorkbenchHumanTasks,
+  WorkflowWorkbenchPendingHumanTask,
+} from "./react/human-task-panel";
 export type {
   WorkflowWorkbenchInspectorFieldRenderer,
   WorkflowWorkbenchInspectorFieldRendererProps,
@@ -428,6 +437,8 @@ export type WorkflowWorkbenchProps<
   triggerActivation?: WorkflowWorkbenchTriggerActivation;
   /** Named input profiles and an optional run seam for the document's inputs (#115). */
   inputProfiles?: WorkflowWorkbenchInputProfiles;
+  /** Pending human tasks of connected runs and the host's answer channel (#105). */
+  humanTasks?: WorkflowWorkbenchHumanTasks;
   /** Host renderers that replace built-in inspector field kinds or individual fields. */
   inspectorFieldRenderers?: WorkflowWorkbenchInspectorFieldRenderers;
   typeDefinitions?: readonly WorkflowEditorTypeDefinition[];
@@ -619,6 +630,7 @@ export function WorkflowWorkbench<
   inspectorFieldRenderers,
   triggerActivation,
   inputProfiles,
+  humanTasks,
   typeDefinitions,
   documentReferences,
   portTypeColors,
@@ -3539,6 +3551,20 @@ export function WorkflowWorkbench<
                   </div>
                   {inspectorCollapsed ? null : (
                     <div className="min-h-0 overflow-y-auto">
+                      {selectedNode
+                        ? humanTasks?.pending
+                            .filter((task) => task.nodeId === selectedNode.id)
+                            .map((task) => (
+                              <WorkflowPendingHumanTaskPanel
+                                key={`${task.runId}:${task.taskId}`}
+                                task={task}
+                                respond={humanTasks.respond}
+                                readOnly={false}
+                                typeDeclarations={document.typeDeclarations}
+                                typeDefinitions={typeDefinitions}
+                              />
+                            ))
+                        : null}
                       {execution && selectedNode ? (
                         <WorkflowExecutionDetails
                           execution={execution}

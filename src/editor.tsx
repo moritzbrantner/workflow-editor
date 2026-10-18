@@ -414,6 +414,8 @@ export type WorkflowEditorProps<
     TEdgeData,
     TTemplateData
   >["triggerActivation"];
+  /** Pending human tasks of connected runs and the host's answer channel (#105). */
+  humanTasks?: WorkflowWorkbenchProps<TNodeData, TEdgeData, TTemplateData>["humanTasks"];
   /**
    * Connected host's Run/Test seam (#115): receives validated input values (defaults filled in)
    * and the selected profile. Without it the Inputs panel only authors profiles.
@@ -726,6 +728,7 @@ export function WorkflowEditor<
   execution,
   inspectorFieldRenderers,
   triggerActivation,
+  humanTasks,
   onRunWorkflow,
   formatExecutionLabel,
   renderExecutionDetails,
@@ -1878,6 +1881,7 @@ export function WorkflowEditor<
           execution={execution}
           inspectorFieldRenderers={inspectorFieldRenderers}
           triggerActivation={triggerActivation}
+          humanTasks={humanTasks}
           inputProfiles={
             activeEntry
               ? {
