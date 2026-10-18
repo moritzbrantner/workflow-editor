@@ -1,5 +1,9 @@
 import type { WorkflowEditorInputProfile } from "./core-workflow-inputs";
 import {
+  getWorkflowEditorWorkflowInterface,
+  type WorkflowEditorWorkflowInterface,
+} from "./core-workflow-interface";
+import {
   assertWorkflowEditorDocument,
   normalizeWorkflowEditorDocument,
   workflowEditorValidationPolicies,
@@ -78,6 +82,8 @@ export type WorkflowEditorDocumentReferenceOption = {
   id: string;
   name: string;
   missing?: boolean;
+  /** The document's start/end interface, so a reference node can sync its ports (#95). */
+  interface?: WorkflowEditorWorkflowInterface;
 };
 
 export type WorkflowEditorReferenceDiagnostic = {
@@ -311,7 +317,11 @@ export function listWorkflowEditorDocumentReferenceOptions<
   TNodeData = Record<string, unknown>,
   TEdgeData = Record<string, unknown>,
 >(library: WorkflowEditorLibrary<TNodeData, TEdgeData>): WorkflowEditorDocumentReferenceOption[] {
-  return library.documents.map((entry) => ({ id: entry.id, name: entry.name }));
+  return library.documents.map((entry) => ({
+    id: entry.id,
+    name: entry.name,
+    interface: getWorkflowEditorWorkflowInterface(entry.document),
+  }));
 }
 
 export function getWorkflowEditorReferenceDiagnostics<

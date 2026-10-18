@@ -239,6 +239,12 @@ export {
   type WorkflowEditorInputProfile,
 } from "./core-workflow-inputs";
 export {
+  getWorkflowEditorWorkflowInterface,
+  syncWorkflowEditorReferenceInterface,
+  workflowEditorReferenceMatchesInterface,
+  type WorkflowEditorWorkflowInterface,
+} from "./core-workflow-interface";
+export {
   compileWorkflowEditorHumanTask,
   isWorkflowEditorHumanTaskNode,
   validateWorkflowEditorHumanTaskResponse,

@@ -823,6 +823,9 @@ export function getWorkflowEditorSharedInspectorFields(entries: ReadonlyArray<{
     fields: readonly WorkflowEditorInspectorFieldDefinition[];
 }>): WorkflowEditorSharedInspectorField[];
 
+// @public (undocumented)
+export function getWorkflowEditorWorkflowInterface(document: WorkflowEditorDocument<unknown, unknown>): WorkflowEditorWorkflowInterface;
+
 // @public
 export function getWorkflowExecutionEdgeStatus(snapshot: WorkflowExecutionEdgeSnapshot): "idle" | "running" | "success" | "error";
 
@@ -1030,6 +1033,9 @@ export function stringifyWorkflowEditorBundle(bundle: WorkflowEditorBundle<unkno
 
 // @public
 export function syncWorkflowEditorIterationResultPort<TNodeData>(node: WorkflowEditorNode<TNodeData>): WorkflowEditorNode<TNodeData>;
+
+// @public
+export function syncWorkflowEditorReferenceInterface<TNodeData, TEdgeData>(document: WorkflowEditorDocument<TNodeData, TEdgeData>, nodeId: string, workflowInterface: WorkflowEditorWorkflowInterface): WorkflowEditorDocument<TNodeData, TEdgeData>;
 
 // @public (undocumented)
 export function topologicallySortWorkflowEditorNodes<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(document: WorkflowEditorDocument<TNodeData, TEdgeData>): WorkflowEditorNode<TNodeData>[];
@@ -1989,6 +1995,7 @@ export type WorkflowEditorDocumentReferenceOption = {
     id: string;
     name: string;
     missing?: boolean;
+    interface?: WorkflowEditorWorkflowInterface;
 };
 
 // @public (undocumented)
@@ -2807,6 +2814,9 @@ export type WorkflowEditorReferenceDiagnostic = {
     path: string[];
 };
 
+// @public
+export function workflowEditorReferenceMatchesInterface(node: Pick<WorkflowEditorNode<unknown>, "inputs" | "outputs">, workflowInterface: WorkflowEditorWorkflowInterface): boolean;
+
 // @public (undocumented)
 export type WorkflowEditorRestoredDocumentFile<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>> = {
     exportedAt: string;
@@ -2985,6 +2995,12 @@ export function WorkflowEditorVersionControls<TNodeData extends Record<string, u
 
 // @public (undocumented)
 export type WorkflowEditorViewport = GraphEditorViewport;
+
+// @public
+export type WorkflowEditorWorkflowInterface = {
+    inputs: WorkflowEditorPort[];
+    outputs: WorkflowEditorPort[];
+};
 
 // @public (undocumented)
 export type WorkflowEditorWorkflowReference = {
