@@ -124,8 +124,6 @@ export function DefaultWorkflowInspector<
                 {
                   id: "persistOnCompletion",
                   label: "Persist result on completion",
-                  description:
-                    "Save this node's result as soon as it completes. By default results are saved when the run ends.",
                   type: "boolean",
                 },
               ],
