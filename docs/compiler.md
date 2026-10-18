@@ -43,6 +43,29 @@ keep compiled v1/v2. The shared fixture is `fixtures/compiled-v3-workflow-refere
   `unbounded-recursive-reference`, and the runner enforces the bound. Missing documents report
   `missing-workflow-reference`. Diagnostics inside a referenced definition use paths prefixed with
   `workflows.<key>.`.
+## Human tasks (editor #105, Engine TECH-001)
+
+Nodes of kind `human.task.approval` and `human.task.input` (default templates **Approval** and
+**Human input**, category "Human task") compile with a `humanTask` contract. Documents without
+them keep their output unchanged, and the shared fixture is `fixtures/compiled-v1-human-tasks.json`.
+
+```jsonc
+// Approval: ports request → approved | rejected
+{ "kind": "approval", "prompt": "Approve this expense?", "outcomes": ["approved", "rejected"] }
+// Typed input: optional context input → value output
+{ "kind": "input", "prompt": "Enter the corrected amount.", "responseType": { "kind": "typescript", "source": "number" } }
+```
+
+- **Response contract:** the host's answer is `{ decision: "approved" | "rejected", comment? }`
+  for approval and `{ value, comment? }` for input. The approval decision names the active output
+  port, and both outputs carry the `request` value. An input task emits `value` on its `value`
+  port.
+- **Validation:** `validateWorkflowEditorHumanTaskResponse(humanTask, response, { typeDeclarations })`
+  checks a response against the contract. Typed values use the same TypeScript checker as ports,
+  with the compiled workflow's `typeDeclarations`.
+- **Ownership:** the runner suspends the node through its executor and resumes the same run with
+  the response. The engine persists the wait and the task, authorizes nothing itself (the host
+  does), and validates the response before resuming. The editor stores no task state.
 
 ## Per-node result persistence (TECH-011)
 

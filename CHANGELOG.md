@@ -9,6 +9,10 @@
   - Reference nodes carry `workflowRef: { workflow, maxDepth? }`.
   - The compiler reports `missing-workflow-reference`, `workflow-reference-interface` and `unbounded-recursive-reference`.
   - Documents without references compile as before.
+- Human task nodes (editor #105, Decision Atlas 5.16): the **Approval** (`human.task.approval`, with approved/rejected outputs) and **Human input** (`human.task.input`, with a typed `value` output) default templates.
+  - Both compile with a `humanTask` contract (prompt, outcomes or response type) and report `invalid-human-task` diagnostics.
+  - `validateWorkflowEditorHumanTaskResponse` checks host responses.
+  - See `docs/compiler.md` and `fixtures/compiled-v1-human-tasks.json`.
 - Iteration measurements (TECH-004, #96): iteration bodies can expose named, typed measurement outputs besides `next` and `converged`.
   - They compile to `iteration.body.outputs.measurements` and appear as `measurements` in the typed `result`.
   - Bodies without measurements compile unchanged.

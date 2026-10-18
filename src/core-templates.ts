@@ -1,3 +1,4 @@
+import { workflowEditorHumanTaskNodeTemplates } from "./core-human-tasks";
 import type { WorkflowEditorNodeTemplate } from "./core-types";
 
 export const workflowEditorControlFlowNodeTemplates = [
@@ -280,4 +281,5 @@ export const defaultWorkflowEditorNodeTemplates = [
   ...workflowEditorControlFlowNodeTemplates,
   ...workflowEditorJsonNodeTemplates,
   ...workflowEditorCollectionNodeTemplates,
+  ...workflowEditorHumanTaskNodeTemplates,
 ] satisfies WorkflowEditorNodeTemplate[];

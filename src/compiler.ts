@@ -26,6 +26,19 @@ import type {
 import type { WorkflowEditorIterationDiagnosticCode } from "./core-iteration";
 import { createWorkflowEditorTypeResolver } from "./core-type-resolver";
 
+import {
+  compileWorkflowEditorHumanTask,
+  isWorkflowEditorHumanTaskNode,
+  type CompiledWorkflowHumanTask,
+} from "./core-human-tasks";
+
+export {
+  validateWorkflowEditorHumanTaskResponse,
+  type CompiledWorkflowHumanTask,
+  type WorkflowEditorHumanApprovalResponse,
+  type WorkflowEditorHumanInputResponse,
+} from "./core-human-tasks";
+
 export const compiledWorkflowFormat = "@moritzbrantner/workflow/compiled" as const;
 export const compiledWorkflowVersion = 1 as const;
 /** Emitted only for documents containing bounded iteration; DAG-only documents stay version 1. */
@@ -55,6 +68,8 @@ export type CompiledWorkflowNode<TData extends Record<string, unknown> = Record<
     data?: TData;
     /** Present only when the authored node opts into persisting its result on completion. */
     persistence?: "on-completion";
+    /** Human approval or typed-input task contract (`human.task.*` kinds, editor #105). */
+    humanTask?: CompiledWorkflowHumanTask;
   };
 
 export type CompiledWorkflowEdge = Pick<
@@ -208,6 +223,7 @@ export type WorkflowEditorCompileDiagnosticCode =
   | "missing-workflow-reference"
   | "workflow-reference-interface"
   | "unbounded-recursive-reference"
+  | "invalid-human-task"
   | WorkflowEditorIterationDiagnosticCode;
 
 export type WorkflowEditorCompileDiagnostic = {
@@ -313,6 +329,13 @@ function validateExecutableNode(
       path: `nodes.${node.id}.workflowRef`,
       nodeId: node.id,
     });
+  }
+
+  if (isWorkflowEditorHumanTaskNode(node)) {
+    const humanTask = compileWorkflowEditorHumanTask(node, scope.pathPrefix);
+    if ("diagnostics" in humanTask) {
+      diagnostics.push(...humanTask.diagnostics);
+    }
   }
 
   if (iteration && scope.inBody) {
@@ -582,6 +605,7 @@ function compileScope(document: WorkflowEditorDocument, scope: CompileScope) {
       ...(node.outputs?.length ? { outputs: node.outputs.map(compilePort) } : {}),
       ...(node.data === undefined ? {} : { data: node.data }),
       ...compiledPersistence(node),
+      ...compiledHumanTask(node),
     };
   });
 
@@ -596,6 +620,12 @@ function compileScope(document: WorkflowEditorDocument, scope: CompileScope) {
     }));
 
   return { nodes, edges, order };
+}
+
+function compiledHumanTask(node: WorkflowEditorNode): { humanTask?: CompiledWorkflowHumanTask } {
+  if (!isWorkflowEditorHumanTaskNode(node)) return {};
+  const result = compileWorkflowEditorHumanTask(node);
+  return "humanTask" in result ? { humanTask: result.humanTask } : {};
 }
 
 function compiledPersistence(node: WorkflowEditorNode): { persistence?: "on-completion" } {

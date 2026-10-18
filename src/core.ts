@@ -220,6 +220,18 @@ export {
   type WorkflowEditorNodeTemplateRegistryEntry,
 } from "./core-template-registry";
 export {
+  compileWorkflowEditorHumanTask,
+  isWorkflowEditorHumanTaskNode,
+  validateWorkflowEditorHumanTaskResponse,
+  workflowEditorHumanApprovalKind,
+  workflowEditorHumanInputKind,
+  workflowEditorHumanTaskNodeTemplates,
+  type CompiledWorkflowHumanTask,
+  type WorkflowEditorHumanApprovalResponse,
+  type WorkflowEditorHumanInputResponse,
+  type WorkflowEditorHumanTaskDiagnostic,
+} from "./core-human-tasks";
+export {
   diffWorkflowEditorDocuments,
   isWorkflowEditorSecretLikePath,
   workflowEditorDiffRedacted,
