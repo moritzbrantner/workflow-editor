@@ -14,6 +14,7 @@ import {
   type ReactNode,
   type SetStateAction,
   type SyntheticEvent,
+  Fragment,
   useEffect,
   useMemo,
   useRef,
@@ -148,6 +149,14 @@ import {
 } from "./core-rendered-node-size";
 import { formatShortcutLabel } from "./shortcut-label";
 import {
+  formatWorkflowExecutionDuration,
+  getWorkflowExecutionEdgeStatus,
+  getWorkflowExecutionNodeDuration,
+  getWorkflowExecutionNodePresentation,
+  type WorkflowExecutionNodeSnapshot,
+  type WorkflowExecutionSnapshot,
+} from "./core-execution";
+import {
   describeWorkflowWorkbenchConnectionRejection,
   describeWorkflowWorkbenchDocumentChange,
 } from "./react/workbench-announcements";
@@ -226,11 +235,21 @@ export type WorkflowWorkbenchSelection<
   TEdgeData extends Record<string, unknown> = Record<string, unknown>,
 > = WorkflowEditorSelection<TNodeData, TEdgeData>;
 
+export type WorkflowWorkbenchExecutionContext<
+  TNodeData extends Record<string, unknown> = Record<string, unknown>,
+> = {
+  execution: WorkflowExecutionSnapshot;
+  node: WorkflowEditorNode<TNodeData>;
+  snapshot?: WorkflowExecutionNodeSnapshot;
+};
+
 export type WorkflowWorkbenchInspectorContext<
   TNodeData extends Record<string, unknown> = Record<string, unknown>,
   TEdgeData extends Record<string, unknown> = Record<string, unknown>,
 > = {
   document: WorkflowEditorDocument<TNodeData, TEdgeData>;
+  /** The host-supplied execution snapshot, when one is shown. */
+  execution?: WorkflowExecutionSnapshot;
   documentReferences?: WorkflowEditorDocumentReferenceOption[];
   readOnly: boolean;
   selection: WorkflowEditorSelectionState;
@@ -406,6 +425,18 @@ export type WorkflowWorkbenchProps<
   onOpenWorkflowReference?: (node: WorkflowEditorNode<TNodeData>) => void;
   onCreateWorkflowReference?: (node: WorkflowEditorNode<TNodeData>) => void;
   /**
+   * Host-supplied run state shown over the canvas. It is a controlled, transient input: it never
+   * enters the document, history, saved versions or dirty tracking. Pass `null` to clear it.
+   */
+  execution?: WorkflowExecutionSnapshot | null;
+  /** Custom status text for a node's execution state (defaults to the state label). */
+  formatExecutionLabel?: (
+    snapshot: WorkflowExecutionNodeSnapshot,
+    node: WorkflowEditorNode<TNodeData>,
+  ) => string;
+  /** Host content for the selected node's execution details, such as inspect/retry/cancel actions. */
+  renderExecutionDetails?: (context: WorkflowWorkbenchExecutionContext<TNodeData>) => ReactNode;
+  /**
    * Host-owned document history. When provided, undo/redo commands and their keyboard shortcuts
    * use it instead of the workbench's internal operation history.
    */
@@ -576,6 +607,9 @@ export function WorkflowWorkbench<
   onViewportChange,
   onOpenWorkflowReference,
   onCreateWorkflowReference,
+  execution,
+  formatExecutionLabel,
+  renderExecutionDetails,
   history: hostHistory,
   renderNodeTemplate,
   renderInspector,
@@ -776,13 +810,50 @@ export function WorkflowWorkbench<
     return edge ? [edge] : [];
   });
   const graphIndex = useMemo(() => createWorkflowEditorGraphIndex(document), [document]);
-  const uiNodes = useMemo(
+  const designUiNodes = useMemo(
     () => toUiWorkflowBuilderNodes(document.nodes, document.edges, { portTypeColors }),
     [document.edges, document.nodes, portTypeColors],
   );
-  const uiEdges = useMemo(
+  const designUiEdges = useMemo(
     () => toUiWorkflowBuilderEdges(document.edges, document.nodes, { portTypeColors }),
     [document.edges, document.nodes, portTypeColors],
+  );
+  // Runtime state is layered over the derived UI nodes only, so an update never re-normalizes the
+  // document and never reaches document history or serialization.
+  const uiNodes = useMemo(
+    () =>
+      execution
+        ? designUiNodes.map((uiNode) => {
+            const snapshot = execution.nodes[uiNode.id];
+            if (!snapshot) {
+              return uiNode;
+            }
+            const presentation = getWorkflowExecutionNodePresentation(snapshot);
+            const node = documentContext.nodeById.get(uiNode.id);
+            return {
+              ...uiNode,
+              status: presentation.status,
+              tone: presentation.tone,
+              eyebrow:
+                formatExecutionLabel && node
+                  ? formatExecutionLabel(snapshot, node)
+                  : presentation.label,
+            };
+          })
+        : designUiNodes,
+    [designUiNodes, documentContext, execution, formatExecutionLabel],
+  );
+  const uiEdges = useMemo(
+    () =>
+      execution?.edges
+        ? designUiEdges.map((uiEdge) => {
+            const snapshot = execution.edges?.[uiEdge.id];
+            return snapshot
+              ? { ...uiEdge, status: getWorkflowExecutionEdgeStatus(snapshot) }
+              : uiEdge;
+          })
+        : designUiEdges,
+    [designUiEdges, execution],
   );
   const minimizedGroups = useMemo(
     () => (document.groups ?? []).filter((group) => group.minimized === true),
@@ -1254,6 +1325,7 @@ export function WorkflowWorkbench<
 
   const inspectorContext = {
     document,
+    ...(execution ? { execution } : {}),
     documentReferences,
     readOnly,
     selection,
@@ -2616,10 +2688,27 @@ export function WorkflowWorkbench<
         // Focus left to nowhere: either the user clicked away (target stays connected) or an
         // edit removed the focused element, in which case focus is restored to the canvas.
         const blurred = event.target;
+        const ownerDocument = event.currentTarget.ownerDocument;
         queueMicrotask(() => {
-          if (blurred.isConnected) {
+          // A blurred element that is still rendered and enabled means the user moved focus away; a
+          // removed, hidden or disabled one (for example "Create nested workflow" once it opens the
+          // nested workflow) does not.
+          if (
+            blurred.isConnected &&
+            blurred.getClientRects().length > 0 &&
+            !blurred.matches(":disabled")
+          ) {
             focusWithinWorkbenchRef.current = false;
+            return;
           }
+          ownerDocument.defaultView?.requestAnimationFrame(() => {
+            const active = ownerDocument.activeElement;
+            if (focusWithinWorkbenchRef.current && (!active || active === ownerDocument.body)) {
+              containerRef.current
+                ?.querySelector<HTMLElement>("[data-slot='workflow-builder-surface']")
+                ?.focus({ preventScroll: true });
+            }
+          });
         });
       }}
       className={cn(
@@ -2864,7 +2953,10 @@ export function WorkflowWorkbench<
                     .map((node) => node.id);
                   const nextDocument = normalizeWorkflowEditorDocument({
                     ...document,
-                    nodes: fromUiWorkflowBuilderNodes(nodes, document.nodes),
+                    nodes: keepDesignPresentation(
+                      fromUiWorkflowBuilderNodes(nodes, document.nodes),
+                      documentContext.nodeById,
+                    ),
                     edges: document.edges.filter(
                       (edge) => nodeIds.has(edge.sourceNodeId) && nodeIds.has(edge.targetNodeId),
                     ),
@@ -2919,7 +3011,10 @@ export function WorkflowWorkbench<
                   commitDocument(
                     normalizeWorkflowEditorDocument({
                       ...document,
-                      edges: fromUiWorkflowBuilderEdges(edges, document.edges),
+                      edges: keepDesignPresentation(
+                        fromUiWorkflowBuilderEdges(edges, document.edges),
+                        documentContext.edgeById,
+                      ),
                     }).document,
                   );
                 }
@@ -3233,6 +3328,13 @@ export function WorkflowWorkbench<
                   </div>
                   {inspectorCollapsed ? null : (
                     <div className="min-h-0 overflow-y-auto">
+                      {execution && selectedNode ? (
+                        <WorkflowExecutionDetails
+                          execution={execution}
+                          node={selectedNode}
+                          renderExecutionDetails={renderExecutionDetails}
+                        />
+                      ) : null}
                       {renderInspector ? (
                         renderInspector(inspectorContext)
                       ) : (
@@ -5996,4 +6098,81 @@ function createTemplateNodeId<TData extends Record<string, unknown>>(
   }
 
   return candidate;
+}
+
+/** Keeps runtime overlay status out of the document when the canvas echoes nodes/edges back. */
+function keepDesignPresentation<
+  T extends { id: string; status?: string; tone?: string; eyebrow?: string },
+>(
+  items: T[],
+  designById: ReadonlyMap<string, { status?: string; tone?: string; eyebrow?: string }>,
+): T[] {
+  return items.map((item) => {
+    const design = designById.get(item.id);
+    if (!design) {
+      return item;
+    }
+    const next = { ...item, status: design.status };
+    if ("tone" in item || "tone" in design) {
+      (next as { tone?: string }).tone = design.tone;
+    }
+    if ("eyebrow" in item || "eyebrow" in design) {
+      (next as { eyebrow?: string }).eyebrow = design.eyebrow;
+    }
+    return next;
+  });
+}
+
+function WorkflowExecutionDetails<TNodeData extends Record<string, unknown>>({
+  execution,
+  node,
+  renderExecutionDetails,
+}: {
+  execution: WorkflowExecutionSnapshot;
+  node: WorkflowEditorNode<TNodeData>;
+  renderExecutionDetails?: (context: WorkflowWorkbenchExecutionContext<TNodeData>) => ReactNode;
+}) {
+  const snapshot = execution.nodes[node.id];
+  const duration = snapshot ? getWorkflowExecutionNodeDuration(snapshot) : undefined;
+  const rows: Array<[string, string]> = snapshot
+    ? [
+        ["State", getWorkflowExecutionNodePresentation(snapshot).label],
+        ...(snapshot.attempt !== undefined
+          ? [["Attempt", String(snapshot.attempt)] as [string, string]]
+          : []),
+        ...(snapshot.startedAt ? [["Started", snapshot.startedAt] as [string, string]] : []),
+        ...(snapshot.endedAt ? [["Ended", snapshot.endedAt] as [string, string]] : []),
+        ...(duration !== undefined
+          ? [["Duration", formatWorkflowExecutionDuration(duration)] as [string, string]]
+          : []),
+        ...(snapshot.outputSummary ? [["Output", snapshot.outputSummary] as [string, string]] : []),
+        ...(snapshot.errorSummary ? [["Error", snapshot.errorSummary] as [string, string]] : []),
+      ]
+    : [];
+
+  return (
+    <section
+      aria-label="Run details"
+      data-slot="workflow-execution-details"
+      data-run-id={execution.runId}
+      className="grid gap-1.5 border-b border-border p-3 text-xs"
+    >
+      <div className="font-medium">
+        {execution.mode === "historical" ? "Past run" : "Run"} {execution.runId}
+      </div>
+      {snapshot ? (
+        <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-1">
+          {rows.map(([label, value]) => (
+            <Fragment key={label}>
+              <dt className="text-muted-foreground">{label}</dt>
+              <dd className="min-w-0 break-words">{value}</dd>
+            </Fragment>
+          ))}
+        </dl>
+      ) : (
+        <div className="text-muted-foreground">No run state for this node.</div>
+      )}
+      {renderExecutionDetails?.({ execution, node, ...(snapshot ? { snapshot } : {}) })}
+    </section>
+  );
 }

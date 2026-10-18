@@ -398,6 +398,52 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     }
   });
 
+  test("overlays host execution state without touching the document", () => {
+    const handleDocumentChange = vi.fn();
+    const execution = {
+      runId: "run-1",
+      nodes: {
+        input: { state: "succeeded", durationMs: 1500, outputSummary: "3 rows" },
+        transform: { state: "running", progress: 0.4, attempt: 2 },
+      },
+      edges: { "input-transform": { state: "transferred" } },
+    } as const;
+    const { container, rerender } = render(
+      <WorkflowWorkbench
+        document={document}
+        selectedNodeId="input"
+        execution={execution}
+        renderExecutionDetails={({ node }) => <button type="button">Retry {node.label}</button>}
+        onDocumentChange={handleDocumentChange}
+      />,
+    );
+
+    const node = (id: string) =>
+      container.querySelector(
+        `[data-slot="workflow-builder-node"][data-node-id="${id}"] [data-slot="workflow-node"]`,
+      );
+    expect(node("input")?.getAttribute("data-status")).toBe("success");
+    expect(node("transform")?.getAttribute("data-status")).toBe("running");
+    expect(screen.getAllByText("Running 40% · attempt 2").length).toBeGreaterThan(0);
+    const details = container.querySelector('[data-slot="workflow-execution-details"]');
+    expect(details?.textContent).toContain("1.5 s");
+    expect(details?.textContent).toContain("3 rows");
+    expect(screen.getByRole("button", { name: "Retry Input" })).toBeTruthy();
+    expect(handleDocumentChange).not.toHaveBeenCalled();
+
+    rerender(
+      <WorkflowWorkbench
+        document={document}
+        selectedNodeId="input"
+        execution={null}
+        onDocumentChange={handleDocumentChange}
+      />,
+    );
+    expect(node("transform")?.getAttribute("data-status")).not.toBe("running");
+    expect(container.querySelector('[data-slot="workflow-execution-details"]')).toBeNull();
+    expect(handleDocumentChange).not.toHaveBeenCalled();
+  });
+
   test("renders, selects, changes document state, and respects read-only mode", () => {
     const handleDocumentChange = vi.fn();
     const handleSelectionChange = vi.fn();
