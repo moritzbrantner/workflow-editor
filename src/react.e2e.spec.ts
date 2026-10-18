@@ -408,7 +408,7 @@ test.describe("WorkflowWorkbench desktop", () => {
     await valueInput.fill("published");
     await expect(valueInput).toHaveValue("published");
 
-    const menuButton = page.getByRole("button", { name: "String node actions" });
+    const menuButton = page.getByRole("button", { name: "Open String menu" });
     await expect(menuButton).toBeVisible();
     const minimizedInputBox = await valueInput.boundingBox();
     const minimizedMenuBox = await menuButton.boundingBox();
@@ -1315,13 +1315,26 @@ test.describe("WorkflowWorkbench accessibility and responsive smoke", () => {
 
     await expect(page.getByTestId("selection-json")).toContainText('"id":"input"');
 
-    const actionButton = page.getByRole("button", { name: "Input node actions", exact: true });
+    const actionButton = page.getByRole("button", { name: "Open Input menu", exact: true });
     await actionButton.focus();
     await page.keyboard.press("Enter");
     await expect(page.getByRole("menu")).toBeVisible();
     await page.keyboard.press("ArrowDown");
     await page.keyboard.press("Escape");
     await expect(page.getByRole("menu")).toBeHidden();
+
+    // Rename from the node menu by keyboard: the field replaces the title in place (#46).
+    await actionButton.focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("menuitem", { name: "Rename" })).toBeFocused();
+    await page.keyboard.press("Enter");
+    const inlineName = page.getByLabel("Input node name");
+    await expect(inlineName).toBeFocused();
+    await expect(
+      page.locator('[data-node-id="input"] [data-slot="graph-node-title"] input'),
+    ).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(inlineName).toBeHidden();
 
     await page.getByRole("button", { name: "Delete", exact: true }).focus();
     await page.keyboard.press("Enter");

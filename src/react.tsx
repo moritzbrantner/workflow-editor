@@ -20,13 +20,7 @@ import {
   useRef,
   useState,
 } from "react";
-import {
-  Maximize2Icon,
-  Minimize2Icon,
-  MoreHorizontalIcon,
-  PinIcon,
-  Trash2Icon,
-} from "lucide-react";
+import { Maximize2Icon, Minimize2Icon, MoreHorizontalIcon, PinIcon } from "lucide-react";
 
 import {
   Badge,
@@ -232,7 +226,6 @@ const workflowEditorPanActivationDistance = 3;
 const workflowEditorMinZoom = 0.5;
 const workflowEditorMaxZoom = 1.75;
 let workflowEditorMemoryClipboard: string | null = null;
-const workflowNodeControlFrameClassName = "pointer-events-auto absolute z-20";
 const workflowNodeTextControlClassName =
   "border-zinc-300 bg-white/95 text-[11px] font-medium text-zinc-950 shadow-sm [--ui-input-height:1.5rem] [--ui-input-padding-x:0.5rem] [--ui-input-radius:0.25rem] focus-visible:ring-zinc-950/35 disabled:opacity-70";
 const workflowJsonPrimitiveTextControlClassName = cn(
@@ -3048,6 +3041,55 @@ export function WorkflowWorkbench<
                   addAction
                 );
               }}
+              // One action surface per node: graph-editor's built-in node menu (#46).
+              {...(chrome?.nodeControls === "hidden"
+                ? {}
+                : {
+                    getNodeMenuItems: (node: { id: string }) =>
+                      readOnly
+                        ? []
+                        : [
+                            {
+                              id: "rename",
+                              label: "Rename",
+                              onSelect: () => {
+                                ignoreSelectionClearUntilRef.current =
+                                  Date.now() + workflowWorkbenchOverlaySelectionPreservationMs;
+                                emitSelectionState({
+                                  nodeIds: [node.id],
+                                  edgeIds: [],
+                                  primary: { type: "node", id: node.id },
+                                });
+                                // Start after the menu closes and returns focus to its trigger,
+                                // so the field keeps focus instead of committing on blur.
+                                window.setTimeout(() => setRenamingNodeId(node.id), 0);
+                              },
+                            },
+                            {
+                              id: "delete",
+                              label: "Delete",
+                              destructive: true,
+                              onSelect: () => deleteNode(node.id),
+                            },
+                          ],
+                  })}
+              // Inline rename replaces the header title in place (no portal, #46).
+              renderNodeTitle={({ node }) => {
+                const workflowNode =
+                  node.id === renamingNodeId && !readOnly
+                    ? documentContext.nodeById.get(node.id)
+                    : undefined;
+                return workflowNode ? (
+                  <WorkflowNodeRenameControl
+                    node={workflowNode}
+                    onCancel={() => setRenamingNodeId(null)}
+                    onCommit={(nodeId, label) => {
+                      setRenamingNodeId(null);
+                      updateWorkflowNodeLabel(nodeId, label);
+                    }}
+                  />
+                ) : undefined;
+              }}
               renderPortContent={({ node, port, direction }) => {
                 const workflowNode = documentContext.nodeById.get(node.id);
                 return workflowNode && isWorkflowEditorDynamicPortNode(workflowNode) ? (
@@ -3191,12 +3233,6 @@ export function WorkflowWorkbench<
             ) : null}
             {chrome?.nodeControls === "hidden" ? null : (
               <>
-                <WorkflowNodeActionMenus
-                  containerRef={containerRef}
-                  document={document}
-                  readOnly={readOnly}
-                  onDeleteNode={deleteNode}
-                />
                 <WorkflowGroupOverlays
                   document={document}
                   readOnly={readOnly}
@@ -3268,17 +3304,6 @@ export function WorkflowWorkbench<
                   marquee={null}
                   primaryNodeId={primarySelectedNodeId}
                   selection={selection}
-                />
-                <WorkflowNodeRenameControls
-                  containerRef={containerRef}
-                  document={document}
-                  nodeId={renamingNodeId}
-                  readOnly={readOnly}
-                  onCancel={() => setRenamingNodeId(null)}
-                  onCommit={(nodeId, label) => {
-                    setRenamingNodeId(null);
-                    updateWorkflowNodeLabel(nodeId, label);
-                  }}
                 />
               </>
             )}
@@ -4477,7 +4502,6 @@ function WorkflowWorkbenchNodeLayerStyles<TNodeData extends Record<string, unkno
   // container so INPUTS/OUTPUTS labels stay hidden without affecting portals.
   const styles = [
     `[data-slot="workbench-layout"] [data-slot="workflow-node"]:not([data-compact="true"]) > div.grid:not([data-slot]) > div > div:first-child { display: none !important; }`,
-    `[data-slot="workbench-layout"] [data-slot="workflow-builder-node"] [data-slot="workflow-node-menu-trigger"] { visibility: hidden; pointer-events: none; }`,
     `[data-slot="workbench-layout"] [data-slot="workflow-node"][data-minimized="true"] { height: ${workflowEditorMinimizedNodeHeight}px !important; min-height: ${workflowEditorMinimizedNodeHeight}px !important; display: flex !important; flex-direction: row !important; align-items: stretch !important; }`,
     `[data-slot="workbench-layout"] [data-slot="workflow-node"][data-minimized="true"] > [data-slot="workflow-node-header"] { position: relative !important; z-index: 10 !important; height: ${workflowEditorMinimizedNodeHeight}px !important; min-height: ${workflowEditorMinimizedNodeHeight}px !important; flex: 1 1 auto !important; border-bottom: 0 !important; border-radius: inherit !important; padding: 6px 8px !important; }`,
     `[data-slot="workbench-layout"] [data-slot="workflow-node"][data-minimized="true"] [data-slot="workflow-node-header"] > div { align-items: center !important; }`,
@@ -4638,112 +4662,6 @@ function isWorkflowEditorDetachedNodeControlVisible<TNodeData extends Record<str
   return toUiWorkflowBuilderNodes([node])[0]?.minimized !== true;
 }
 
-function useWorkflowWorkbenchNodeElementMap<TNodeData extends Record<string, unknown>>(
-  containerRef: RefObject<HTMLDivElement | null>,
-  nodes: ReadonlyArray<WorkflowEditorNode<TNodeData>>,
-) {
-  const nodeFingerprint = nodes.map((node) => node.id).join("\u001f");
-  const [nodeElements, setNodeElements] = useState<Map<string, HTMLElement>>(() => new Map());
-
-  useEffect(() => {
-    const container = containerRef.current;
-
-    if (!container || nodes.length === 0) {
-      setNodeElements((current) => (current.size === 0 ? current : new Map()));
-      return;
-    }
-
-    const nextElements = new Map<string, HTMLElement>();
-
-    for (const node of nodes) {
-      const builderNode = container.querySelector<HTMLElement>(
-        `[data-slot="workflow-builder-node"][data-node-id="${cssAttributeValue(node.id)}"]`,
-      );
-      const workflowNode =
-        builderNode?.firstElementChild instanceof HTMLElement &&
-        builderNode.firstElementChild.dataset.slot === "workflow-node"
-          ? builderNode.firstElementChild
-          : builderNode?.querySelector<HTMLElement>("[data-slot='workflow-node']");
-
-      if (workflowNode) {
-        nextElements.set(node.id, workflowNode);
-      }
-    }
-
-    setNodeElements((current) =>
-      areWorkflowWorkbenchNodeElementMapsEqual(current, nextElements) ? current : nextElements,
-    );
-  }, [containerRef, nodeFingerprint, nodes]);
-
-  return nodeElements;
-}
-
-function areWorkflowWorkbenchNodeElementMapsEqual(
-  current: ReadonlyMap<string, HTMLElement>,
-  next: ReadonlyMap<string, HTMLElement>,
-) {
-  if (current.size !== next.size) {
-    return false;
-  }
-
-  for (const [id, element] of next) {
-    if (current.get(id) !== element) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-function WorkflowNodeRenameControls<
-  TNodeData extends Record<string, unknown>,
-  TEdgeData extends Record<string, unknown>,
->({
-  containerRef,
-  document,
-  nodeId,
-  onCancel,
-  onCommit,
-  readOnly,
-}: {
-  containerRef: RefObject<HTMLDivElement | null>;
-  document: WorkflowEditorDocument<TNodeData, TEdgeData>;
-  nodeId: string | null;
-  onCancel: () => void;
-  onCommit: (nodeId: string, label: string) => void;
-  readOnly: boolean;
-}) {
-  const node = nodeId ? document.nodes.find((candidate) => candidate.id === nodeId) : undefined;
-  const editableNodes = node && !readOnly ? [node] : [];
-  const nodeElements = useWorkflowWorkbenchNodeElementMap(containerRef, editableNodes);
-
-  if (!node || readOnly) {
-    return null;
-  }
-
-  const target = nodeElements.get(node.id);
-  if (!target) {
-    return null;
-  }
-
-  const offset = getWorkflowNodeRenameControlOffset(node, target);
-
-  return createPortal(
-    <div
-      className={workflowNodeControlFrameClassName}
-      style={{
-        left: offset.x,
-        top: offset.y,
-        width: offset.width,
-      }}
-    >
-      <WorkflowNodeRenameControl node={node} onCancel={onCancel} onCommit={onCommit} />
-    </div>,
-    target,
-    node.id,
-  );
-}
-
 function WorkflowNodeRenameControl<TNodeData extends Record<string, unknown>>({
   node,
   onCancel,
@@ -4835,32 +4753,6 @@ function WorkflowNodeRenameControl<TNodeData extends Record<string, unknown>>({
       />
     </div>
   );
-}
-
-function getWorkflowNodeRenameControlOffset<TNodeData>(
-  node: WorkflowEditorNode<TNodeData>,
-  target: HTMLElement,
-) {
-  const targetRect = target.getBoundingClientRect();
-  const selectElement = target.querySelector<HTMLElement>("[data-slot='workflow-node-select']");
-  const selectRect = selectElement?.getBoundingClientRect();
-
-  if (selectRect && targetRect.width > 0 && selectRect.width > 0) {
-    return {
-      x: Math.max(8, Math.round(selectRect.left - targetRect.left + 8)),
-      y: Math.max(6, Math.round(selectRect.top - targetRect.top + 6)),
-      width: Math.max(96, Math.round(selectRect.width - 16)),
-    };
-  }
-
-  const size = getWorkflowEditorRenderedNodeSize(toUiWorkflowBuilderNodes([node])[0]!);
-  const compact = node.variant === "compact" || toUiWorkflowBuilderNodes([node])[0]?.minimized;
-
-  return {
-    x: compact ? 10 : 12,
-    y: compact ? 6 : 12,
-    width: Math.max(96, size.width - (compact ? 48 : 24)),
-  };
 }
 
 type WorkflowGroupOverlayDragState = {
@@ -5538,151 +5430,6 @@ function formatWorkflowPortConnectionMenuType(type: unknown) {
   }
   const kind = (type as { kind?: unknown }).kind;
   return typeof kind === "string" ? kind : undefined;
-}
-
-function WorkflowNodeActionMenus<
-  TNodeData extends Record<string, unknown>,
-  TEdgeData extends Record<string, unknown>,
->({
-  containerRef,
-  document,
-  readOnly,
-  onDeleteNode,
-}: {
-  containerRef: RefObject<HTMLDivElement | null>;
-  document: WorkflowEditorDocument<TNodeData, TEdgeData>;
-  readOnly: boolean;
-  onDeleteNode: (nodeId: string) => void;
-}) {
-  const [openNodeId, setOpenNodeId] = useState<string | null>(null);
-  const nodeElements = useWorkflowWorkbenchNodeElementMap(containerRef, document.nodes);
-
-  if (document.nodes.length === 0) {
-    return null;
-  }
-
-  const stopInteractionPropagation = (event: SyntheticEvent) => {
-    event.stopPropagation();
-  };
-  const closeOnEscape = (event: ReactKeyboardEvent) => {
-    if (event.key === "Escape") {
-      event.stopPropagation();
-      setOpenNodeId(null);
-    }
-  };
-
-  return (
-    <>
-      {document.nodes.map((node) => {
-        const target = nodeElements.get(node.id);
-        if (!target) {
-          return null;
-        }
-
-        const offset = getWorkflowNodeActionMenuOffset(node, target);
-        const open = openNodeId === node.id;
-
-        return createPortal(
-          <div
-            key={node.id}
-            data-slot="workflow-node-action-menu"
-            className="pointer-events-auto absolute z-30"
-            style={{
-              left: offset.x,
-              top: offset.y,
-            }}
-            onClick={stopInteractionPropagation}
-            onKeyDown={closeOnEscape}
-            onMouseDown={stopInteractionPropagation}
-            onPointerDown={stopInteractionPropagation}
-          >
-            <Button
-              type="button"
-              size="icon-sm"
-              variant="ghost"
-              className="size-6 border border-zinc-300 bg-white/85 text-zinc-700 shadow-sm hover:bg-white"
-              aria-expanded={open}
-              aria-haspopup="menu"
-              aria-label={`${node.label} node actions`}
-              onClick={() => setOpenNodeId((current) => (current === node.id ? null : node.id))}
-            >
-              <MoreHorizontalIcon className="size-3.5" aria-hidden="true" />
-            </Button>
-            {open ? (
-              <div
-                role="menu"
-                data-slot="workflow-node-action-menu-content"
-                className="absolute right-0 top-7 z-[20010] grid w-36 gap-1 rounded-md bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10"
-              >
-                <div className="truncate px-1.5 py-1 text-xs font-medium text-muted-foreground">
-                  {node.label}
-                </div>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="flex items-center gap-2 rounded-sm px-1.5 py-1.5 text-left text-sm text-destructive outline-none transition-colors hover:bg-destructive/10 focus:bg-destructive/10 disabled:pointer-events-none disabled:opacity-50"
-                  disabled={readOnly}
-                  onClick={() => {
-                    setOpenNodeId(null);
-                    onDeleteNode(node.id);
-                  }}
-                >
-                  <Trash2Icon className="size-4" aria-hidden="true" />
-                  Delete
-                </button>
-              </div>
-            ) : null}
-          </div>,
-          target,
-          node.id,
-        );
-      })}
-    </>
-  );
-}
-
-function getWorkflowNodeActionMenuOffset<TNodeData>(
-  node: WorkflowEditorNode<TNodeData>,
-  target: HTMLElement,
-) {
-  const targetRect = target.getBoundingClientRect();
-  const builtInTrigger = target.querySelector<HTMLElement>(
-    "[data-slot='workflow-node-menu-trigger']",
-  );
-  const triggerRect = builtInTrigger?.getBoundingClientRect();
-
-  if (triggerRect && targetRect.width > 0 && triggerRect.width > 0) {
-    const scaleX = target.offsetWidth > 0 ? targetRect.width / target.offsetWidth : 1;
-    const scaleY = target.offsetHeight > 0 ? targetRect.height / target.offsetHeight : scaleX;
-
-    return {
-      x: Math.round((triggerRect.left - targetRect.left) / Math.max(scaleX, 0.001)),
-      y: Math.round((triggerRect.top - targetRect.top) / Math.max(scaleY, 0.001)),
-    };
-  }
-
-  const minimizeButton = target.querySelector<HTMLElement>("[data-slot='workflow-node-minimize']");
-  const minimizeRect = minimizeButton?.getBoundingClientRect();
-
-  if (minimizeRect && targetRect.width > 0 && minimizeRect.width > 0) {
-    const scaleX = target.offsetWidth > 0 ? targetRect.width / target.offsetWidth : 1;
-    const scaleY = target.offsetHeight > 0 ? targetRect.height / target.offsetHeight : scaleX;
-    const actionButtonWidth = 24;
-    const gap = 6;
-
-    return {
-      x: Math.round(
-        (minimizeRect.left - targetRect.left) / Math.max(scaleX, 0.001) - actionButtonWidth - gap,
-      ),
-      y: Math.round((minimizeRect.top - targetRect.top) / Math.max(scaleY, 0.001)),
-    };
-  }
-
-  const size = getWorkflowEditorRenderedNodeSize(toUiWorkflowBuilderNodes([node])[0]!);
-  return {
-    x: Math.round(size.width - 34),
-    y: 8,
-  };
 }
 
 export function WorkflowSelectionOverlay<

@@ -845,13 +845,39 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
   test("uses the visible node action menu for node deletion", async () => {
     render(<StatefulWorkbench />);
 
-    expect(screen.queryByRole("button", { name: "Open Input menu" })).toBeNull();
+    // One action surface per node: the graph-editor menu, no workflow overlay (#46).
+    expect(globalThis.document.querySelector("[data-slot='workflow-node-action-menu']")).toBeNull();
+    expect(screen.getAllByRole("button", { name: "Open Input menu" })).toHaveLength(1);
 
-    fireEvent.click(screen.getByRole("button", { name: "Input node actions" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+    fireEvent.keyDown(screen.getByRole("button", { name: "Open Input menu" }), { key: "Enter" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Delete" }));
 
     await waitFor(() => {
       expect(readStatefulDocument().nodes.map((node) => node.id)).toEqual(["transform", "output"]);
+    });
+  });
+
+  test("renames a node inline from its node menu", async () => {
+    render(<StatefulWorkbench />);
+
+    fireEvent.keyDown(screen.getByRole("button", { name: "Open Input menu" }), { key: "Enter" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Rename" }));
+
+    const renameInput = await screen.findByLabelText("Input node name");
+    // The field replaces the header title in place; no portal-positioned frame.
+    expect(renameInput.closest("[data-slot='graph-node-title']")).not.toBeNull();
+    fireEvent.keyDown(renameInput, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByLabelText("Input node name")).toBeNull());
+
+    fireEvent.keyDown(screen.getByRole("button", { name: "Open Input menu" }), { key: "Enter" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Rename" }));
+    const secondInput = await screen.findByLabelText("Input node name");
+    fireEvent.change(secondInput, { target: { value: "Source" } });
+    fireEvent.keyDown(secondInput, { key: "Enter" });
+    await waitFor(() => {
+      expect(readStatefulDocument().nodes.find((node) => node.id === "input")?.label).toBe(
+        "Source",
+      );
     });
   });
 
