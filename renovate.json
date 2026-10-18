@@ -31,5 +31,6 @@
       "groupName": "lint-format",
       "matchPackageNames": ["oxfmt", "oxlint"]
     }
-  ]
+  ],
+  "platformAutomerge": true
 }

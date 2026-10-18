@@ -1,15 +1,8 @@
 name: Source Validation
 
 on:
-  pull_request:
-    paths:
-      - ".github/workflows/source-validation.yml"
-      - "package.json"
-      - "bun.lock"
-      - "scripts/**"
-      - "src/**"
-      - "examples/**"
-  workflow_dispatch:
+  workflow_dispatch: null
+  workflow_call: null
 
 permissions:
   contents: read
