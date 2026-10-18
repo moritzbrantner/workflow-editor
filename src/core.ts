@@ -230,6 +230,13 @@ export {
   type WorkflowEditorTriggerType,
 } from "./core-triggers";
 import { normalizeWorkflowEditorTriggers } from "./core-triggers";
+  getWorkflowEditorInputDeclarations,
+  resolveWorkflowEditorInputValues,
+  validateWorkflowEditorInputValues,
+  type WorkflowEditorInputDeclaration,
+  type WorkflowEditorInputDiagnostic,
+  type WorkflowEditorInputProfile,
+} from "./core-workflow-inputs";
 export {
   diffWorkflowEditorDocuments,
   isWorkflowEditorSecretLikePath,
