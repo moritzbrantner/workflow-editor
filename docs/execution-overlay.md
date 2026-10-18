@@ -26,3 +26,23 @@ const execution: WorkflowExecutionSnapshot = {
 - **Customization.** `formatExecutionLabel(snapshot, node)` replaces the status text shown on a node. `renderExecutionDetails({ execution, node, snapshot })` adds host content, such as inspect, retry or cancel actions, to the selected node's run details in the inspector.
 
 The editor does not transport, poll or execute runs. Hosts and runners supply the snapshots (ADR 0002, Decision Atlas 5.7).
+
+## From runner events
+
+A connected host can turn Workflow Runner lifecycle events (runner #26, engine #24) into the
+overlay snapshot:
+
+```ts
+import { applyWorkflowRunnerEventToSnapshot } from "@moritzbrantner/workflow-editor/core";
+
+let execution: WorkflowExecutionSnapshot | undefined;
+runner.onEvent((event) => {
+  execution = applyWorkflowRunnerEventToSnapshot(execution, event);
+  render(<WorkflowEditor execution={execution} />);
+});
+```
+
+`createWorkflowExecutionSnapshotFromRunnerEvents(events, { mode: "historical" })` folds a stored
+event list for a past run. Snapshots record states, attempts, retries, timestamps, durations,
+failures and waiting tasks. Node outputs are summarized by port name only, so output values (and
+anything secret in them) never enter the snapshot.
