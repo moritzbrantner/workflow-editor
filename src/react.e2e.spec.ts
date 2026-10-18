@@ -1303,6 +1303,62 @@ test.describe("WorkflowWorkbench accessibility and responsive smoke", () => {
     await expect(page.getByTestId("summary-json")).toContainText("input:out->output:in");
   });
 
+  test("completes a pointer-free authoring flow with live announcements", async ({
+    page,
+    isMobile,
+  }, testInfo) => {
+    test.skip(isMobile, "Desktop keyboard flow");
+    await gotoWorkflowEditor(page, testInfo);
+    const announcer = page.locator('[data-slot="workflow-workbench-announcer"]');
+
+    await page.getByLabel("Search node palette").focus();
+    await page.keyboard.type("Decision");
+    await page
+      .getByRole("button", { name: /Decision/ })
+      .first()
+      .focus();
+    await page.keyboard.press("Enter");
+    await expectNodeCount(page, 4);
+    await expect(announcer).toHaveText("Added node Decision.");
+
+    await page.getByRole("button", { name: "Start Input Out", exact: true }).first().focus();
+    await page.keyboard.press("Enter");
+    await page.getByRole("button", { name: "Connect to Output In", exact: true }).focus();
+    await page.keyboard.press("Space");
+    await expectEdgeCount(page, 2);
+    await expect(announcer).toHaveText("Connected Input Out to Output In.");
+
+    const decision = page
+      .locator(
+        '[data-slot="workflow-builder-node"][data-node-id="decision"] [data-slot="workflow-node-select"]:visible',
+      )
+      .first();
+    await decision.focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByTestId("selection-json")).toContainText('"id":"decision"');
+
+    await page.keyboard.press("Delete");
+    await expectNodeCount(page, 3);
+    await expect(announcer).toHaveText("Removed node Decision.");
+    await expect
+      .poll(() => page.evaluate(() => document.activeElement?.getAttribute("data-slot")))
+      .toBe("workflow-builder-surface");
+
+    await pressShortcut(page, "Mod+Z");
+    await expectNodeCount(page, 4);
+    await expect(announcer).toHaveText("Added node Decision.");
+
+    await pressShortcut(page, "Mod+A");
+    await pressShortcut(page, "Mod+G");
+    await expect(announcer).toHaveText(/^Grouped 4 nodes as /);
+  });
+
+  test("passes automated accessibility checks in read-only mode", async ({ page }, testInfo) => {
+    await gotoWorkflowEditor(page, testInfo, { readonly: "1" });
+    await selectNode(page, "Input");
+    await expectNoAxeViolations(page);
+  });
+
   test("keeps keyboard shortcuts blocked in read-only mode", async ({ page }, testInfo) => {
     await gotoWorkflowEditor(page, testInfo, { readonly: "1" });
     await selectNode(page, "Input");
