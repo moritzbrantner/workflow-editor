@@ -59,10 +59,17 @@ export function isWorkflowEditorIterationNode<TNodeData>(node: WorkflowEditorNod
 /** The result contract never claims convergence for a limit-exhausted run (Decision 2.8). */
 export function workflowEditorIterationResultType(
   stateType: WorkflowEditorPortType,
+  measurements: ReadonlyArray<{ id: string; type: WorkflowEditorPortType }> = [],
 ): WorkflowEditorPortType {
   const value = workflowEditorPortTypeSource(stateType);
+  // Measurements are the last completed iteration's computed values (TECH-004); none is a metric.
+  const measured = measurements.length
+    ? `; measurements: { ${measurements
+        .map((entry) => `${entry.id}: ${workflowEditorPortTypeSource(entry.type)}`)
+        .join("; ")} }`
+    : "";
   const member = (status: string) =>
-    `{ status: "${status}"; value: ${value}; iterations: number; maxIterations: number }`;
+    `{ status: "${status}"; value: ${value}; iterations: number; maxIterations: number${measured} }`;
   return { kind: "typescript", source: `${member("converged")} | ${member("limit-exhausted")}` };
 }
 
@@ -125,7 +132,46 @@ export function updateWorkflowEditorIterationStateType<TNodeData, TEdgeData>(
   );
 }
 
-/** Keeps the generated `result` port in step with the declared state type. */
+const measurementIdPattern = /^[A-Za-z_][A-Za-z0-9_]*$/u;
+
+/** Whether a body output boundary is a named measurement rather than `next` or `converged`. */
+export function isWorkflowEditorIterationMeasurementBoundary(wrapperPortId: string) {
+  return (
+    wrapperPortId !== workflowEditorIterationNextBoundaryId &&
+    wrapperPortId !== workflowEditorIterationConvergedBoundaryId
+  );
+}
+
+/**
+ * Named, typed measurements an iteration body exposes besides `next` and `converged` (TECH-004),
+ * in id order. Each one is an ordinary body output computed by workflow nodes.
+ */
+export function workflowEditorIterationMeasurements<TNodeData>(
+  node: WorkflowEditorNode<TNodeData>,
+): Array<{ id: string; nodeId: string; portId: string; type: WorkflowEditorPortType }> {
+  const body = node.composition;
+  if (!body) return [];
+  return body.outputBoundaries
+    .filter((boundary) => isWorkflowEditorIterationMeasurementBoundary(boundary.wrapperPortId))
+    .flatMap((boundary) => {
+      const source = body.nodes
+        .find((candidate) => candidate.id === boundary.nodeId)
+        ?.outputs?.find((port) => port.id === boundary.portId);
+      return source && measurementIdPattern.test(boundary.wrapperPortId)
+        ? [
+            {
+              id: boundary.wrapperPortId,
+              nodeId: boundary.nodeId,
+              portId: boundary.portId,
+              type: source.type,
+            },
+          ]
+        : [];
+    })
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
+/** Keeps the generated `result` port in step with the declared state type and measurements. */
 export function syncWorkflowEditorIterationResultPort<TNodeData>(
   node: WorkflowEditorNode<TNodeData>,
 ): WorkflowEditorNode<TNodeData> {
@@ -133,7 +179,10 @@ export function syncWorkflowEditorIterationResultPort<TNodeData>(
   if (!isWorkflowEditorIterationNode(node) || !state) {
     return node;
   }
-  const type = workflowEditorIterationResultType(state.type);
+  const type = workflowEditorIterationResultType(
+    state.type,
+    workflowEditorIterationMeasurements(node),
+  );
   const result = node.outputs?.find((port) => port.id === workflowEditorIterationResultPortId);
   if (result && workflowEditorPortTypeSource(result.type) === workflowEditorPortTypeSource(type)) {
     return node;
@@ -269,16 +318,16 @@ export function validateWorkflowEditorIterationNode<TNodeData>(
 
   for (const boundary of body.outputBoundaries) {
     const source = bodyPort(boundary.nodeId, boundary.portId, "outputs");
-    const reserved =
-      boundary.wrapperPortId === workflowEditorIterationNextBoundaryId ||
-      boundary.wrapperPortId === workflowEditorIterationConvergedBoundaryId;
-    if (!reserved || !source) {
+    const measurement = isWorkflowEditorIterationMeasurementBoundary(boundary.wrapperPortId);
+    if (!source || (measurement && !measurementIdPattern.test(boundary.wrapperPortId))) {
       report(
         "iteration-boundary-invalid",
-        `Iteration ${node.id} body output "${boundary.wrapperPortId}" ← ${boundary.nodeId}.${boundary.portId} must be "next" or "converged" and name a body output.`,
+        `Iteration ${node.id} body output "${boundary.wrapperPortId}" ← ${boundary.nodeId}.${boundary.portId} must name a body output and be "next", "converged" or a measurement name (letters, digits, _).`,
         "composition.outputBoundaries",
         boundary.wrapperPortId,
       );
+    } else if (measurement) {
+      // A named measurement: any typed body output, reported with the result (TECH-004).
     } else if (boundary.wrapperPortId === workflowEditorIterationNextBoundaryId) {
       if (state && !resolver.isAssignable(source.type, state.type)) {
         report(
@@ -297,7 +346,7 @@ export function validateWorkflowEditorIterationNode<TNodeData>(
       );
     }
   }
-  for (const key of ["next", "converged"]) {
+  for (const key of new Set(body.outputBoundaries.map((boundary) => boundary.wrapperPortId))) {
     if (body.outputBoundaries.filter((boundary) => boundary.wrapperPortId === key).length > 1) {
       report(
         "iteration-boundary-invalid",

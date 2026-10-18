@@ -524,13 +524,64 @@ describe("iteration validation", () => {
     );
   });
 
-  test("rejects an output boundary other than next or converged", () => {
+  test("rejects an output boundary whose name is not a measurement identifier", () => {
     const node = literalIterationNode();
     node.composition!.outputBoundaries.push({
-      wrapperPortId: "extra",
+      wrapperPortId: "bad name",
       nodeId: "newton-step",
       portId: "next",
     });
+    expect(codes(api.validateWorkflowEditorIterationNode(node))).toContain(
+      "iteration-boundary-invalid",
+    );
+  });
+
+  test("accepts named measurements and compiles them with a typed result (TECH-004)", () => {
+    const node = literalIterationNode();
+    node.composition!.outputBoundaries.push({
+      wrapperPortId: "estimate",
+      nodeId: "newton-step",
+      portId: "next",
+    });
+    expect(codes(api.validateWorkflowEditorIterationNode(node))).toEqual([]);
+    expect(coreApi.workflowEditorIterationMeasurements(node)).toEqual([
+      { id: "estimate", nodeId: "newton-step", portId: "next", type: { kind: "number" } },
+    ]);
+    const synced = coreApi.syncWorkflowEditorIterationResultPort(node);
+    expect(synced.outputs?.find((port) => port.id === "result")?.type).toEqual({
+      kind: "typescript",
+      source:
+        '{ status: "converged"; value: number; iterations: number; maxIterations: number; measurements: { estimate: number } } | { status: "limit-exhausted"; value: number; iterations: number; maxIterations: number; measurements: { estimate: number } }',
+    });
+
+    const compiled = compileWorkflowEditorDocument(newtonDocument(synced));
+    const iteration = compiled.nodes.find((candidate) => candidate.id === "refine") as {
+      iteration: { body: { outputs: { measurements?: unknown } } };
+    };
+    expect(iteration.iteration.body.outputs.measurements).toEqual([
+      { id: "estimate", nodeId: "newton-step", portId: "next", type: { kind: "number" } },
+    ]);
+    expect(compiled).toEqual(
+      JSON.parse(
+        readFileSync(
+          resolve(process.cwd(), "fixtures/compiled-v2-bounded-iteration-measurements.json"),
+          "utf8",
+        ),
+      ),
+    );
+    // Without measurements the compiled v2 contract is unchanged.
+    const plain = compileWorkflowEditorDocument(newtonDocument()).nodes.find(
+      (candidate) => candidate.id === "refine",
+    ) as { iteration: { body: { outputs: object } } };
+    expect(plain.iteration.body.outputs).not.toHaveProperty("measurements");
+  });
+
+  test("rejects duplicate measurement names", () => {
+    const node = literalIterationNode();
+    node.composition!.outputBoundaries.push(
+      { wrapperPortId: "estimate", nodeId: "newton-step", portId: "next" },
+      { wrapperPortId: "estimate", nodeId: "newton-step", portId: "next" },
+    );
     expect(codes(api.validateWorkflowEditorIterationNode(node))).toContain(
       "iteration-boundary-invalid",
     );
