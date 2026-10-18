@@ -38,6 +38,7 @@ import {
   type InspectorFieldValue,
 } from "./inspector-panel";
 import { WorkflowTriggersPanel } from "./triggers-panel";
+import { WorkflowInputsPanel } from "./inputs-panel";
 import { WorkflowPortPayloadEditor, withWorkflowEditorPortPayload } from "./port-payload-editor";
 import {
   applyInspectorFieldDrafts,
@@ -589,6 +590,13 @@ export function DefaultWorkflowInspector<
             ...(triggers.length ? { triggers } : { triggers: undefined }),
           })
         }
+      />
+      <WorkflowInputsPanel
+        key={`${context.document.nodes.length}:${(context.inputProfiles?.profiles ?? []).map((profile) => profile.id).join(",")}`}
+        document={context.document as WorkflowEditorDocument<unknown, unknown>}
+        typeDefinitions={context.typeDefinitions}
+        readOnly={context.readOnly}
+        inputProfiles={context.inputProfiles}
       />
     </div>
   );

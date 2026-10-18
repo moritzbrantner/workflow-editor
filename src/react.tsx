@@ -151,6 +151,7 @@ import { formatShortcutLabel } from "./shortcut-label";
 import type { WorkflowEditorInspectorFieldDefinition } from "./core-inspector-fields";
 import type { WorkflowWorkbenchInspectorFieldRenderers } from "./react/inspector-field-sections";
 import type { WorkflowWorkbenchTriggerActivation } from "./react/triggers-panel";
+import type { WorkflowWorkbenchInputProfiles } from "./react/inputs-panel";
 import {
   formatWorkflowExecutionDuration,
   getWorkflowExecutionEdgeStatus,
@@ -200,6 +201,7 @@ export {
   WorkflowEditorCurrentNodesPanel,
 } from "./react/workbench-panels";
 export type { WorkflowWorkbenchTriggerActivation } from "./react/triggers-panel";
+export type { WorkflowWorkbenchInputProfiles } from "./react/inputs-panel";
 export type {
   WorkflowWorkbenchInspectorFieldRenderer,
   WorkflowWorkbenchInspectorFieldRendererProps,
@@ -274,6 +276,9 @@ export type WorkflowWorkbenchInspectorContext<
   updateSelectedNodeWorkflowReference: (documentId: string | null) => void;
   /** Host connection that can activate the document's triggers (#91). */
   triggerActivation?: WorkflowWorkbenchTriggerActivation;
+  /** Named input profiles for the document (#115). */
+  inputProfiles?: WorkflowWorkbenchInputProfiles;
+  typeDefinitions?: readonly WorkflowEditorTypeDefinition[];
   /** Schema-driven data fields for a node, from the template whose `kind` matches the node. */
   inspectorFields?: (
     node: WorkflowEditorNode<TNodeData>,
@@ -424,6 +429,8 @@ export type WorkflowWorkbenchProps<
   nodeTemplates?: ReadonlyArray<WorkflowWorkbenchPaletteItem<TTemplateData>>;
   /** Host connection that registers and activates the document's triggers (#91). */
   triggerActivation?: WorkflowWorkbenchTriggerActivation;
+  /** Named input profiles and an optional run seam for the document's inputs (#115). */
+  inputProfiles?: WorkflowWorkbenchInputProfiles;
   /** Host renderers that replace built-in inspector field kinds or individual fields. */
   inspectorFieldRenderers?: WorkflowWorkbenchInspectorFieldRenderers;
   typeDefinitions?: readonly WorkflowEditorTypeDefinition[];
@@ -614,6 +621,7 @@ export function WorkflowWorkbench<
   >,
   inspectorFieldRenderers,
   triggerActivation,
+  inputProfiles,
   typeDefinitions,
   documentReferences,
   portTypeColors,
@@ -1370,6 +1378,8 @@ export function WorkflowWorkbench<
       inspectorFieldsForNode(nodeTemplates, node),
     ...(inspectorFieldRenderers ? { inspectorFieldRenderers } : {}),
     ...(triggerActivation ? { triggerActivation } : {}),
+    ...(inputProfiles ? { inputProfiles } : {}),
+    ...(typeDefinitions ? { typeDefinitions } : {}),
   } satisfies WorkflowWorkbenchInspectorContext<TNodeData, TEdgeData>;
 
   const createTemplateNode = (
@@ -3424,6 +3434,7 @@ export function useWorkflowWorkbenchController<
   >,
   inspectorFieldRenderers,
   triggerActivation,
+  inputProfiles,
   typeDefinitions,
   documentReferences,
   portTypeColors,
@@ -4056,6 +4067,8 @@ export function useWorkflowWorkbenchController<
       inspectorFieldsForNode(nodeTemplates, node),
     ...(inspectorFieldRenderers ? { inspectorFieldRenderers } : {}),
     ...(triggerActivation ? { triggerActivation } : {}),
+    ...(inputProfiles ? { inputProfiles } : {}),
+    ...(typeDefinitions ? { typeDefinitions } : {}),
   } satisfies WorkflowWorkbenchInspectorContext<TNodeData, TEdgeData>;
 
   const graphCommands = [

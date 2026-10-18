@@ -116,6 +116,7 @@ import {
   validateWorkflowEditorDocument,
   workflowEditorValidationPolicies,
   type WorkflowEditorDocument,
+  type WorkflowEditorInputProfile,
   type WorkflowEditorDocumentDiagnostic,
   type WorkflowEditorNodeTemplate,
   type WorkflowEditorNodeTemplateRegistry,
@@ -394,6 +395,14 @@ export type WorkflowEditorProps<
     TEdgeData,
     TTemplateData
   >["triggerActivation"];
+  /**
+   * Connected host's Run/Test seam (#115): receives validated input values (defaults filled in)
+   * and the selected profile. Without it the Inputs panel only authors profiles.
+   */
+  onRunWorkflow?: (
+    values: Record<string, unknown>,
+    profile: WorkflowEditorInputProfile | undefined,
+  ) => void;
   inspectorFieldRenderers?: WorkflowWorkbenchProps<
     TNodeData,
     TEdgeData,
@@ -698,6 +707,7 @@ export function WorkflowEditor<
   execution,
   inspectorFieldRenderers,
   triggerActivation,
+  onRunWorkflow,
   formatExecutionLabel,
   renderExecutionDetails,
   renderToolbarActions,
@@ -1833,6 +1843,21 @@ export function WorkflowEditor<
           execution={execution}
           inspectorFieldRenderers={inspectorFieldRenderers}
           triggerActivation={triggerActivation}
+          inputProfiles={
+            activeEntry
+              ? {
+                  profiles: activeEntry.inputProfiles ?? [],
+                  onChange: (profiles) =>
+                    updateActiveEntry((entry) => ({
+                      ...entry,
+                      ...(profiles.length
+                        ? { inputProfiles: profiles }
+                        : { inputProfiles: undefined }),
+                    })),
+                  ...(onRunWorkflow ? { onRun: onRunWorkflow } : {}),
+                }
+              : undefined
+          }
           formatExecutionLabel={formatExecutionLabel}
           renderExecutionDetails={renderExecutionDetails}
           onDocumentChange={updateDocument}

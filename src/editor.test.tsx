@@ -1,5 +1,6 @@
 import { NativeWorkflowTypes } from "./editor/native-types";
 import { buildWorkflowEditorBundle, stringifyWorkflowEditorBundle } from "./bundle";
+import { parameterDocument } from "./core-workflow-inputs.unit.test";
 import {
   connectWorkflowEditorNodes,
   addWorkflowEditorObjectDecompositionOutputToNode,
@@ -323,6 +324,40 @@ describe("@moritzbrantner/workflow-editor editor shell", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
     expect(screen.getByTestId("save-state").textContent).toBe("Saved");
+  });
+
+  test("fills typed inputs, saves named profiles and runs with validated values", async () => {
+    const saveLibrary = vi.fn(async (_library: WorkflowEditorLibrary) => {});
+    const onRunWorkflow = vi.fn();
+    render(
+      <WorkflowEditor
+        initialLibrary={createWorkflowEditorLibrary({
+          documents: [
+            createWorkflowEditorEntry({ id: "w", name: "W", document: parameterDocument }),
+          ],
+        })}
+        storage={{ loadLibrary: vi.fn(async () => ({ status: "empty" as const })), saveLibrary }}
+        onRunWorkflow={onRunWorkflow}
+      />,
+    );
+    // Let the stored library load first; edits before that would be replaced by it.
+    await waitFor(() => expect(saveLibrary).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: "Expand info panel" }));
+    const run = screen.getByRole("button", { name: "Run with these inputs" }) as HTMLButtonElement;
+    expect(run.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText("Input Region"), { target: { value: '"eu"' } });
+    fireEvent.change(screen.getByLabelText("Profile name"), { target: { value: "EU nightly" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save profile" }));
+    await waitFor(() =>
+      expect(saveLibrary.mock.calls.at(-1)?.[0].documents[0]?.inputProfiles).toEqual([
+        expect.objectContaining({ name: "EU nightly", values: { region: "eu" } }),
+      ]),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Run with these inputs" }));
+    expect(onRunWorkflow).toHaveBeenCalledWith(
+      { region: "eu", limit: 100 },
+      expect.objectContaining({ name: "EU nightly" }),
+    );
   });
 
   test("explains a rejected import until it is dismissed", async () => {

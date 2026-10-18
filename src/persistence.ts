@@ -939,7 +939,13 @@ function normalizeWorkflowEditorInputProfiles(value: unknown): WorkflowEditorInp
       return [];
     }
     seen.add(profile.id);
-    return [{ id: profile.id, name: profile.name.trim() || "Untitled profile", values: { ...profile.values } }];
+    return [
+      {
+        id: profile.id,
+        name: profile.name.trim() || "Untitled profile",
+        values: { ...profile.values },
+      },
+    ];
   });
 }
 

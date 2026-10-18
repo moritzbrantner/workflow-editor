@@ -63,7 +63,10 @@ export function validateWorkflowEditorInputValues(
   options: { typeDefinitions?: readonly WorkflowEditorTypeDefinition[] } = {},
 ): WorkflowEditorInputDiagnostic[] {
   const declarations = getWorkflowEditorInputDeclarations(document);
-  const resolver = createWorkflowEditorTypeResolver(options.typeDefinitions, document.typeDeclarations);
+  const resolver = createWorkflowEditorTypeResolver(
+    options.typeDefinitions,
+    document.typeDeclarations,
+  );
   const diagnostics: WorkflowEditorInputDiagnostic[] = [];
   const seen = new Set<string>();
   for (const declaration of declarations) {
