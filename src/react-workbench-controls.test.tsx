@@ -197,11 +197,11 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     expect(readStatefulDocument().edges).toHaveLength(0);
   });
 
-  test("deletes a workflow node from its node action menu", () => {
+  test("deletes a workflow node from its node action menu", async () => {
     render(<StatefulWorkbench />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Input node actions" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+    fireEvent.keyDown(screen.getByRole("button", { name: "Open Input menu" }), { key: "Enter" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Delete" }));
 
     expect(readStatefulDocument().nodes.map((node) => node.id)).toEqual(["transform", "output"]);
     expect(readStatefulDocument().edges).toHaveLength(0);

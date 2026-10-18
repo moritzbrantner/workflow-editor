@@ -4,6 +4,7 @@
 
 ### Minor Changes
 
+- Node actions and rename use graph-editor's node chrome (#46). Each node has one action menu, the built-in "Open <node> menu" trigger, with Rename and Delete. Rename edits the label inline in the node header through graph-editor's title slot. The workflow-local action-menu overlay ("<node> node actions"), the portal-positioned rename field and the CSS that hid the built-in trigger are removed. graph-editor is pinned to `69341e3`, so idle nodes no longer draw a status dot (graph-editor#67).
 - Dynamic ports are edited on the node (#45, Decision Atlas 5.6), through graph-editor's port-content and body slots:
   - Object Constructor property names are edited beside their input ports.
   - Array Constructor item rows can be removed.
