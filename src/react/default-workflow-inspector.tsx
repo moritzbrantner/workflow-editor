@@ -133,6 +133,7 @@ export function DefaultWorkflowInspector<
             x: node.x,
             y: node.y,
             status: node.status ?? "idle",
+            persistOnCompletion: node.persistence === "on-completion",
             workflowDocumentId: referencedDocumentId,
             arrayExpression: arrayConstructorExpression,
             objectExpression: objectConstructorExpression,
@@ -156,6 +157,17 @@ export function DefaultWorkflowInspector<
                 { id: "x", label: "X", type: "number", step: 10 },
                 { id: "y", label: "Y", type: "number", step: 10 },
                 { id: "status", label: "Status", type: "text" },
+              ],
+            },
+            {
+              id: "execution",
+              title: "Execution",
+              fields: [
+                {
+                  id: "persistOnCompletion",
+                  label: "Persist result on completion",
+                  type: "boolean",
+                },
               ],
             },
             ...dataFieldSections.sections,
@@ -329,6 +341,7 @@ export function DefaultWorkflowInspector<
               x: toNumber(values.x, node.x),
               y: toNumber(values.y, node.y),
               status: String(values.status ?? "") || undefined,
+              persistence: values.persistOnCompletion === true ? "on-completion" : undefined,
             };
 
             if (context.documentReferences) {

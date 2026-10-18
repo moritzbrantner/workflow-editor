@@ -16,6 +16,15 @@ Version 1 rejects nested workflow references and embedded compositions instead o
 
 Compiled ports carry their declared `cardinality` and delivery `payload` (see [port payloads](port-payloads.md)). Ports without them omit the fields, so existing version 1 consumers and fixtures are unaffected.
 
+## Per-node result persistence (TECH-011)
+
+A node may set `persistence: "on-completion"` (inspector: **Execution → Persist result on
+completion**). The compiled node then carries `persistence: "on-completion"`, which asks the
+runner to hand that node's result to host persistence as soon as the node completes. Without the
+setting, the compiled node has no `persistence` field and results persist with the terminal run
+result, so existing compiled-v1 output is unchanged. The setting applies to iteration nodes and
+iteration-body nodes in the same way. The editor stores no results.
+
 ## Canonical form, fingerprint, stages and source map
 
 `createCompiledWorkflowReport(compiled)` derives host-facing metadata **beside** the compiled artifact. The artifact itself is unchanged, so version 1/2 consumers and their conformance fixtures keep their exact bytes.

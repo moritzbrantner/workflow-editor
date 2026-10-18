@@ -55,6 +55,7 @@ import type {
   WorkflowEditorGroup,
   WorkflowEditorNode,
   WorkflowEditorNodeComposition,
+  WorkflowEditorNodePersistence,
   WorkflowEditorObjectConstructorSchema,
   WorkflowEditorObjectConstructorProperty,
   WorkflowEditorObjectConstructorExpressionDiagnostic,
@@ -153,6 +154,7 @@ export type {
   WorkflowEditorGroup,
   WorkflowEditorNode,
   WorkflowEditorNodeComposition,
+  WorkflowEditorNodePersistence,
   WorkflowEditorNodeTemplate,
   WorkflowEditorObjectConstructorExpressionEntry,
   WorkflowEditorObjectConstructorExpressionDiagnostic,
@@ -4360,6 +4362,7 @@ function normalizeWorkflowEditorNode<TNodeData = Record<string, unknown>>(
     inputs: normalizePorts(node.inputs),
     outputs: normalizePorts(node.outputs),
     workflowRef: normalizeWorkflowEditorWorkflowReference(node.workflowRef),
+    persistence: node.persistence === "on-completion" ? "on-completion" : undefined,
     composition: node.composition
       ? normalizeWorkflowEditorNodeComposition(
           node.composition,

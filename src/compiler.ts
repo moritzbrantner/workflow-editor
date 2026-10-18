@@ -46,6 +46,8 @@ export type CompiledWorkflowNode<TData extends Record<string, unknown> = Record<
     inputs?: CompiledWorkflowPort[];
     outputs?: CompiledWorkflowPort[];
     data?: TData;
+    /** Present only when the authored node opts into persisting its result on completion. */
+    persistence?: "on-completion";
   };
 
 export type CompiledWorkflowEdge = Pick<
@@ -462,6 +464,7 @@ function compileScope(document: WorkflowEditorDocument, scope: CompileScope) {
       ...(node.inputs?.length ? { inputs: node.inputs.map(compilePort) } : {}),
       ...(node.outputs?.length ? { outputs: node.outputs.map(compilePort) } : {}),
       ...(node.data === undefined ? {} : { data: node.data }),
+      ...compiledPersistence(node),
     };
   });
 
@@ -476,6 +479,10 @@ function compileScope(document: WorkflowEditorDocument, scope: CompileScope) {
     }));
 
   return { nodes, edges, order };
+}
+
+function compiledPersistence(node: WorkflowEditorNode): { persistence?: "on-completion" } {
+  return node.persistence === "on-completion" ? { persistence: "on-completion" } : {};
 }
 
 function bodyDocument(node: WorkflowEditorNode, scope: CompileScope): WorkflowEditorDocument {
@@ -517,6 +524,7 @@ function compileIterationNode(
     ...(node.inputs?.length ? { inputs: node.inputs.map(compilePort) } : {}),
     ...(node.outputs?.length ? { outputs: node.outputs.map(compilePort) } : {}),
     ...(Object.keys(data).length ? { data } : {}),
+    ...compiledPersistence(node),
     iteration: {
       maxIterations: workflowEditorIterationBound(node) as number,
       state: { inputPortId: "state", type: state.type },
