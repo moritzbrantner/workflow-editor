@@ -220,6 +220,17 @@ export {
   type WorkflowEditorNodeTemplateRegistryEntry,
 } from "./core-template-registry";
 export {
+  isWorkflowEditorCronExpression,
+  normalizeWorkflowEditorTriggers,
+  toWorkflowEditorEngineTriggerInputs,
+  validateWorkflowEditorTriggers,
+  type WorkflowEditorEngineTriggerInput,
+  type WorkflowEditorTrigger,
+  type WorkflowEditorTriggerDiagnostic,
+  type WorkflowEditorTriggerType,
+} from "./core-triggers";
+import { normalizeWorkflowEditorTriggers } from "./core-triggers";
+export {
   diffWorkflowEditorDocuments,
   isWorkflowEditorSecretLikePath,
   workflowEditorDiffRedacted,
@@ -507,6 +518,9 @@ function normalizeWorkflowEditorDocumentContent<
       ...(document.typeDeclarations === undefined
         ? {}
         : { typeDeclarations: document.typeDeclarations }),
+      ...(normalizeWorkflowEditorTriggers(document.triggers)?.length
+        ? { triggers: normalizeWorkflowEditorTriggers(document.triggers) }
+        : {}),
       nodes,
       edges,
       ...(groups.length > 0 ? { groups } : {}),

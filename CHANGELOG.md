@@ -4,6 +4,10 @@
 
 ### Minor Changes
 
+- Workflow triggers (#91, Decision Atlas 5.11): documents declare manual, cron-schedule and webhook triggers (`document.triggers`), validated by `validateWorkflowEditorTriggers`.
+  - With nothing selected, the info panel opens on document settings with a **Triggers** panel (owner decision 2026-10-18).
+  - A host passes `triggerActivation` to register and activate the triggers; without one, Pages shows "Activation unavailable".
+  - `toWorkflowEditorEngineTriggerInputs` produces workflow-engine trigger registrations.
 - Iteration measurements (TECH-004, #96): iteration bodies can expose named, typed measurement outputs besides `next` and `converged`.
   - They compile to `iteration.body.outputs.measurements` and appear as `measurements` in the typed `result`.
   - Bodies without measurements compile unchanged.

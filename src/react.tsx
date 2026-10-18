@@ -150,6 +150,7 @@ import {
 import { formatShortcutLabel } from "./shortcut-label";
 import type { WorkflowEditorInspectorFieldDefinition } from "./core-inspector-fields";
 import type { WorkflowWorkbenchInspectorFieldRenderers } from "./react/inspector-field-sections";
+import type { WorkflowWorkbenchTriggerActivation } from "./react/triggers-panel";
 import {
   formatWorkflowExecutionDuration,
   getWorkflowExecutionEdgeStatus,
@@ -198,6 +199,7 @@ export {
   WorkflowEditorCurrentNodeTypesPanel,
   WorkflowEditorCurrentNodesPanel,
 } from "./react/workbench-panels";
+export type { WorkflowWorkbenchTriggerActivation } from "./react/triggers-panel";
 export type {
   WorkflowWorkbenchInspectorFieldRenderer,
   WorkflowWorkbenchInspectorFieldRendererProps,
@@ -270,6 +272,8 @@ export type WorkflowWorkbenchInspectorContext<
   updateSelectedNode: (patch: Partial<WorkflowEditorNode<TNodeData>>) => void;
   updateSelectedEdge: (patch: Partial<WorkflowEditorEdge<TEdgeData>>) => void;
   updateSelectedNodeWorkflowReference: (documentId: string | null) => void;
+  /** Host connection that can activate the document's triggers (#91). */
+  triggerActivation?: WorkflowWorkbenchTriggerActivation;
   /** Schema-driven data fields for a node, from the template whose `kind` matches the node. */
   inspectorFields?: (
     node: WorkflowEditorNode<TNodeData>,
@@ -418,6 +422,8 @@ export type WorkflowWorkbenchProps<
   selectedGroupIds?: readonly string[] | null;
   readOnly?: boolean;
   nodeTemplates?: ReadonlyArray<WorkflowWorkbenchPaletteItem<TTemplateData>>;
+  /** Host connection that registers and activates the document's triggers (#91). */
+  triggerActivation?: WorkflowWorkbenchTriggerActivation;
   /** Host renderers that replace built-in inspector field kinds or individual fields. */
   inspectorFieldRenderers?: WorkflowWorkbenchInspectorFieldRenderers;
   typeDefinitions?: readonly WorkflowEditorTypeDefinition[];
@@ -607,6 +613,7 @@ export function WorkflowWorkbench<
     WorkflowWorkbenchPaletteItem<TTemplateData>
   >,
   inspectorFieldRenderers,
+  triggerActivation,
   typeDefinitions,
   documentReferences,
   portTypeColors,
@@ -815,7 +822,10 @@ export function WorkflowWorkbench<
     const group = document.groups?.find((candidate) => candidate.id === id);
     return group ? [group] : [];
   });
-  const inspectorCollapsed = effectiveInspectorMinimized || (!selectedNode && !selectedEdge);
+  // With nothing selected the panel stays collapsed until the user opens document settings (#91).
+  const [documentSettingsOpen, setDocumentSettingsOpen] = useState(false);
+  const nothingSelected = !selectedNode && !selectedEdge;
+  const inspectorCollapsed = nothingSelected ? !documentSettingsOpen : effectiveInspectorMinimized;
   const selectedNodes = selection.nodeIds.flatMap((id) => {
     const node = documentContext.nodeById.get(id);
     return node ? [node] : [];
@@ -1359,6 +1369,7 @@ export function WorkflowWorkbench<
     inspectorFields: (node: WorkflowEditorNode<TNodeData>) =>
       inspectorFieldsForNode(nodeTemplates, node),
     ...(inspectorFieldRenderers ? { inspectorFieldRenderers } : {}),
+    ...(triggerActivation ? { triggerActivation } : {}),
   } satisfies WorkflowWorkbenchInspectorContext<TNodeData, TEdgeData>;
 
   const createTemplateNode = (
@@ -3341,9 +3352,12 @@ export function WorkflowWorkbench<
                       size="icon-sm"
                       variant="ghost"
                       aria-label={inspectorCollapsed ? "Expand info panel" : "Minimize info panel"}
-                      aria-pressed={effectiveInspectorMinimized}
-                      disabled={!selectedNode && !selectedEdge}
-                      onClick={() => setInspectorMinimizedState(!effectiveInspectorMinimized)}
+                      aria-pressed={inspectorCollapsed}
+                      onClick={() =>
+                        nothingSelected
+                          ? setDocumentSettingsOpen(!documentSettingsOpen)
+                          : setInspectorMinimizedState(!effectiveInspectorMinimized)
+                      }
                     >
                       {inspectorCollapsed ? (
                         <Maximize2Icon className="size-3.5" aria-hidden="true" />
@@ -3409,6 +3423,7 @@ export function useWorkflowWorkbenchController<
     WorkflowWorkbenchPaletteItem<TTemplateData>
   >,
   inspectorFieldRenderers,
+  triggerActivation,
   typeDefinitions,
   documentReferences,
   portTypeColors,
@@ -4040,6 +4055,7 @@ export function useWorkflowWorkbenchController<
     inspectorFields: (node: WorkflowEditorNode<TNodeData>) =>
       inspectorFieldsForNode(nodeTemplates, node),
     ...(inspectorFieldRenderers ? { inspectorFieldRenderers } : {}),
+    ...(triggerActivation ? { triggerActivation } : {}),
   } satisfies WorkflowWorkbenchInspectorContext<TNodeData, TEdgeData>;
 
   const graphCommands = [

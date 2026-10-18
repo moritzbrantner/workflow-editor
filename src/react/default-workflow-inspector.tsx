@@ -37,6 +37,7 @@ import {
   type InspectorFieldDefinition,
   type InspectorFieldValue,
 } from "./inspector-panel";
+import { WorkflowTriggersPanel } from "./triggers-panel";
 import { WorkflowPortPayloadEditor, withWorkflowEditorPortPayload } from "./port-payload-editor";
 import {
   applyInspectorFieldDrafts,
@@ -573,8 +574,22 @@ export function DefaultWorkflowInspector<
   }
 
   return (
-    <div className="p-4 text-sm text-muted-foreground">
-      Select a workflow node or edge to inspect its configuration.
+    <div className="grid">
+      <div className="p-4 pb-0 text-sm text-muted-foreground">
+        Select a workflow node or edge to inspect its configuration.
+      </div>
+      <WorkflowTriggersPanel
+        key={JSON.stringify(context.document.triggers ?? [])}
+        triggers={context.document.triggers}
+        readOnly={context.readOnly || !context.updateDocument}
+        activation={context.triggerActivation}
+        onApply={(triggers) =>
+          context.updateDocument?.({
+            ...context.document,
+            ...(triggers.length ? { triggers } : { triggers: undefined }),
+          })
+        }
+      />
     </div>
   );
 }
