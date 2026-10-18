@@ -174,12 +174,40 @@ describe("compileWorkflowEditorDocument", () => {
   it("reports cyclic documents as invalid compiler DAGs", () => {
     const document: WorkflowEditorDocument = {
       nodes: [
-        { id: "a", label: "A", kind: "noop", x: 0, y: 0 },
-        { id: "b", label: "B", kind: "noop", x: 0, y: 0 },
+        {
+          id: "a",
+          label: "A",
+          kind: "noop",
+          x: 0,
+          y: 0,
+          inputs: [{ id: "in", label: "In", type: { kind: "any" } }],
+          outputs: [{ id: "out", label: "Out", type: { kind: "any" } }],
+        },
+        {
+          id: "b",
+          label: "B",
+          kind: "noop",
+          x: 0,
+          y: 0,
+          inputs: [{ id: "in", label: "In", type: { kind: "any" } }],
+          outputs: [{ id: "out", label: "Out", type: { kind: "any" } }],
+        },
       ],
       edges: [
-        { id: "a-b", sourceNodeId: "a", targetNodeId: "b" },
-        { id: "b-a", sourceNodeId: "b", targetNodeId: "a" },
+        {
+          id: "a-b",
+          sourceNodeId: "a",
+          sourcePortId: "out",
+          targetNodeId: "b",
+          targetPortId: "in",
+        },
+        {
+          id: "b-a",
+          sourceNodeId: "b",
+          sourcePortId: "out",
+          targetNodeId: "a",
+          targetPortId: "in",
+        },
       ],
     };
 

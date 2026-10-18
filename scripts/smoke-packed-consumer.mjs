@@ -1,10 +1,14 @@
-import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 
 const rootDir = path.resolve(fileURLToPath(new URL("../", import.meta.url)));
+// The consumer installs the same graph-editor commit pin and ui range as this package.
+const rootDependencies = JSON.parse(
+  await readFile(path.join(rootDir, "package.json"), "utf8"),
+).dependencies;
 const tempDir = await mkdtemp(path.join(tmpdir(), "workflow-editor-consumer-"));
 const keepTemp = process.env.WORKFLOW_EDITOR_KEEP_SMOKE_TEMP === "1";
 const consumerDir = path.join(tempDir, "consumer");
@@ -33,8 +37,8 @@ try {
         dependencies: {
           "@tailwindcss/vite": "^4.3.0",
           "@vitejs/plugin-react": "latest",
-          "@moritzbrantner/graph-editor": "^0.1.0",
-          "@moritzbrantner/ui": "^0.8.0",
+          "@moritzbrantner/graph-editor": rootDependencies["@moritzbrantner/graph-editor"],
+          "@moritzbrantner/ui": rootDependencies["@moritzbrantner/ui"],
           "@moritzbrantner/workflow-editor": `file:${tarballPath}`,
           "@types/react": "^19.2.2",
           "@types/react-dom": "^19.2.2",
@@ -44,6 +48,7 @@ try {
           vite: "^8.0.14",
         },
         devDependencies: {},
+        trustedDependencies: ["@moritzbrantner/graph-editor"],
       },
       null,
       2,

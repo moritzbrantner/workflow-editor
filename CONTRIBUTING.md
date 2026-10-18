@@ -8,8 +8,10 @@ Use Bun `1.3.14`.
 bun install --frozen-lockfile
 ```
 
-Local development may resolve sibling package source through Vite/Vitest aliases, but package
-dependencies must use installable semver ranges.
+Local development may resolve sibling package source through Vite/Vitest aliases. Owner packages
+without a registry release, such as `@moritzbrantner/graph-editor`, are commit-pinned git
+dependencies (`git+https://github.com/moritzbrantner/<repo>.git#<sha>`) listed in
+`trustedDependencies`; other dependencies use installable semver ranges.
 
 ## Common Commands
 
