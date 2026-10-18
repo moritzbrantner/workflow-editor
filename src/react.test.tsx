@@ -1135,6 +1135,43 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     expect(screen.queryByLabelText("Schema")).toBeNull();
   });
 
+  test("edits dynamic ports directly on the node (#45)", () => {
+    const handleDocumentChange = vi.fn();
+    const objectTemplate = workflowEditorJsonNodeTemplates.find(
+      (template) => template.id === "json-object",
+    )!;
+    let current = normalizeWorkflowEditorDocument<Record<string, unknown>>({
+      nodes: [{ ...objectTemplate, id: "profile", x: 0, y: 0 }],
+      edges: [],
+    }).document;
+    const view = render(
+      <WorkflowWorkbench document={current} onDocumentChange={handleDocumentChange} />,
+    );
+    const rerender = () => {
+      current = handleDocumentChange.mock.calls.at(-1)?.[0] as typeof current;
+      view.rerender(
+        <WorkflowWorkbench document={current} onDocumentChange={handleDocumentChange} />,
+      );
+    };
+
+    fireEvent.click(screen.getByRole("button", { name: "Add property to Object" }));
+    rerender();
+    const properties = () =>
+      getWorkflowEditorObjectConstructorInputs(findWorkflowEditorNode(current, "profile")!);
+    expect(properties()).toHaveLength(1);
+    const first = properties()[0]!;
+
+    const nameInput = screen.getByLabelText(`Object property ${first.label} name`);
+    fireEvent.change(nameInput, { target: { value: "email" } });
+    fireEvent.keyDown(nameInput, { key: "Enter" });
+    rerender();
+    expect(properties().map((input) => [input.id, input.label])).toEqual([[first.id, "email"]]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove Object property email" }));
+    rerender();
+    expect(properties()).toEqual([]);
+  });
+
   test("edits object constructor expressions live from rendered workflow nodes", () => {
     const handleDocumentChange = vi.fn();
     const objectTemplate = workflowEditorJsonNodeTemplates.find(

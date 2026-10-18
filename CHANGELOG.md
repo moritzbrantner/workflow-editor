@@ -4,6 +4,15 @@
 
 ### Minor Changes
 
+- Dynamic ports are edited on the node (#45, Decision Atlas 5.6), through graph-editor's port-content and body slots:
+  - Object Constructor property names are edited beside their input ports.
+  - Array Constructor item rows can be removed.
+  - Object Decomposition output names are edited beside their outputs.
+  - Each family has a compact **+ Add …** action in the node body.
+  - The object expression editor moved from a portal overlay into the node body.
+
+  All edits use the workflow-core mutation helpers, so port ids, connections and undo stay authoritative. graph-editor is pinned to `f0e70f8`.
+
 - Typed workflow inputs and named input profiles (#115, Decision Atlas 5.12):
   - A document's inputs are its Start node output ports: name, TypeScript type, required state, and default via `optional` / `defaultValue`. This is the same interface Workflow References use.
   - `getWorkflowEditorInputDeclarations`, `validateWorkflowEditorInputValues` (TypeScript checker) and `resolveWorkflowEditorInputValues` are exported.
