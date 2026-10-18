@@ -28,6 +28,7 @@
 
 ### Patch Changes
 
+- The save badge no longer flips from "Save error" back to "Saved" when a save that was already in flight finishes after a rejected import (#87). The import error stays on the badge until it is dismissed or replaced, and dismissing it shows the last save outcome again.
 - Accessibility (#18): the compact document menu is now a labelled popover instead of an ARIA menu holding form controls, the workflow types panel has a heading, and the Pages example has a page heading. When a focused workbench control is removed, hidden or disabled without a document edit (for example on drill-in to a nested workflow), focus returns to the canvas instead of the page body.
 - Explain rejected workflow imports: the editor shows the restore error (for example `Unsupported workflow port type at …`) in a dismissible alert beside the save state, and exposes it as `controller.importError` / `actions.dismissImportError` and the `WorkflowEditorImportErrorAlert` chrome component. Rejected files still never reach the library.
 - Build the package in a `prepare` script so consumers can install it as a commit-pinned git dependency (`git+https://github.com/moritzbrantner/workflow-editor.git#<sha>` listed in `trustedDependencies`).

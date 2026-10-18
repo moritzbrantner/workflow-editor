@@ -736,6 +736,11 @@ export function WorkflowEditor<
   );
   const [saveState, setSaveState] = useState<SaveState>("loading");
   const [importError, setImportError] = useState<string | null>(null);
+  // A rejected import keeps the badge on "Save error" until it is dismissed or replaced, even when
+  // a save that was already in flight completes afterwards (#87).
+  const importErrorRef = useRef<string | null>(null);
+  importErrorRef.current = importError;
+  const lastSaveOutcomeRef = useRef<"saved" | "error">("saved");
   const [selection, setSelection] = useState<WorkflowEditorSelectionState>(
     emptyWorkflowEditorSelection,
   );
@@ -850,11 +855,13 @@ export function WorkflowEditor<
     saveWorkflowEditorLibrary(storageAdapter, library)
       .then(() => {
         if (!canceled) {
-          setSaveState("saved");
+          lastSaveOutcomeRef.current = "saved";
+          setSaveState(importErrorRef.current ? "error" : "saved");
         }
       })
       .catch((error: unknown) => {
         if (!canceled) {
+          lastSaveOutcomeRef.current = "error";
           setSaveState("error");
           onError?.(error instanceof Error ? error : new Error("Failed to save workflow library"));
         }
@@ -1331,7 +1338,11 @@ export function WorkflowEditor<
       createDocument,
       createWorkflowReference,
       deleteDocument,
-      dismissImportError: () => setImportError(null),
+      dismissImportError: () => {
+        setImportError(null);
+        // Show the last persistence outcome again unless a save is still running.
+        setSaveState((current) => (current === "error" ? lastSaveOutcomeRef.current : current));
+      },
       ...bundleTransfer.actions,
       ...versionComparison.actions,
       duplicateDocument,
@@ -1949,6 +1960,11 @@ export function useWorkflowEditorController<
   );
   const [saveState, setSaveState] = useState<SaveState>("loading");
   const [importError, setImportError] = useState<string | null>(null);
+  // A rejected import keeps the badge on "Save error" until it is dismissed or replaced, even when
+  // a save that was already in flight completes afterwards (#87).
+  const importErrorRef = useRef<string | null>(null);
+  importErrorRef.current = importError;
+  const lastSaveOutcomeRef = useRef<"saved" | "error">("saved");
   const [selection, setSelection] = useState<WorkflowEditorSelectionState>(
     emptyWorkflowEditorSelection,
   );
@@ -2121,11 +2137,13 @@ export function useWorkflowEditorController<
     saveWorkflowEditorLibrary(storageAdapter, library)
       .then(() => {
         if (!canceled) {
-          setSaveState("saved");
+          lastSaveOutcomeRef.current = "saved";
+          setSaveState(importErrorRef.current ? "error" : "saved");
         }
       })
       .catch((error: unknown) => {
         if (!canceled) {
+          lastSaveOutcomeRef.current = "error";
           setSaveState("error");
           onError?.(error instanceof Error ? error : new Error("Failed to save workflow library"));
         }
@@ -2456,7 +2474,11 @@ export function useWorkflowEditorController<
       createDocument,
       createWorkflowReference,
       deleteDocument,
-      dismissImportError: () => setImportError(null),
+      dismissImportError: () => {
+        setImportError(null);
+        // Show the last persistence outcome again unless a save is still running.
+        setSaveState((current) => (current === "error" ? lastSaveOutcomeRef.current : current));
+      },
       ...bundleTransfer.actions,
       ...versionComparison.actions,
       duplicateDocument,
