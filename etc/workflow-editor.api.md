@@ -206,6 +206,9 @@ export function createWorkflowEditorVersion<TNodeData = Record<string, unknown>,
 }): WorkflowEditorLibraryEntry<TNodeData, TEdgeData>;
 
 // @public
+export function createWorkflowExecutionSnapshotFromLiveRun(status: WorkflowEngineLiveRunStatus): WorkflowExecutionSnapshot;
+
+// @public
 export function createWorkflowExecutionSnapshotFromRunnerEvents(events: ReadonlyArray<WorkflowRunnerLifecycleEvent | {
     type: string;
     runId?: string;
@@ -3133,6 +3136,17 @@ export type WorkflowEditorWorkflowInterface = {
 export type WorkflowEditorWorkflowReference = {
     documentId: string;
     maxDepth?: number;
+};
+
+// @public
+export type WorkflowEngineLiveRunStatus = {
+    runId: string;
+    status: string;
+    nodes: Readonly<Record<string, {
+        state: "running" | "retrying" | "succeeded" | "failed" | "skipped" | "suspended" | string;
+        attempt?: number;
+        updatedAt?: string;
+    }>>;
 };
 
 // @public (undocumented)

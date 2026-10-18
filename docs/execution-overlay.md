@@ -46,3 +46,21 @@ runner.onEvent((event) => {
 event list for a past run. Snapshots record states, attempts, retries, timestamps, durations,
 failures and waiting tasks. Node outputs are summarized by port name only, so output values (and
 anything secret in them) never enter the snapshot.
+
+## Live runs from Workflow Engine (#20, Engine #24)
+
+A connected host that dispatches through Workflow Engine can show a run while it executes:
+
+```ts
+const unsubscribe = engine.observeRun(runId, (status) =>
+  setExecution(createWorkflowExecutionSnapshotFromLiveRun(status)),
+);
+```
+
+- Retrying nodes show as running, with their attempt.
+- Suspended nodes, such as a pending human task (#105), show as **Waiting**.
+- The final notification carries the persisted terminal status and is shown as a past run.
+
+Live state has no payloads, so these snapshots have no output summaries. Use the persisted run
+record for results. A host that receives Runner lifecycle events directly (Runner #26) uses
+`createWorkflowExecutionSnapshotFromRunnerEvents` / `applyWorkflowRunnerEventToSnapshot` instead.

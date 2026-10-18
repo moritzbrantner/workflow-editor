@@ -74,6 +74,7 @@ const nodePresentation: Record<string, WorkflowExecutionPresentation> = {
   failed: { status: "error", tone: "error", label: "Failed" },
   skipped: { status: "idle", tone: "neutral", label: "Skipped" },
   cancelled: { status: "warning", tone: "warning", label: "Cancelled" },
+  waiting: { status: "warning", tone: "warning", label: "Waiting" },
   unknown: { status: "idle", tone: "neutral", label: "Unknown" },
 };
 
