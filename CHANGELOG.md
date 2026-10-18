@@ -8,6 +8,12 @@
   - Both compile with a `humanTask` contract (prompt, outcomes or response type) and report `invalid-human-task` diagnostics.
   - `validateWorkflowEditorHumanTaskResponse` checks host responses.
   - See `docs/compiler.md` and `fixtures/compiled-v1-human-tasks.json`.
+- Build on current graph-editor (#26): `@moritzbrantner/graph-editor` is now pinned to graph-editor `main` (commit `3f72b6e`) as a git dependency, and `@moritzbrantner/ui` moves to `^1.1.0`.
+  - Keyboard users can move selected nodes with **Shift+Arrow** (coarse) and **Alt+Shift+Arrow** (fine) (#18).
+  - Hosts must import `@moritzbrantner/ui/component-sources.css` next to their theme stylesheet and add an `@source` for graph-editor's `dist` (see the Pages `styles.css`).
+  - `SearchField` now comes from `@moritzbrantner/ui/data`.
+  - Graph validation now requires edge port ids. Workflow ports without a label still load and display their id.
+  - The node palette list is a focusable, labelled region ("Node templates").
 - Document diff and saved-version comparison (W-12): `diffWorkflowEditorDocuments` reports id-matched node, port, edge, group, document and viewport changes with stable paths. Layout-only changes can be included, summarized or ignored, and secret-like fields are redacted by default. The editor adds **Compare** with a summary, a differences list, canvas focus and highlight, and draft ↔ version or version ↔ version selection.
 - **Behavior change:** restoring a saved version now asks for confirmation and is one undoable edit, instead of resetting the undo history (see `docs/document-diff.md`).
 - Schema-driven inspector fields (W-11): node templates declare `inspectorFields` (text, number, boolean, select, multi-select, json, expression, secret-ref, key-value, custom) with paths into node `data`, defaults, required/read-only state, `visibleWhen` conditions and validation hints. One Apply is one undoable edit. Multi-node selections get a shared-fields panel with mixed-value handling; secret fields store references only. Hosts override renderers through `inspectorFieldRenderers`, and invalid definitions are reported as `invalid-inspector-field` template diagnostics. A `workflowRef` edit in the inspector now keeps the reference's `maxDepth` (see `docs/inspector-fields.md`).
@@ -32,6 +38,7 @@
 
 ### Patch Changes
 
+- The save badge no longer flips from "Save error" back to "Saved" when a save that was already in flight finishes after a rejected import (#87). The import error stays on the badge until it is dismissed or replaced, and dismissing it shows the last save outcome again.
 - Accessibility (#18): the compact document menu is now a labelled popover instead of an ARIA menu holding form controls, the workflow types panel has a heading, and the Pages example has a page heading. When a focused workbench control is removed, hidden or disabled without a document edit (for example on drill-in to a nested workflow), focus returns to the canvas instead of the page body.
 - Explain rejected workflow imports: the editor shows the restore error (for example `Unsupported workflow port type at …`) in a dismissible alert beside the save state, and exposes it as `controller.importError` / `actions.dismissImportError` and the `WorkflowEditorImportErrorAlert` chrome component. Rejected files still never reach the library.
 - Build the package in a `prepare` script so consumers can install it as a commit-pinned git dependency (`git+https://github.com/moritzbrantner/workflow-editor.git#<sha>` listed in `trustedDependencies`).

@@ -609,7 +609,9 @@ export function validateWorkflowEditorDocument(
   options: WorkflowEditorDocumentValidationOptions = {},
 ): WorkflowEditorDocumentDiagnostic[] {
   const policy = options.policy ?? strictWorkflowEditorValidationPolicy;
-  const graphDiagnostics = validateGraphEditorDocument(value, {
+  // Workflow ports without a label stay valid (they display their id), as before graph-editor
+  // required port labels.
+  const graphDiagnostics = validateGraphEditorDocument(withDefaultPortLabels(value), {
     allowCycles: true,
   }) as WorkflowEditorUnratedDocumentDiagnostic[];
   const cycleDiagnostics: WorkflowEditorUnratedDocumentDiagnostic[] = [];
@@ -4297,7 +4299,35 @@ function isWorkflowEditorPortTypeLike(value: unknown, depth = 0): value is Workf
 }
 
 function normalizePorts(ports: WorkflowEditorPort[] | undefined) {
-  return ports?.map((port) => ({ ...port })) ?? [];
+  return (
+    ports?.map((port) => ({
+      ...port,
+      label: typeof port.label === "string" ? port.label : port.id,
+    })) ?? []
+  );
+}
+
+/** A view of `value` whose ports without a string label use their id, for graph validation. */
+function withDefaultPortLabels(value: unknown): unknown {
+  if (!isRecord(value) || !Array.isArray(value.nodes)) {
+    return value;
+  }
+  const withLabels = (ports: unknown) =>
+    Array.isArray(ports)
+      ? ports.map((port) =>
+          isRecord(port) && typeof port.label !== "string" && typeof port.id === "string"
+            ? { ...port, label: port.id }
+            : port,
+        )
+      : ports;
+  return {
+    ...value,
+    nodes: value.nodes.map((node) =>
+      isRecord(node)
+        ? { ...node, inputs: withLabels(node.inputs), outputs: withLabels(node.outputs) }
+        : node,
+    ),
+  };
 }
 
 function normalizeWorkflowEditorCategoryPath(categoryPath: unknown) {

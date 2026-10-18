@@ -1,5 +1,7 @@
 @import "@moritzbrantner/ui/styles.css";
+@import "@moritzbrantner/ui/component-sources.css";
 
+@source "../../../node_modules/@moritzbrantner/graph-editor/dist/**/*.js";
 @source "./**/*.{ts,tsx}";
 @source "../../../src/**/*.{ts,tsx}";
 

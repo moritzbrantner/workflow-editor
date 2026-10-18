@@ -33,7 +33,9 @@ if (packageRoot.split(path.sep).includes("node_modules")) {
       recursive: true,
       filter: (source) => !skipped.has(source),
     });
-    run(["install", "--frozen-lockfile", "--ignore-scripts"], buildRoot);
+    // Lifecycle scripts stay on so trusted git dependencies (graph-editor) build their own dist;
+    // this script is a no-op in buildRoot because it is not below node_modules.
+    run(["install", "--frozen-lockfile"], buildRoot);
     run(["run", "build"], buildRoot);
 
     for (const output of buildOutputs) {
