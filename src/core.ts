@@ -239,6 +239,18 @@ export {
   type WorkflowEditorInputProfile,
 } from "./core-workflow-inputs";
 export {
+  compileWorkflowEditorHumanTask,
+  isWorkflowEditorHumanTaskNode,
+  validateWorkflowEditorHumanTaskResponse,
+  workflowEditorHumanApprovalKind,
+  workflowEditorHumanInputKind,
+  workflowEditorHumanTaskNodeTemplates,
+  type CompiledWorkflowHumanTask,
+  type WorkflowEditorHumanApprovalResponse,
+  type WorkflowEditorHumanInputResponse,
+  type WorkflowEditorHumanTaskDiagnostic,
+} from "./core-human-tasks";
+export {
   diffWorkflowEditorDocuments,
   isWorkflowEditorSecretLikePath,
   workflowEditorDiffRedacted,
@@ -283,6 +295,11 @@ export {
   type WorkflowExecutionPresentation,
   type WorkflowExecutionSnapshot,
 } from "./core-execution";
+export {
+  applyWorkflowRunnerEventToSnapshot,
+  createWorkflowExecutionSnapshotFromRunnerEvents,
+  type WorkflowRunnerLifecycleEvent,
+} from "./core-execution-events";
 
 export class WorkflowEditorDocumentValidationError extends Error {
   override name = "WorkflowEditorDocumentValidationError" as const;

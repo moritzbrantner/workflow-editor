@@ -278,6 +278,26 @@ export function resolveWorkflowEditorDocumentReference<
   return library.documents.find((entry) => entry.id === reference.documentId) ?? null;
 }
 
+/**
+ * A compile-time Workflow Reference resolver over a library: references resolve to the entry's
+ * current document and version (TECH-005). Pass it as `resolveWorkflowReference`.
+ */
+export function createWorkflowEditorLibraryReferenceResolver<
+  TNodeData = Record<string, unknown>,
+  TEdgeData = Record<string, unknown>,
+>(library: WorkflowEditorLibrary<TNodeData, TEdgeData>) {
+  return (reference: { documentId: string }) => {
+    const entry = library.documents.find((candidate) => candidate.id === reference.documentId);
+    return entry
+      ? {
+          id: entry.id,
+          version: entry.version,
+          document: entry.document as unknown as WorkflowEditorDocument,
+        }
+      : undefined;
+  };
+}
+
 export function listWorkflowEditorDocumentReferenceOptions<
   TNodeData = Record<string, unknown>,
   TEdgeData = Record<string, unknown>,

@@ -4,10 +4,27 @@
 
 ### Minor Changes
 
+- Typed workflow inputs and named input profiles (#115, Decision Atlas 5.12):
+  - A document's inputs are its Start node output ports: name, TypeScript type, required state, and default via `optional` / `defaultValue`. This is the same interface Workflow References use.
+  - `getWorkflowEditorInputDeclarations`, `validateWorkflowEditorInputValues` (TypeScript checker) and `resolveWorkflowEditorInputValues` are exported.
+  - Named profiles live on the library entry (`inputProfiles`, never inside the document), with `upsertWorkflowEditorInputProfile` / `removeWorkflowEditorInputProfile`.
+  - Document settings gain an **Inputs** panel with a generated form, inline validation, and save / switch / delete for profiles.
+  - `WorkflowEditor` `onRunWorkflow(values, profile)` is the host Run seam; without it, Pages says runs are unavailable.
 - Workflow triggers (#91, Decision Atlas 5.11): documents declare manual, cron-schedule and webhook triggers (`document.triggers`), validated by `validateWorkflowEditorTriggers`.
   - With nothing selected, the info panel opens on document settings with a **Triggers** panel (owner decision 2026-10-18).
   - A host passes `triggerActivation` to register and activate the triggers; without one, Pages shows "Activation unavailable".
   - `toWorkflowEditorEngineTriggerInputs` produces workflow-engine trigger registrations.
+- `applyWorkflowRunnerEventToSnapshot` / `createWorkflowExecutionSnapshotFromRunnerEvents` build the execution overlay snapshot from Workflow Runner lifecycle events (#20). The snapshot covers attempts, retries, durations, failures and waiting tasks. Outputs are summarized by port name only.
+- Nested bounded iterations (#97): an iteration body may contain another `control.iterate` node. It compiles into compiled v2 with its own bound and body checks. `nested-iteration-not-supported` is no longer reported.
+- Compile Workflow References (TECH-005, #95): with `resolveWorkflowReference` (for example `createWorkflowEditorLibraryReferenceResolver(library)`), documents that reference other Workflow Documents compile to **compiled v3**.
+  - v3 freezes each referenced document once as `workflows["<id>@<version>"]` with a typed `control.start` / `control.end` interface.
+  - Reference nodes carry `workflowRef: { workflow, maxDepth? }`.
+  - The compiler reports `missing-workflow-reference`, `workflow-reference-interface` and `unbounded-recursive-reference`.
+  - Documents without references compile as before.
+- Human task nodes (editor #105, Decision Atlas 5.16): the **Approval** (`human.task.approval`, with approved/rejected outputs) and **Human input** (`human.task.input`, with a typed `value` output) default templates.
+  - Both compile with a `humanTask` contract (prompt, outcomes or response type) and report `invalid-human-task` diagnostics.
+  - `validateWorkflowEditorHumanTaskResponse` checks host responses.
+  - See `docs/compiler.md` and `fixtures/compiled-v1-human-tasks.json`.
 - Iteration measurements (TECH-004, #96): iteration bodies can expose named, typed measurement outputs besides `next` and `converged`.
   - They compile to `iteration.body.outputs.measurements` and appear as `measurements` in the typed `result`.
   - Bodies without measurements compile unchanged.
@@ -41,6 +58,7 @@
 
 ### Patch Changes
 
+- JSON string/number/boolean/null value editors render natively inside the node (#44), through graph-editor's composition seams: the body slot when expanded and the minimized header slot when minimized (owner decision 2026-10-18). The portal and offset positioning code is gone. Editing still never drags the node. graph-editor is pinned to `323bbba`.
 - The save badge no longer flips from "Save error" back to "Saved" when a save that was already in flight finishes after a rejected import (#87). The import error stays on the badge until it is dismissed or replaced, and dismissing it shows the last save outcome again.
 - Accessibility (#18): the compact document menu is now a labelled popover instead of an ARIA menu holding form controls, the workflow types panel has a heading, and the Pages example has a page heading. When a focused workbench control is removed, hidden or disabled without a document edit (for example on drill-in to a nested workflow), focus returns to the canvas instead of the page body.
 - Explain rejected workflow imports: the editor shows the restore error (for example `Unsupported workflow port type at …`) in a dismissible alert beside the save state, and exposes it as `controller.importError` / `actions.dismissImportError` and the `WorkflowEditorImportErrorAlert` chrome component. Rejected files still never reach the library.
