@@ -1251,8 +1251,6 @@ test.describe("WorkflowWorkbench desktop", () => {
     await clickAction(page, "Create nested workflow");
     await expect(page.getByTestId("active-document-name")).toHaveText("Input Workflow");
 
-    await page.getByRole("button", { name: "Demo Workflow" }).click();
-    await page.getByLabel("Workflow document").first().selectOption({ label: "Input Workflow" });
     await page.getByRole("button", { name: "Delete document" }).click();
     await expect(page.getByTestId("active-document-name")).toHaveText("Demo Workflow");
 
