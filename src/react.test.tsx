@@ -842,6 +842,30 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     expect(handleOpenWorkflowReference).not.toHaveBeenCalled();
   });
 
+  test("opens a nested workflow from the node menu, also when read-only (#47)", async () => {
+    const handleOpenWorkflowReference = vi.fn();
+    render(
+      <WorkflowWorkbench
+        document={
+          normalizeWorkflowEditorDocument({
+            nodes: [{ ...document.nodes[0]!, workflowRef: { documentId: "child" } }],
+            edges: [],
+          }).document
+        }
+        readOnly
+        documentReferences={[{ id: "child", name: "Child workflow" }]}
+        onOpenWorkflowReference={handleOpenWorkflowReference}
+      />,
+    );
+
+    fireEvent.keyDown(screen.getByRole("button", { name: "Open Input menu" }), { key: "Enter" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Open workflow" }));
+    expect(handleOpenWorkflowReference).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "input" }),
+    );
+    expect(screen.queryByRole("menuitem", { name: "Delete" })).toBeNull();
+  });
+
   test("uses the visible node action menu for node deletion", async () => {
     render(<StatefulWorkbench />);
 
@@ -1027,8 +1051,7 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     );
   });
 
-  test("edits built-in JSON source values from the default inspector", () => {
-    const handleDocumentChange = vi.fn();
+  test("edits JSON source values only on the node, not again in the inspector (#47)", () => {
     const sourceDocument = normalizeWorkflowEditorDocument({
       nodes: [
         {
@@ -1046,32 +1069,13 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
       edges: [],
     }).document;
 
-    render(
-      <WorkflowWorkbench
-        document={sourceDocument}
-        selectedNodeId="flag"
-        onDocumentChange={handleDocumentChange}
-      />,
-    );
+    render(<WorkflowWorkbench document={sourceDocument} selectedNodeId="flag" />);
 
-    fireEvent.click(screen.getAllByLabelText("Value")[0]!);
-    fireEvent.click(screen.getByRole("option", { name: "True" }));
-    fireEvent.click(
-      screen
-        .getAllByRole("button", { name: "Apply" })
-        .find((button) => !(button as HTMLButtonElement).disabled)!,
-    );
-
-    expect(handleDocumentChange).toHaveBeenCalledWith(
-      expect.objectContaining({
-        nodes: [
-          expect.objectContaining({
-            id: "flag",
-            data: expect.objectContaining({ sourceName: "booleanValue", value: true }),
-          }),
-        ],
-      }),
-    );
+    expect(screen.getByLabelText("Flag JSON value")).not.toBeNull();
+    expect(screen.queryByText("Choose the value emitted by this source node.")).toBeNull();
+    // Advanced and precision fields stay in the inspector.
+    expect(screen.getAllByLabelText("X").length).toBeGreaterThan(0);
+    expect(screen.getAllByLabelText("Description").length).toBeGreaterThan(0);
   });
 
   test("keeps node kind read-only in the default inspector", () => {
@@ -1471,111 +1475,6 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     });
     expect(activate).toHaveBeenCalledWith([{ id: "manual-1", type: "cron", cron: "0 2 * * *" }]);
     expect(screen.getAllByText("Triggers activated.").length).toBeGreaterThan(0);
-  });
-
-  test("edits JSON string and number source values and keeps null read-only", () => {
-    const stringChange = vi.fn();
-    const stringDocument = normalizeWorkflowEditorDocument({
-      nodes: [
-        {
-          id: "title",
-          label: "Title",
-          kind: "json.string",
-          category: "JSON",
-          x: 0,
-          y: 0,
-          outputs: [{ id: "value", label: "Value", type: { kind: "string" } }],
-          data: { value: "draft" },
-        },
-      ],
-      edges: [],
-    }).document;
-
-    const { unmount } = render(
-      <WorkflowWorkbench
-        document={stringDocument}
-        selectedNodeId="title"
-        onDocumentChange={stringChange}
-      />,
-    );
-
-    fireEvent.change(screen.getAllByLabelText("Value")[0]!, { target: { value: "published" } });
-    fireEvent.click(screen.getAllByRole("button", { name: "Apply" })[0]!);
-    expect(stringChange).toHaveBeenCalledWith(
-      expect.objectContaining({
-        nodes: [
-          expect.objectContaining({
-            id: "title",
-            data: expect.objectContaining({ sourceName: "stringValue", value: "published" }),
-          }),
-        ],
-      }),
-    );
-
-    unmount();
-
-    const numberChange = vi.fn();
-    const numberDocument = normalizeWorkflowEditorDocument({
-      nodes: [
-        {
-          id: "count",
-          label: "Count",
-          kind: "json.number",
-          category: "JSON",
-          x: 0,
-          y: 0,
-          outputs: [{ id: "value", label: "Value", type: { kind: "number" } }],
-          data: { value: 1 },
-        },
-      ],
-      edges: [],
-    }).document;
-
-    const renderedNumber = render(
-      <WorkflowWorkbench
-        document={numberDocument}
-        selectedNodeId="count"
-        onDocumentChange={numberChange}
-      />,
-    );
-
-    fireEvent.change(screen.getAllByLabelText("Value")[0]!, { target: { value: "42" } });
-    fireEvent.click(screen.getAllByRole("button", { name: "Apply" })[0]!);
-    expect(numberChange).toHaveBeenCalledWith(
-      expect.objectContaining({
-        nodes: [
-          expect.objectContaining({
-            id: "count",
-            data: expect.objectContaining({ sourceName: "numberValue", value: 42 }),
-          }),
-        ],
-      }),
-    );
-
-    renderedNumber.unmount();
-
-    const nullDocument = normalizeWorkflowEditorDocument({
-      nodes: [
-        {
-          id: "nothing",
-          label: "Nothing",
-          kind: "json.null",
-          category: "JSON",
-          x: 0,
-          y: 0,
-          outputs: [{ id: "value", label: "Value", type: { kind: "null" } }],
-          data: { value: null },
-        },
-      ],
-      edges: [],
-    }).document;
-
-    render(<WorkflowWorkbench document={nullDocument} selectedNodeId="nothing" />);
-
-    const nullValue = screen.getAllByLabelText("Value")[0] as HTMLTextAreaElement;
-
-    expect(nullValue.disabled).toBe(true);
-    expect(nullValue.value).toBe("null");
   });
 
   test("edits JSON primitive source values from rendered workflow nodes", async () => {

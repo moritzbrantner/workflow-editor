@@ -3022,6 +3022,7 @@ export function WorkflowWorkbench<
               readOnly={readOnly}
               showMiniMap
               showPortColumnHeaders={false}
+              showNodeCategory={false}
               enableWheelZoom={false}
               measurePorts="dom"
               surfaceHeight="auto"
@@ -3092,8 +3093,25 @@ export function WorkflowWorkbench<
               {...(chrome?.nodeControls === "hidden"
                 ? {}
                 : {
-                    getNodeMenuItems: (node: { id: string }) =>
-                      readOnly
+                    getNodeMenuItems: (node: { id: string }) => [
+                      // Nested workflow navigation is contextual, in the node menu (#47).
+                      ...(() => {
+                        const workflowNode = documentContext.nodeById.get(node.id);
+                        const target = workflowNode?.workflowRef?.documentId;
+                        return workflowNode &&
+                          target &&
+                          onOpenWorkflowReference &&
+                          documentReferences?.some((reference) => reference.id === target)
+                          ? [
+                              {
+                                id: "open-workflow",
+                                label: "Open workflow",
+                                onSelect: () => onOpenWorkflowReference(workflowNode),
+                              },
+                            ]
+                          : [];
+                      })(),
+                      ...(readOnly
                         ? []
                         : [
                             {
@@ -3128,7 +3146,8 @@ export function WorkflowWorkbench<
                               destructive: true,
                               onSelect: () => deleteNode(node.id),
                             },
-                          ],
+                          ]),
+                    ],
                   })}
               // Inline rename replaces the header title in place (no portal, #46).
               renderNodeTitle={({ node }) => {
@@ -4617,7 +4636,6 @@ function WorkflowWorkbenchNodeLayerStyles<TNodeData extends Record<string, unkno
 
       if (isWorkflowEditorJsonNode(node)) {
         rules.push(
-          `${selector} [data-slot="workflow-node-header"] > div > div:last-child > span:first-child:not([aria-hidden="true"]) { display: none !important; }`,
           `${selector} [data-slot="workflow-node-port"] > div > span:nth-of-type(3) > span:first-child { display: none !important; }`,
         );
       }

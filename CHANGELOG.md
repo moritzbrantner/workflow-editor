@@ -4,6 +4,11 @@
 
 ### Minor Changes
 
+- Node face versus inspector (#47, Decision Atlas 5.6), documented in `docs/node-editing.md`.
+  - The canvas node no longer repeats description, category or kind. `toUiWorkflowBuilderNodes` omits the description, and `fromUiWorkflowBuilderNodes` restores it from the document node. The workbench hides the category/kind chip with graph-editor's `showNodeCategory={false}`.
+  - The inspector no longer duplicates the on-node JSON source value editor.
+  - Nested workflows open from the node menu (**Open workflow**), also in read-only mode.
+  - The CSS override that hid the kind chip on JSON nodes is gone.
 - The Pages data pipeline declares typed inputs (#115) through a **Parameters** start node: a required `exportDate: string` and an optional `currency: "EUR" | "USD"` that defaults to EUR. The Inputs panel also warns that profiles are plain saved values, so secrets should be passed as host references.
 - Compose and restore from the workbench (#18). The toolbar has **Compose**, which wraps the selected nodes into one composed node and selects it. When a composed node is selected it also shows **Restore composition**, and the same action is in that node's menu; restoring selects the restored nodes. Both work by keyboard. When restoring removes the focused menu trigger, focus moves to the canvas. Controllers gain `actions.composeSelection` and `actions.restoreComposition(nodeId?)`.
 - Hosts choose how composed nodes compile (#19, #97) with `compileWorkflowEditorDocument(document, { compositions })`: `"reject"` (default, unchanged), `"opaque"` (one node), or `"expand"` (the embedded subgraph is inlined with `<composed>/<inner>` addresses and rewired boundary connections, also inside iteration bodies). The source map links inlined entities back to their nested authoring paths. New export `expandWorkflowEditorCompositions`. New shared fixture: `fixtures/compiled-v1-composed-expanded.json`.

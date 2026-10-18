@@ -433,7 +433,8 @@ test.describe("WorkflowWorkbench desktop", () => {
       page.locator(
         '[data-slot="workflow-builder-node"][data-node-id="json-string"] [data-slot="workflow-node-header"] > div > div:last-child > span:first-child:not([aria-hidden="true"])',
       ),
-    ).toHaveCSS("display", "none");
+      // The kind chip is inspector metadata and is not rendered on the node face (#47).
+    ).toHaveCount(0);
     await expect(
       page.locator(
         '[data-slot="workflow-builder-node"][data-node-id="json-string"] [data-slot="workflow-node-port"][data-port-direction="output"][data-port-id="value"] > div > span:nth-of-type(3) > span:first-child',

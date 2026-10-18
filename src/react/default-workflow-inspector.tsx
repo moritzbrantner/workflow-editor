@@ -107,11 +107,9 @@ export function DefaultWorkflowInspector<
     const objectDecompositionDefaultValues = Object.fromEntries(
       objectDecompositionOutputs.map((output) => [`objectOutput:${output.id}`, output.label]),
     );
-    const jsonValueField = createWorkflowEditorJsonValueField(node);
     const iteration = isWorkflowEditorIterationNode(node)
       ? describeWorkflowEditorIteration(node, context.document.typeDeclarations)
       : null;
-    const jsonValueDefault = readWorkflowEditorJsonValueFieldValue(node);
 
     return (
       <div className="grid gap-3">
@@ -152,7 +150,6 @@ export function DefaultWorkflowInspector<
             arrayExpression: arrayConstructorExpression,
             objectExpression: objectConstructorExpression,
             objectDecompositionExpression,
-            ...(jsonValueField ? { jsonValue: jsonValueDefault } : {}),
             ...iteration?.defaultValues,
             ...arrayConstructorDefaultValues,
             ...objectConstructorDefaultValues,
@@ -216,16 +213,7 @@ export function DefaultWorkflowInspector<
                   },
                 ]
               : []),
-            ...(jsonValueField
-              ? [
-                  {
-                    id: "json-value",
-                    title: "Output",
-                    description: "Choose the value emitted by this source node.",
-                    fields: [jsonValueField],
-                  },
-                ]
-              : []),
+            // JSON source values are edited on the node (#47); the inspector does not repeat them.
             ...(isWorkflowEditorArrayConstructorNode(node)
               ? [
                   {
@@ -440,13 +428,6 @@ export function DefaultWorkflowInspector<
               patch.data = updated!.data;
               patch.inputs = updated!.inputs;
               patch.outputs = updated!.outputs;
-            }
-
-            if (jsonValueField) {
-              patch.data = {
-                ...(isRecord(node.data) ? node.data : {}),
-                value: parseWorkflowEditorJsonValueFieldValue(node, values.jsonValue),
-              } as unknown as TNodeData;
             }
 
             if (dataFields.length > 0) {
@@ -741,86 +722,6 @@ function describeWorkflowEditorIteration<TData>(
 function toNumber(value: InspectorFieldValue, fallback: number) {
   const nextValue = typeof value === "number" ? value : Number(value);
   return Number.isFinite(nextValue) ? nextValue : fallback;
-}
-
-function createWorkflowEditorJsonValueField<TData>(
-  node: WorkflowEditorNode<TData>,
-): InspectorFieldDefinition | null {
-  switch (node.kind) {
-    case "json.string":
-      return {
-        id: "jsonValue",
-        label: "Value",
-        type: "text",
-        placeholder: "Text",
-      };
-    case "json.number":
-      return {
-        id: "jsonValue",
-        label: "Value",
-        type: "number",
-      };
-    case "json.boolean":
-      return {
-        id: "jsonValue",
-        label: "Value",
-        type: "select",
-        options: [
-          { label: "False", value: "false" },
-          { label: "True", value: "true" },
-        ],
-      };
-    case "json.null":
-      return {
-        id: "jsonValue",
-        label: "Value",
-        type: "code",
-        readOnly: true,
-      };
-    default:
-      return null;
-  }
-}
-
-function readWorkflowEditorJsonValueFieldValue<TData>(
-  node: WorkflowEditorNode<TData>,
-): InspectorFieldValue {
-  const value = isRecord(node.data) ? node.data.value : undefined;
-
-  switch (node.kind) {
-    case "json.string":
-      return typeof value === "string" ? value : "";
-    case "json.number":
-      return typeof value === "number" && Number.isFinite(value) ? value : 0;
-    case "json.boolean":
-      return value === true ? "true" : "false";
-    case "json.null":
-      return "null";
-    default:
-      return undefined;
-  }
-}
-
-function parseWorkflowEditorJsonValueFieldValue<TData>(
-  node: WorkflowEditorNode<TData>,
-  value: InspectorFieldValue,
-) {
-  switch (node.kind) {
-    case "json.string":
-      return String(value ?? "");
-    case "json.number":
-      return toNumber(value, 0);
-    case "json.boolean":
-      return value === true || value === "true";
-    case "json.null":
-      return null;
-    default:
-      return isRecord(node.data) ? node.data.value : undefined;
-  }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function createWorkflowReferenceOptions<TNodeData extends Record<string, unknown>>(

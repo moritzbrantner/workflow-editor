@@ -42,7 +42,10 @@ export function toUiWorkflowBuilderNodes<TData = Record<string, unknown>>(
     return {
       id: node.id,
       label: node.label,
-      description: jsonPrimitiveValue === undefined ? node.description : undefined,
+      // Node-face split (#47, Decision Atlas 5.6): the description is inspector metadata, so the
+      // canvas node does not repeat it. Kind and category stay for geometry and lookups; the
+      // workbench hides their chip through graph-editor's `showNodeCategory={false}`.
+      description: undefined,
       kind: node.kind,
       category: node.category,
       status: node.status,
@@ -92,7 +95,8 @@ export function fromUiWorkflowBuilderNodes<TData = Record<string, unknown>>(
     return {
       id: node.id,
       label: node.label,
-      description: node.description,
+      // The canvas never edits the description (#47), so it comes from the document node.
+      description: node.description ?? previousNode?.description,
       kind: node.kind,
       category: node.category,
       categoryPath: previousNode?.categoryPath ? [...previousNode.categoryPath] : undefined,
