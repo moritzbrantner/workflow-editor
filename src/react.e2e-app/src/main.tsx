@@ -14,7 +14,49 @@ import {
   type WorkflowEditorLibrary,
   type WorkflowEditorNodeTemplate,
   type WorkflowWorkbenchSelection,
+  type WorkflowExecutionSnapshot,
 } from "@moritzbrantner/workflow-editor";
+
+/** Host-side run snapshots the fixture can switch between (`?execution=1`). */
+const fixtureRuns: Record<string, WorkflowExecutionSnapshot> = {
+  running: {
+    runId: "run-1",
+    state: "running",
+    nodes: {
+      input: { state: "succeeded", attempt: 1 },
+      transform: { state: "running", attempt: 1, progress: 0.5 },
+      output: { state: "queued" },
+    },
+  },
+  failed: {
+    runId: "run-1",
+    state: "failed",
+    nodes: {
+      input: { state: "succeeded", attempt: 1 },
+      transform: { state: "failed", attempt: 1, errorSummary: "Upstream timeout" },
+      output: { state: "skipped" },
+    },
+  },
+  retrying: {
+    runId: "run-1",
+    state: "running",
+    nodes: {
+      input: { state: "succeeded", attempt: 1 },
+      transform: { state: "running", attempt: 2 },
+      output: { state: "queued" },
+    },
+  },
+  previous: {
+    runId: "run-0",
+    state: "succeeded",
+    mode: "historical",
+    nodes: {
+      input: { state: "succeeded", attempt: 1 },
+      transform: { state: "succeeded", attempt: 1, outputSummary: "ok" },
+      output: { state: "succeeded", attempt: 1 },
+    },
+  },
+};
 
 const initialDocument: WorkflowEditorDocument = normalizeWorkflowEditorDocument({
   nodes: [
@@ -133,6 +175,8 @@ function App() {
   }
   const readOnly = searchParams.get("readonly") === "1";
   const maxDepth = Number(searchParams.get("maxDepth") ?? 64);
+  const showExecutionControls = searchParams.get("execution") === "1";
+  const [execution, setExecution] = useState<WorkflowExecutionSnapshot | null>(null);
   const [library, setLibrary] = useState<WorkflowEditorLibrary>(initialLibrary);
   const [selection, setSelection] = useState<WorkflowWorkbenchSelection>(null);
   const [documentPath, setDocumentPath] = useState<WorkflowEditorDocumentPathItem[]>([
@@ -180,10 +224,23 @@ function App() {
             {template.description ? <span> {template.description}</span> : null}
           </span>
         )}
+        execution={execution}
         onLibraryChange={setLibrary}
         onDocumentPathChange={setDocumentPath}
         onSelectionChange={setSelection}
       />
+      {showExecutionControls ? (
+        <section aria-label="Run controls">
+          {Object.keys(fixtureRuns).map((key) => (
+            <button key={key} type="button" onClick={() => setExecution(fixtureRuns[key]!)}>
+              Show {key} run
+            </button>
+          ))}
+          <button type="button" onClick={() => setExecution(null)}>
+            Clear run
+          </button>
+        </section>
+      ) : null}
       <section aria-label="Test state">
         <div data-testid="active-document-name">{activeEntry?.name ?? ""}</div>
         <div data-testid="document-count">{library.documents.length}</div>
