@@ -216,6 +216,18 @@ export {
   type WorkflowEditorNodeTemplateRegistry,
   type WorkflowEditorNodeTemplateRegistryEntry,
 } from "./core-template-registry";
+export {
+  diffWorkflowEditorDocuments,
+  isWorkflowEditorSecretLikePath,
+  workflowEditorDiffRedacted,
+  type WorkflowEditorDiffChange,
+  type WorkflowEditorDiffEntity,
+  type WorkflowEditorDiffEntry,
+  type WorkflowEditorDiffField,
+  type WorkflowEditorDiffOptions,
+  type WorkflowEditorDiffSummary,
+  type WorkflowEditorDocumentDiff,
+} from "./core-diff";
 
 export {
   formatWorkflowExecutionDuration,

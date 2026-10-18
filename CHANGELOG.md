@@ -4,6 +4,8 @@
 
 ### Minor Changes
 
+- Document diff and saved-version comparison (W-12): `diffWorkflowEditorDocuments` reports id-matched node, port, edge, group, document and viewport changes with stable paths. Layout-only changes can be included, summarized or ignored, and secret-like fields are redacted by default. The editor adds **Compare** with a summary, a differences list, canvas focus and highlight, and draft ↔ version or version ↔ version selection.
+- **Behavior change:** restoring a saved version now asks for confirmation and is one undoable edit, instead of resetting the undo history (see `docs/document-diff.md`).
 - Per-node result persistence (Runner TECH-011, #19): `WorkflowEditorNode.persistence?: "on-completion"` is authored in the node inspector (**Execution → Persist result on completion**). It round-trips through save, export and import, and compiles to `CompiledWorkflowNode.persistence`. Nodes without it compile exactly as before.
 - Export and import portable workflow bundles (W-09): a root document with its complete referenced-document closure, stable ids, versions and reference provenance (see `docs/bundles.md`).
   - `buildWorkflowEditorBundle` reports missing references and unbounded recursive references before export; recursion bounded by the new optional `WorkflowEditorWorkflowReference.maxDepth` keeps its closure and bound.

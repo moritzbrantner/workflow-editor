@@ -13,6 +13,22 @@ export {
   type WorkflowEditorBundleError,
   type WorkflowEditorBundleImportState,
 } from "./editor/bundle-transfer";
+export {
+  WorkflowEditorCompareVersionsButton,
+  WorkflowEditorVersionComparison,
+  type WorkflowEditorComparisonActions,
+  type WorkflowEditorComparisonSide,
+  type WorkflowEditorComparisonState,
+  type WorkflowEditorPendingRestore,
+} from "./editor/version-compare";
+import {
+  useWorkflowEditorVersionComparison,
+  WorkflowEditorCompareVersionsButton,
+  WorkflowEditorVersionComparison,
+  type WorkflowEditorComparisonActions,
+  type WorkflowEditorComparisonState,
+  type WorkflowEditorPendingRestore,
+} from "./editor/version-compare";
 import { NativeWorkflowTypes } from "./editor/native-types";
 import { workflowEditorPortTypeSource } from "./core-type-source";
 
@@ -238,6 +254,10 @@ export type WorkflowEditorController<
   bundleImport: WorkflowEditorBundleImportState<TNodeData, TEdgeData> | null;
   /** The most recent rejected bundle export or import. */
   bundleError: WorkflowEditorBundleError | null;
+  /** The open version comparison, if any. */
+  comparison: WorkflowEditorComparisonState | null;
+  /** A saved version waiting for restore confirmation. */
+  pendingRestore: WorkflowEditorPendingRestore | null;
   /** Set while a stored library could not be loaded; autosave is paused until resolved. */
   storageRecovery: WorkflowEditorStorageRecovery | null;
   library: WorkflowEditorLibrary<TNodeData, TEdgeData>;
@@ -253,7 +273,8 @@ export type WorkflowEditorController<
     createWorkflowReference: (node: WorkflowEditorNode<TNodeData>) => void;
     deleteDocument: () => void;
     dismissImportError: () => void;
-  } & WorkflowEditorBundleActions & {
+  } & WorkflowEditorBundleActions &
+    WorkflowEditorComparisonActions & {
       duplicateDocument: () => void;
       exportDocument: () => void;
       importDocumentFromFile: (file: File) => Promise<void>;
@@ -965,6 +986,14 @@ export function WorkflowEditor<
       document: nextHistory.present,
     }));
   };
+  const versionComparison = useWorkflowEditorVersionComparison({
+    activeEntry,
+    activeDocument,
+    selectedVersionId,
+    readOnly,
+    setSelection,
+    commitDocument: updateDocument,
+  });
 
   const selectDocument = (documentId: string) => {
     const entry = library.documents.find((candidate) => candidate.id === documentId);
@@ -1050,16 +1079,8 @@ export function WorkflowEditor<
     });
   };
 
-  const restoreVersion = () => {
-    if (!selectedVersionId) {
-      return;
-    }
-
-    setSelection(emptyWorkflowEditorSelection);
-    updateActiveEntry((entry) => restoreWorkflowEditorVersion(entry, selectedVersionId), {
-      resetHistory: true,
-    });
-  };
+  // Restoring asks for confirmation and then commits the version as one undoable edit.
+  const restoreVersion = () => versionComparison.actions.requestRestoreVersion();
 
   const undo = () => {
     if (!activeEntry || readOnly) {
@@ -1289,6 +1310,8 @@ export function WorkflowEditor<
     importError,
     bundleImport: bundleTransfer.bundleImport,
     bundleError: bundleTransfer.bundleError,
+    comparison: versionComparison.comparison,
+    pendingRestore: versionComparison.pendingRestore,
     storageRecovery,
     library,
     nameDraft,
@@ -1304,6 +1327,7 @@ export function WorkflowEditor<
       deleteDocument,
       dismissImportError: () => setImportError(null),
       ...bundleTransfer.actions,
+      ...versionComparison.actions,
       duplicateDocument,
       exportDocument,
       importDocumentFromFile,
@@ -1446,6 +1470,7 @@ export function WorkflowEditor<
                     >
                       Restore
                     </Button>
+                    <WorkflowEditorCompareVersionsButton controller={editorController} />
                   </div>
                   <select
                     aria-label="Saved versions"
@@ -1557,6 +1582,7 @@ export function WorkflowEditor<
           </div>
           <WorkflowEditorImportErrorAlert controller={editorController} />
           <WorkflowEditorBundleTransferStatus controller={editorController} />
+          <WorkflowEditorVersionComparison controller={editorController} />
           <WorkflowEditorStorageRecoveryAlert controller={editorController} />
           <WorkflowEditorDocumentProblems controller={editorController} />
         </WorkbenchToolbar>
@@ -1697,6 +1723,7 @@ export function WorkflowEditor<
               >
                 Restore version
               </Button>
+              <WorkflowEditorCompareVersionsButton controller={editorController} />
               <input
                 ref={importInputRef}
                 aria-label="Import workflow JSON"
@@ -1728,6 +1755,7 @@ export function WorkflowEditor<
             </div>
             <WorkflowEditorImportErrorAlert controller={editorController} />
             <WorkflowEditorBundleTransferStatus controller={editorController} />
+            <WorkflowEditorVersionComparison controller={editorController} />
             <WorkflowEditorStorageRecoveryAlert controller={editorController} />
             <WorkflowEditorDocumentProblems controller={editorController} />
           </WorkbenchToolbar>
@@ -2146,6 +2174,14 @@ export function useWorkflowEditorController<
       document: nextHistory.present,
     }));
   };
+  const versionComparison = useWorkflowEditorVersionComparison({
+    activeEntry,
+    activeDocument,
+    selectedVersionId,
+    readOnly,
+    setSelection,
+    commitDocument: updateActiveDocument,
+  });
   const selectDocument = (documentId: string) => {
     const entry = library.documents.find((candidate) => candidate.id === documentId);
     if (!entry) {
@@ -2216,14 +2252,7 @@ export function useWorkflowEditorController<
       return nextEntry;
     });
   };
-  const restoreVersion = () => {
-    if (selectedVersionId) {
-      setSelection(emptyWorkflowEditorSelection);
-      updateActiveEntry((entry) => restoreWorkflowEditorVersion(entry, selectedVersionId), {
-        resetHistory: true,
-      });
-    }
-  };
+  const restoreVersion = () => versionComparison.actions.requestRestoreVersion();
   const undo = () => {
     if (!activeEntry || readOnly) {
       return;
@@ -2405,6 +2434,8 @@ export function useWorkflowEditorController<
     importError,
     bundleImport: bundleTransfer.bundleImport,
     bundleError: bundleTransfer.bundleError,
+    comparison: versionComparison.comparison,
+    pendingRestore: versionComparison.pendingRestore,
     storageRecovery,
     library,
     nameDraft,
@@ -2420,6 +2451,7 @@ export function useWorkflowEditorController<
       deleteDocument,
       dismissImportError: () => setImportError(null),
       ...bundleTransfer.actions,
+      ...versionComparison.actions,
       duplicateDocument,
       exportDocument,
       importDocumentFromFile,
