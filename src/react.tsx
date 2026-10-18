@@ -94,10 +94,12 @@ import {
 import {
   createWorkflowEditorNodeTemplateRegistry,
   type WorkflowEditorNodeTemplateRegistry,
+  type WorkflowEditorNodeTemplate,
   connectWorkflowEditorNodes,
   copyWorkflowEditorSelection,
   createWorkflowEditorGroup,
   composeWorkflowEditorNodes,
+  resolveWorkflowEditorLinkedNodes,
   restoreWorkflowEditorComposedNode,
   isWorkflowEditorIterationNode,
   createWorkflowEditorDocumentContext,
@@ -147,6 +149,7 @@ import type { WorkflowEditorInspectorFieldDefinition } from "./core-inspector-fi
 import type { WorkflowWorkbenchInspectorFieldRenderers } from "./react/inspector-field-sections";
 import type { WorkflowWorkbenchTriggerActivation } from "./react/triggers-panel";
 import type { WorkflowWorkbenchInputProfiles } from "./react/inputs-panel";
+import type { WorkflowWorkbenchSharedTemplates } from "./react/shared-template-panel";
 import {
   WorkflowPendingHumanTaskPanel,
   type WorkflowWorkbenchHumanTasks,
@@ -206,6 +209,10 @@ export type {
   WorkflowWorkbenchHumanTasks,
   WorkflowWorkbenchPendingHumanTask,
 } from "./react/human-task-panel";
+export type {
+  WorkflowWorkbenchLinkedInstance,
+  WorkflowWorkbenchSharedTemplates,
+} from "./react/shared-template-panel";
 export type {
   WorkflowWorkbenchInspectorFieldRenderer,
   WorkflowWorkbenchInspectorFieldRendererProps,
@@ -280,6 +287,10 @@ export type WorkflowWorkbenchInspectorContext<
   triggerActivation?: WorkflowWorkbenchTriggerActivation;
   /** Named input profiles for the document (#115). */
   inputProfiles?: WorkflowWorkbenchInputProfiles;
+  /** Linked shared templates (#65): the host catalog and its publish channel. */
+  sharedTemplates?: WorkflowWorkbenchSharedTemplates & {
+    templates: readonly WorkflowEditorNodeTemplate<TNodeData>[];
+  };
   typeDefinitions?: readonly WorkflowEditorTypeDefinition[];
   /** Schema-driven data fields for a node, from the template whose `kind` matches the node. */
   inspectorFields?: (
@@ -439,6 +450,8 @@ export type WorkflowWorkbenchProps<
   inputProfiles?: WorkflowWorkbenchInputProfiles;
   /** Pending human tasks of connected runs and the host's answer channel (#105). */
   humanTasks?: WorkflowWorkbenchHumanTasks;
+  /** Publish channel and instance list for linked shared templates (#65). */
+  sharedTemplates?: WorkflowWorkbenchSharedTemplates;
   /** Host renderers that replace built-in inspector field kinds or individual fields. */
   inspectorFieldRenderers?: WorkflowWorkbenchInspectorFieldRenderers;
   typeDefinitions?: readonly WorkflowEditorTypeDefinition[];
@@ -631,6 +644,7 @@ export function WorkflowWorkbench<
   triggerActivation,
   inputProfiles,
   humanTasks,
+  sharedTemplates,
   typeDefinitions,
   documentReferences,
   portTypeColors,
@@ -1320,6 +1334,20 @@ export function WorkflowWorkbench<
     });
   };
 
+  // Linked shared templates follow the catalog (#65): compatible revisions apply when published.
+  useEffect(() => {
+    if (!document.nodes.some((node) => node.templateRef)) return;
+    const resolved = resolveWorkflowEditorLinkedNodes(
+      document,
+      nodeTemplates as unknown as readonly WorkflowEditorNodeTemplate<TNodeData>[],
+    );
+    if (resolved.document !== document) {
+      commitDocument(resolved.document, { history: false });
+    }
+    // Resolution is idempotent, so re-running on its own result settles.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [document, nodeTemplates]);
+
   const updateDocument = (nextDocument: WorkflowEditorDocument<TNodeData, TEdgeData>) => {
     if (readOnly) {
       return;
@@ -1388,6 +1416,14 @@ export function WorkflowWorkbench<
     ...(inspectorFieldRenderers ? { inspectorFieldRenderers } : {}),
     ...(triggerActivation ? { triggerActivation } : {}),
     ...(inputProfiles ? { inputProfiles } : {}),
+    ...(sharedTemplates
+      ? {
+          sharedTemplates: {
+            ...sharedTemplates,
+            templates: nodeTemplates as unknown as readonly WorkflowEditorNodeTemplate<TNodeData>[],
+          },
+        }
+      : {}),
     ...(typeDefinitions ? { typeDefinitions } : {}),
   } satisfies WorkflowWorkbenchInspectorContext<TNodeData, TEdgeData>;
 
@@ -3630,6 +3666,7 @@ export function useWorkflowWorkbenchController<
   inspectorFieldRenderers,
   triggerActivation,
   inputProfiles,
+  sharedTemplates,
   typeDefinitions,
   documentReferences,
   portTypeColors,
@@ -3855,6 +3892,23 @@ export function useWorkflowWorkbenchController<
     onSelectionStateChange?.(normalizedSelection);
     onSelectionChange?.(selectionStateToSingleSelection(selectionDocument, normalizedSelection));
   };
+  // Linked shared templates follow the catalog (#65): compatible revisions apply when published.
+  useEffect(() => {
+    if (!document.nodes.some((node) => node.templateRef)) return;
+    const resolved = resolveWorkflowEditorLinkedNodes(
+      document,
+      nodeTemplates as unknown as readonly WorkflowEditorNodeTemplate<TNodeData>[],
+    );
+    if (resolved.document !== document) {
+      dispatchGraphOperation(
+        createWorkflowWorkbenchDocumentOperation(resolved.document, undefined, false),
+        { emitSelection: false },
+      );
+    }
+    // Resolution is idempotent, so re-running on its own result settles.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [document, nodeTemplates]);
+
   const updateDocument = (nextDocument: WorkflowEditorDocument<TNodeData, TEdgeData>) => {
     if (!readOnly) {
       dispatchGraphOperation(createWorkflowWorkbenchDocumentOperation(nextDocument));
@@ -4295,6 +4349,14 @@ export function useWorkflowWorkbenchController<
     ...(inspectorFieldRenderers ? { inspectorFieldRenderers } : {}),
     ...(triggerActivation ? { triggerActivation } : {}),
     ...(inputProfiles ? { inputProfiles } : {}),
+    ...(sharedTemplates
+      ? {
+          sharedTemplates: {
+            ...sharedTemplates,
+            templates: nodeTemplates as unknown as readonly WorkflowEditorNodeTemplate<TNodeData>[],
+          },
+        }
+      : {}),
     ...(typeDefinitions ? { typeDefinitions } : {}),
   } satisfies WorkflowWorkbenchInspectorContext<TNodeData, TEdgeData>;
 

@@ -3373,6 +3373,9 @@ export type WorkflowWorkbenchInspectorContext<TNodeData extends Record<string, u
     updateSelectedNodeWorkflowReference: (documentId: string | null) => void;
     triggerActivation?: WorkflowWorkbenchTriggerActivation;
     inputProfiles?: WorkflowWorkbenchInputProfiles;
+    sharedTemplates?: WorkflowWorkbenchSharedTemplates & {
+        templates: readonly WorkflowEditorNodeTemplate<TNodeData>[];
+    };
     typeDefinitions?: readonly WorkflowEditorTypeDefinition[];
     inspectorFields?: (node: WorkflowEditorNode<TNodeData>) => readonly WorkflowEditorInspectorFieldDefinition[];
     inspectorFieldRenderers?: WorkflowWorkbenchInspectorFieldRenderers;
@@ -3448,6 +3451,7 @@ export type WorkflowWorkbenchProps<TNodeData extends Record<string, unknown> = R
     triggerActivation?: WorkflowWorkbenchTriggerActivation;
     inputProfiles?: WorkflowWorkbenchInputProfiles;
     humanTasks?: WorkflowWorkbenchHumanTasks;
+    sharedTemplates?: WorkflowWorkbenchSharedTemplates;
     inspectorFieldRenderers?: WorkflowWorkbenchInspectorFieldRenderers;
     typeDefinitions?: readonly WorkflowEditorTypeDefinition[];
     documentReferences?: WorkflowEditorDocumentReferenceOption[];
@@ -3509,11 +3513,12 @@ export function writeWorkflowEditorFieldPath<T extends Record<string, unknown>>(
 // dist/editor.d.ts:427:5 - (ae-forgotten-export) The symbol "WorkflowEditorPendingRestore" needs to be exported by the entry point index.d.ts
 // dist/editor.d.ts:428:5 - (ae-forgotten-export) The symbol "WorkflowEditorStorageRecovery" needs to be exported by the entry point index.d.ts
 // dist/editor.d.ts:463:9 - (ae-forgotten-export) The symbol "WorkflowEditorComparisonSide" needs to be exported by the entry point index.d.ts
-// dist/react.d.ts:178:5 - (ae-forgotten-export) The symbol "WorkflowWorkbenchTriggerActivation" needs to be exported by the entry point index.d.ts
-// dist/react.d.ts:180:5 - (ae-forgotten-export) The symbol "WorkflowWorkbenchInputProfiles" needs to be exported by the entry point index.d.ts
-// dist/react.d.ts:204:9 - (ae-forgotten-export) The symbol "WorkflowWorkbenchPaletteCategoryGroup" needs to be exported by the entry point index.d.ts
-// dist/react.d.ts:211:9 - (ae-forgotten-export) The symbol "WorkflowWorkbenchOverlayPosition" needs to be exported by the entry point index.d.ts
-// dist/react.d.ts:286:5 - (ae-forgotten-export) The symbol "WorkflowWorkbenchHumanTasks" needs to be exported by the entry point index.d.ts
+// dist/react.d.ts:197:5 - (ae-forgotten-export) The symbol "WorkflowWorkbenchTriggerActivation" needs to be exported by the entry point index.d.ts
+// dist/react.d.ts:199:5 - (ae-forgotten-export) The symbol "WorkflowWorkbenchInputProfiles" needs to be exported by the entry point index.d.ts
+// dist/react.d.ts:201:5 - (ae-forgotten-export) The symbol "WorkflowWorkbenchSharedTemplates" needs to be exported by the entry point index.d.ts
+// dist/react.d.ts:227:9 - (ae-forgotten-export) The symbol "WorkflowWorkbenchPaletteCategoryGroup" needs to be exported by the entry point index.d.ts
+// dist/react.d.ts:234:9 - (ae-forgotten-export) The symbol "WorkflowWorkbenchOverlayPosition" needs to be exported by the entry point index.d.ts
+// dist/react.d.ts:309:5 - (ae-forgotten-export) The symbol "WorkflowWorkbenchHumanTasks" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

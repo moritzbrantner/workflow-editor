@@ -134,6 +134,7 @@ import {
   type WorkflowEditorNode,
   type WorkflowEditorSelectionState,
   type WorkflowEditorTypeDefinition,
+  listWorkflowEditorLinkedInstances,
 } from "./core";
 
 export {
@@ -656,6 +657,8 @@ function createWorkflowEditorCatalogController<
       updateNodeTemplate: (id, next) => {
         if (
           !onNodeTemplatesChange ||
+          // Published shared template revisions are immutable (#65).
+          nodeTemplates.some((template) => template.id === id && template.shared) ||
           !next.id.trim() ||
           !next.label.trim() ||
           nodeTemplates.some((template) => template.id !== id && template.id === next.id)
@@ -1869,6 +1872,28 @@ export function WorkflowEditor<
           nodeTemplates={nodeTemplates}
           typeDefinitions={typeDefinitions}
           portTypeColors={resolvedSettings.editor.portTypeColors}
+          sharedTemplates={
+            onNodeTemplatesChange
+              ? {
+                  // Publishing adds an immutable revision to the host catalog (#65, TECH-001).
+                  onPublish: (template) =>
+                    onNodeTemplatesChange([
+                      ...nodeTemplates,
+                      template as unknown as WorkflowEditorNodeTemplate<TTemplateData>,
+                    ]),
+                  listInstances: (templateId) =>
+                    listWorkflowEditorLinkedInstances(
+                      library.documents as unknown as Parameters<
+                        typeof listWorkflowEditorLinkedInstances
+                      >[0],
+                      templateId,
+                      nodeTemplates as unknown as Parameters<
+                        typeof listWorkflowEditorLinkedInstances
+                      >[2],
+                    ),
+                }
+              : undefined
+          }
           documentReferences={documentReferenceOptions}
           chrome={{
             ...(chrome?.workbenchToolbar ? { toolbar: chrome.workbenchToolbar } : {}),
