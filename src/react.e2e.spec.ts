@@ -903,7 +903,7 @@ test.describe("WorkflowWorkbench desktop", () => {
       .toBeGreaterThan(beforeDrag.y + 40);
     const afterDrag = (await readDocument(page)).viewport ?? { x: 0, y: 0, zoom: 1 };
 
-    await page.mouse.move(surfaceBox!.x + surfaceBox!.width / 2, surfaceBox!.y + 340);
+    await page.mouse.move(surfaceBox!.x + surfaceBox!.width / 2, surfaceBox!.y + 220);
     await page.mouse.wheel(0, 120);
     await expect
       .poll(async () => ((await readDocument(page)).viewport ?? { x: 0, y: 0, zoom: 1 }).x)
@@ -1338,6 +1338,17 @@ test.describe("WorkflowWorkbench accessibility and responsive smoke", () => {
     await page.keyboard.press("Enter");
     await expect(page.getByTestId("selection-json")).toContainText('"id":"decision"');
 
+    // Keyboard moves come from graph-editor: Shift+Arrow is a coarse step, Alt+Shift+Arrow fine.
+    const decisionX = async () =>
+      (await readDocument(page)).nodes.find((node) => node.id === "decision")!.x;
+    const startX = await decisionX();
+    await page.keyboard.press("Shift+ArrowRight");
+    await expect.poll(decisionX).toBeGreaterThan(startX);
+    const coarseX = await decisionX();
+    await page.keyboard.press("Alt+Shift+ArrowLeft");
+    await expect.poll(decisionX).toBeLessThan(coarseX);
+    expect(coarseX - (await decisionX())).toBeLessThan(coarseX - startX);
+
     await page.keyboard.press("Delete");
     await expectNodeCount(page, 3);
     await expect(announcer).toHaveText("Removed node Decision.");
@@ -1396,7 +1407,8 @@ test.describe("WorkflowWorkbench accessibility and responsive smoke", () => {
     await page
       .getByRole("button", { name: /Decision/ })
       .first()
-      .click();
+      // The desktop-shaped fixture overlaps its toolbars on a phone, like the clicks below.
+      .click({ force: true });
 
     await expect(page.getByTestId("node-count")).toHaveText("4");
 

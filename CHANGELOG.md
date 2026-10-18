@@ -4,6 +4,12 @@
 
 ### Minor Changes
 
+- Build on current graph-editor (#26): `@moritzbrantner/graph-editor` is now pinned to graph-editor `main` (commit `3f72b6e`) as a git dependency, and `@moritzbrantner/ui` moves to `^1.1.0`.
+  - Keyboard users can move selected nodes with **Shift+Arrow** (coarse) and **Alt+Shift+Arrow** (fine) (#18).
+  - Hosts must import `@moritzbrantner/ui/component-sources.css` next to their theme stylesheet and add an `@source` for graph-editor's `dist` (see the Pages `styles.css`).
+  - `SearchField` now comes from `@moritzbrantner/ui/data`.
+  - Graph validation now requires edge port ids. Workflow ports without a label still load and display their id.
+  - The node palette list is a focusable, labelled region ("Node templates").
 - Pages reference examples (W-10, Decisions 5.1/5.2/5.4): **Sales Data Pipeline** (source → transform → validate → branch → output) is now the first-open example, and **Product Image Generation** routes a media input through one opaque external ComfyUI operation to a published artifact. Both have typed ports, an intentionally invalid connection under test, and are compiled but not executed (see `docs/reference-examples.md`). The compact document menu now opens above the node palette.
 - Per-node result persistence (Runner TECH-011, #19): `WorkflowEditorNode.persistence?: "on-completion"` is authored in the node inspector (**Execution → Persist result on completion**). It round-trips through save, export and import, and compiles to `CompiledWorkflowNode.persistence`. Nodes without it compile exactly as before.
 - Export and import portable workflow bundles (W-09): a root document with its complete referenced-document closure, stable ids, versions and reference provenance (see `docs/bundles.md`).

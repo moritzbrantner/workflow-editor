@@ -37,11 +37,11 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
   Input,
-  SearchField,
   Textarea,
   Toggle,
   cn,
 } from "@moritzbrantner/ui";
+import { SearchField } from "@moritzbrantner/ui/data";
 import { createPortal } from "react-dom";
 import {
   getGraphWorkbenchCommandFromKeyboardEvent,
@@ -2555,6 +2555,8 @@ export function WorkflowWorkbench<
       runCommand: runGraphCommand,
     },
     commands: graphCommands,
+    // Workflow actions report their own errors; the generic graph action error slot stays empty.
+    status: { actionError: null, clearActionError: () => {} },
   } satisfies GraphWorkbenchController<TNodeData, TEdgeData, WorkflowEditorPortType>;
 
   const workbenchController = {
@@ -3261,7 +3263,13 @@ export function WorkflowWorkbench<
                         clearLabel="Clear node search"
                         inputProps={{ "aria-label": "Search node palette" }}
                       />
-                      <div className="min-h-0 overflow-y-auto pr-1">
+                      {/* Focusable so keyboard users can scroll the list even when its items are disabled. */}
+                      <div
+                        role="region"
+                        aria-label="Node templates"
+                        tabIndex={0}
+                        className="min-h-0 overflow-y-auto pr-1 outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                      >
                         {filteredNodeTemplates.length > 0 ? (
                           <div className="grid gap-3">
                             {paletteGroups.map((group) => renderPaletteCategoryGroup(group))}
@@ -4109,6 +4117,8 @@ export function useWorkflowWorkbenchController<
       runCommand,
     },
     commands: graphCommands,
+    // Workflow actions report their own errors; the generic graph action error slot stays empty.
+    status: { actionError: null, clearActionError: () => {} },
   } satisfies GraphWorkbenchController<TNodeData, TEdgeData, WorkflowEditorPortType>;
 
   return {

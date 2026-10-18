@@ -25,11 +25,11 @@ import {
   PopoverContent,
   PopoverTrigger,
   Input,
-  SearchField,
   Textarea,
   WorkbenchToolbar,
   cn,
 } from "@moritzbrantner/ui";
+import { SearchField } from "@moritzbrantner/ui/data";
 
 import {
   canRedoWorkflowEditorHistory,
