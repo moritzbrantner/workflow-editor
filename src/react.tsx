@@ -1,5 +1,6 @@
 "use client";
 
+import { getWorkflowEditorNodeBodyHeight, getWorkflowEditorNodeWidth } from "./core-node-layout";
 import { createWorkflowEditorTypeResolver } from "./core-type-resolver";
 
 import {
@@ -63,7 +64,6 @@ import {
   isWorkflowEditorDynamicPortNode,
   WorkflowDynamicPortAddAction,
   WorkflowDynamicPortControl,
-  workflowDynamicPortBodyHeight,
 } from "./react/dynamic-port-controls";
 import {
   fromUiWorkflowBuilderEdges,
@@ -138,18 +138,10 @@ import { layoutWorkflowEditorDocument } from "./core-layout";
 import type { WorkflowEditorDocumentReferenceOption } from "./persistence";
 import { selectionStateToSingleSelection } from "./react-selection";
 import {
-  getWorkflowEditorObjectConstructorOutputPanelHeight,
-  getWorkflowEditorObjectConstructorRenderedWidth,
-  getWorkflowEditorObjectConstructorTextAreaHeight,
-  getWorkflowEditorPortCenterOffset,
   getWorkflowEditorRenderedNodeSize,
   snapWorkflowEditorNodePositionToCompatiblePort,
   snapWorkflowEditorNodeToCompatiblePort,
 } from "./react-snap";
-import {
-  getWorkflowEditorMinimizedNodeWidth,
-  workflowEditorMinimizedNodeHeight,
-} from "./core-rendered-node-size";
 import { formatShortcutLabel } from "./shortcut-label";
 import type { WorkflowEditorInspectorFieldDefinition } from "./core-inspector-fields";
 import type { WorkflowWorkbenchInspectorFieldRenderers } from "./react/inspector-field-sections";
@@ -241,7 +233,6 @@ const workflowNodeToggleGroupControlClassName =
   "h-6 w-full overflow-hidden rounded border border-zinc-300 bg-white/95 p-0 shadow-sm";
 const workflowNodeToggleItemClassName =
   "h-full min-w-0 flex-1 rounded-none border-0 px-2 text-[11px] font-semibold uppercase text-zinc-700 shadow-none data-[state=on]:bg-zinc-950 data-[state=on]:text-white";
-const workflowJsonPrimitiveNodeControlHeight = 24;
 
 export type WorkflowWorkbenchSelection<
   TNodeData extends Record<string, unknown> = Record<string, unknown>,
@@ -1417,7 +1408,7 @@ export function WorkflowWorkbench<
     };
 
     if (position) {
-      const size = getWorkflowEditorRenderedNodeSize(toUiWorkflowBuilderNodes([node])[0]!);
+      const size = getWorkflowEditorRenderedNodeSize(node);
       node.x = Math.round(position.x - size.width / 2);
       node.y = Math.round(position.y - size.height / 2);
     }
@@ -3003,11 +2994,10 @@ export function WorkflowWorkbench<
               nodes={document.nodes}
               edges={uiEdges}
               portTypeColors={portTypeColors}
-              objectConstructorExpressionDrafts={objectConstructorExpressionDrafts}
               primaryNodeId={primarySelectedNodeId}
             />
             <WorkflowBuilder
-              className="flex h-full min-h-0 min-w-0 flex-col [&>[data-slot='workflow-builder-surface']]:flex-1 [&>[data-slot='workflow-builder-surface']]:basis-0 [&_[data-slot='workflow-node'][data-minimized='true']]:!h-9 [&_[data-slot='workflow-node'][data-minimized='true']]:!min-h-9 [&_[data-slot='workflow-node'][data-minimized='true']]:!flex-row [&_[data-slot='workflow-node'][data-minimized='true']]:items-stretch [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:relative [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:z-10 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:!h-9 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:!min-h-9 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:!flex-1 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:!rounded-lg [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:!border-b-0 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:!px-2 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-header']]:!py-1.5 [&_[data-slot='workflow-node'][data-minimized='true']_[data-slot='workflow-node-header']>div]:items-center [&_[data-slot='workflow-node'][data-minimized='true']_[data-slot='workflow-node-header']>div>div:last-child]:!mt-0 [&_[data-slot='workflow-node'][data-minimized='true']_[data-slot='workflow-node-select']>div+div]:hidden [&_[data-slot='workflow-node'][data-minimized='true']_[data-slot='workflow-node-minimize']]:relative [&_[data-slot='workflow-node'][data-minimized='true']_[data-slot='workflow-node-minimize']]:z-20 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']]:!absolute [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']]:inset-0 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']]:z-0 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']]:!h-auto [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']]:!border-t-0 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']]:!bg-transparent [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']]:pointer-events-none [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']>div]:hidden [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']>[data-slot='workflow-node-port']]:!z-30 [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']>[data-slot='workflow-node-port']]:pointer-events-auto [&_[data-slot='workflow-node'][data-minimized='true']>[data-slot='workflow-node-minimized-ports']>[data-slot='workflow-node-port']]:-translate-y-1/2 [&_[data-slot='workflow-node'][data-compact='true']_[data-slot='workflow-node-port']]:!z-0"
+              className="flex h-full min-h-0 min-w-0 flex-col [&>[data-slot='workflow-builder-surface']]:flex-1 [&>[data-slot='workflow-builder-surface']]:basis-0 [&_[data-slot='workflow-node'][data-compact='true']_[data-slot='workflow-node-port']]:!z-0"
               nodes={uiNodes}
               edges={uiEdges}
               groups={document.groups}
@@ -3038,20 +3028,24 @@ export function WorkflowWorkbench<
                   />
                 ) : null;
               }}
-              getNodeBodyHeight={(node) => {
-                const workflowNode = documentContext.nodeById.get(node.id);
-                return !workflowNode
-                  ? 0
-                  : isWorkflowEditorJsonPrimitiveNode(workflowNode)
-                    ? workflowJsonPrimitiveBodyHeight
-                    : isWorkflowEditorObjectConstructorNode(workflowNode)
-                      ? workflowObjectConstructorBodyHeight(
-                          objectConstructorExpressionDrafts[workflowNode.id],
-                        )
-                      : isWorkflowEditorDynamicPortNode(workflowNode)
-                        ? workflowDynamicPortBodyHeight
-                        : 0;
-              }}
+              // One geometry model (#48): graph-editor sizes nodes from these options.
+              minimizedNodeLayout="inline"
+              getNodeBodyHeight={(node) =>
+                getWorkflowEditorNodeBodyHeight(node, {
+                  objectConstructorExpressions: objectConstructorExpressionDrafts,
+                })
+              }
+              getNodeWidth={(node) =>
+                getWorkflowEditorNodeWidth(node, {
+                  objectConstructorExpressions: objectConstructorExpressionDrafts,
+                  objectConstructorExpression: () => {
+                    const workflowNode = documentContext.nodeById.get(node.id);
+                    return workflowNode
+                      ? formatWorkflowEditorObjectConstructorExpression(workflowNode)
+                      : undefined;
+                  },
+                })
+              }
               renderNodeBody={({ node }) => {
                 const workflowNode = documentContext.nodeById.get(node.id);
                 if (!workflowNode) return null;
@@ -4591,32 +4585,14 @@ function WorkflowWorkbenchNodeLayerStyles<TNodeData extends Record<string, unkno
   nodes,
   edges,
   portTypeColors,
-  objectConstructorExpressionDrafts,
   primaryNodeId,
 }: {
   nodes: Array<WorkflowEditorNode<TNodeData>>;
   edges: ReturnType<typeof toUiWorkflowBuilderEdges>;
   portTypeColors?: Readonly<Record<string, string>>;
-  objectConstructorExpressionDrafts?: Record<string, string>;
   primaryNodeId?: string;
 }) {
-  // The UI node body has no data-slot; constrain these overrides to its grid
-  // container so INPUTS/OUTPUTS labels stay hidden without affecting portals.
   const styles = [
-    `[data-slot="workbench-layout"] [data-slot="workflow-node"]:not([data-compact="true"]) > div.grid:not([data-slot]) > div > div:first-child { display: none !important; }`,
-    `[data-slot="workbench-layout"] [data-slot="workflow-node"][data-minimized="true"] { height: ${workflowEditorMinimizedNodeHeight}px !important; min-height: ${workflowEditorMinimizedNodeHeight}px !important; display: flex !important; flex-direction: row !important; align-items: stretch !important; }`,
-    `[data-slot="workbench-layout"] [data-slot="workflow-node"][data-minimized="true"] > [data-slot="workflow-node-header"] { position: relative !important; z-index: 10 !important; height: ${workflowEditorMinimizedNodeHeight}px !important; min-height: ${workflowEditorMinimizedNodeHeight}px !important; flex: 1 1 auto !important; border-bottom: 0 !important; border-radius: inherit !important; padding: 6px 8px !important; }`,
-    `[data-slot="workbench-layout"] [data-slot="workflow-node"][data-minimized="true"] [data-slot="workflow-node-header"] > div { align-items: center !important; }`,
-    `[data-slot="workbench-layout"] [data-slot="workflow-node"][data-minimized="true"] [data-slot="workflow-node-header"] > div > div:last-child { margin-top: 0 !important; }`,
-    `[data-slot="workbench-layout"] [data-slot="workflow-node"][data-minimized="true"] [data-slot="workflow-node-select"] > div + div { display: none !important; }`,
-    `[data-slot="workbench-layout"] [data-slot="workflow-node"][data-minimized="true"] [data-slot="workflow-node-minimize"] { position: relative !important; z-index: 20 !important; }`,
-    `[data-slot="workbench-layout"] [data-slot="workflow-node"][data-minimized="true"] > [data-slot="workflow-node-minimized-ports"] { position: absolute !important; inset: 0 !important; z-index: 30 !important; height: auto !important; border-top: 0 !important; background: transparent !important; pointer-events: none !important; }`,
-    `[data-slot="workbench-layout"] [data-slot="workflow-node"][data-minimized="true"] > [data-slot="workflow-node-minimized-ports"] > div { display: none !important; }`,
-    `[data-slot="workbench-layout"] [data-slot="workflow-node"][data-minimized="true"] > [data-slot="workflow-node-minimized-ports"] > [data-slot="workflow-node-port"] { z-index: 40 !important; width: 12px !important; height: 12px !important; border-radius: 9999px !important; pointer-events: auto !important; transform: translateY(-50%) !important; }`,
-    `[data-slot="workbench-layout"] [data-slot="workflow-node"][data-minimized="true"] > [data-slot="workflow-node-minimized-ports"] > [data-slot="workflow-node-port"][data-port-direction="input"] { left: -6px !important; }`,
-    `[data-slot="workbench-layout"] [data-slot="workflow-node"][data-minimized="true"] > [data-slot="workflow-node-minimized-ports"] > [data-slot="workflow-node-port"][data-port-direction="output"] { right: -6px !important; }`,
-    `[data-slot="workbench-layout"] [data-slot="workflow-node"][data-minimized="true"] > [data-slot="workflow-node-minimized-ports"] [data-slot="workflow-node-port-dot"] { display: block !important; width: 100% !important; height: 100% !important; border-radius: 9999px !important; }`,
-    `[data-slot="workbench-layout"] [data-slot="workflow-node"][data-compact="true"] [data-slot="workflow-node-port"] { z-index: 0 !important; }`,
     ...edges.flatMap((edge) => {
       const color = (edge as { color?: unknown }).color;
       if (typeof color !== "string" || !isSafeWorkflowEditorCssValue(color)) {
@@ -4633,64 +4609,6 @@ function WorkflowWorkbenchNodeLayerStyles<TNodeData extends Record<string, unkno
       const uiNode = toUiWorkflowBuilderNodes([node], undefined, { portTypeColors })[0]!;
 
       rules.push(...getWorkflowEditorPortColorRules(selector, uiNode));
-
-      if (isWorkflowEditorJsonNode(node)) {
-        rules.push(
-          `${selector} [data-slot="workflow-node-port"] > div > span:nth-of-type(3) > span:first-child { display: none !important; }`,
-        );
-      }
-
-      if ((node.inputs ?? []).length === 0) {
-        rules.push(
-          `${selector} [data-slot="workflow-node"]:not([data-compact="true"]):not([data-minimized="true"]) > div.grid:not([data-slot]) { grid-template-columns: minmax(0, 1fr) !important; }`,
-          `${selector} [data-slot="workflow-node"]:not([data-compact="true"]):not([data-minimized="true"]) > div.grid:not([data-slot]) > div:first-child { display: none !important; }`,
-        );
-      }
-
-      if (isWorkflowEditorJsonPrimitiveNode(node)) {
-        const width = getWorkflowEditorMinimizedNodeWidth(uiNode);
-        rules.push(
-          `${selector}, ${selector} > [data-slot="workflow-node"] { width: ${width}px !important; }`,
-          `${selector} [data-slot="workflow-node"]:not([data-minimized="true"]) [data-slot="workflow-node-port"][data-port-direction="output"][data-port-id="value"] > div > div > div:first-child { display: none !important; }`,
-          `${selector} [data-slot="workflow-node"]:not([data-minimized="true"]) [data-slot="workflow-node-port"][data-port-direction="output"][data-port-id="value"] > div > span:nth-of-type(2) { display: none !important; }`,
-          `${selector} [data-slot="workflow-node"][data-minimized="true"] [data-slot="workflow-node-select"] > div { visibility: hidden; }`,
-        );
-      }
-
-      if (uiNode.minimized === true && node.variant !== "compact") {
-        const width = getWorkflowEditorMinimizedNodeWidth(uiNode);
-        rules.push(
-          `${selector}, ${selector} > [data-slot="workflow-node"] { width: ${width}px !important; }`,
-        );
-      }
-
-      if (isWorkflowEditorObjectConstructorNode(node) && node.minimized !== true) {
-        const expressionDraft = objectConstructorExpressionDrafts?.[node.id];
-        const validationMessage =
-          expressionDraft === undefined
-            ? undefined
-            : validateWorkflowEditorObjectConstructorExpression(expressionDraft)[0]?.message;
-        const width = getWorkflowEditorObjectConstructorRenderedWidth(
-          uiNode,
-          expressionDraft,
-          validationMessage,
-        );
-        const height = getWorkflowEditorRenderedNodeSize(uiNode, {
-          objectConstructorExpression: expressionDraft,
-          objectConstructorValidationMessage: validationMessage,
-        }).height;
-        const outputPanelHeight = getWorkflowEditorObjectConstructorOutputPanelHeight(
-          uiNode,
-          expressionDraft,
-          validationMessage,
-        );
-        rules.push(
-          `${selector}, ${selector} > [data-slot="workflow-node"] { width: ${width}px !important; }`,
-          `${selector} { height: ${height}px !important; }`,
-          `${selector} > [data-slot="workflow-node"] { height: ${height}px !important; }`,
-          `${selector} [data-slot="workflow-node-port"][data-port-direction="output"][data-port-id="value"] { height: ${outputPanelHeight}px !important; min-height: ${outputPanelHeight}px !important; }`,
-        );
-      }
 
       return rules.join("\n");
     }),
@@ -4755,12 +4673,6 @@ function cssAttributeValue(value: string) {
 
 function getWorkflowEditorNodeLayerIndex(index: number, nodeId: string, primaryNodeId?: string) {
   return nodeId === primaryNodeId ? 10000 : index * 2 + 1;
-}
-
-function isWorkflowEditorDetachedNodeControlVisible<TNodeData extends Record<string, unknown>>(
-  node: WorkflowEditorNode<TNodeData>,
-) {
-  return toUiWorkflowBuilderNodes([node])[0]?.minimized !== true;
 }
 
 function WorkflowNodeRenameControl<TNodeData extends Record<string, unknown>>({
@@ -4866,14 +4778,6 @@ type WorkflowGroupOverlayDragState = {
 };
 
 /** Expression editor (with room for a validation message while drafting) plus the add action. */
-function workflowObjectConstructorBodyHeight(draft: string | undefined) {
-  const invalid =
-    draft !== undefined && validateWorkflowEditorObjectConstructorExpression(draft).length > 0;
-  return workflowDynamicPortBodyHeight + (invalid ? 92 : 72);
-}
-
-/** Body height reserved for an expanded JSON value node's editor. */
-const workflowJsonPrimitiveBodyHeight = 48;
 
 function WorkflowJsonPrimitiveNodeValueControl<TNodeData extends Record<string, unknown>>({
   node,
@@ -5268,7 +5172,7 @@ function getWorkflowEditorRenderedGroupBounds<
   }
 
   const boxes = nodes.map((node) => {
-    const size = getWorkflowEditorRenderedNodeSize(toUiWorkflowBuilderNodes([node])[0]!);
+    const size = getWorkflowEditorRenderedNodeSize(node);
     return {
       left: node.x,
       top: node.y,
@@ -5555,7 +5459,7 @@ export function WorkflowSelectionOverlay<
       {document.nodes
         .filter((node) => selectedNodeIds.has(node.id))
         .map((node) => {
-          const size = getWorkflowEditorRenderedNodeSize(toUiWorkflowBuilderNodes([node])[0]!);
+          const size = getWorkflowEditorRenderedNodeSize(node);
           return (
             <div
               key={node.id}
@@ -5593,18 +5497,6 @@ function normalizeRect(rect: WorkflowSelectionMarquee) {
     right: Math.max(rect.startX, rect.currentX),
     bottom: Math.max(rect.startY, rect.currentY),
   };
-}
-
-function rectsIntersect(
-  left: { left: number; top: number; right: number; bottom: number },
-  right: { left: number; top: number; right: number; bottom: number },
-) {
-  return (
-    left.left <= right.right &&
-    left.right >= right.left &&
-    left.top <= right.bottom &&
-    left.bottom >= right.top
-  );
 }
 
 function isEditableEventTarget(target: EventTarget | null) {
@@ -5738,12 +5630,6 @@ function isWorkflowEditorJsonPrimitiveNode<TData>(
     node.kind === "json.number" ||
     node.kind === "json.boolean" ||
     node.kind === "json.null"
-  );
-}
-
-function isWorkflowEditorJsonNode<TData>(node: WorkflowEditorNode<TData>) {
-  return (
-    node.category === "JSON" || (typeof node.kind === "string" && node.kind.startsWith("json."))
   );
 }
 

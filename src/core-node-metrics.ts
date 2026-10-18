@@ -1,10 +1,8 @@
 import { getGraphEditorNodeSize } from "@moritzbrantner/graph-editor/layout";
 
+import { formatWorkflowEditorObjectConstructorExpression } from "./core";
+import { createWorkflowEditorNodeLayoutOptions } from "./core-node-layout";
 import type { WorkflowEditorNode } from "./core-types";
-import {
-  getWorkflowEditorMinimizedNodeWidth,
-  workflowEditorMinimizedNodeHeight,
-} from "./core-rendered-node-size";
 
 export function formatWorkflowEditorJsonPrimitiveNodeValue<TData>(
   node: WorkflowEditorNode<TData>,
@@ -32,7 +30,7 @@ export function toWorkflowEditorNodeMetrics<TData = Record<string, unknown>>(
   const minimized = node.minimized ?? (jsonPrimitiveValue === undefined ? undefined : true);
 
   return {
-    description: jsonPrimitiveValue === undefined ? node.description : undefined,
+    // The canvas node face shows no description (#47), so layout reserves no room for one.
     inputs: node.inputs,
     kind: node.kind,
     label: node.label,
@@ -47,19 +45,19 @@ export function toWorkflowEditorNodeMetrics<TData = Record<string, unknown>>(
   };
 }
 
+/** Layout size from the same geometry model as the canvas (#48). */
 export function getWorkflowEditorLayoutNodeSize<TData = Record<string, unknown>>(
   node: WorkflowEditorNode<TData>,
 ) {
-  const metrics = toWorkflowEditorNodeMetrics(node);
-
-  if (node.minimized === true && node.variant !== "compact") {
-    return {
-      width: getWorkflowEditorMinimizedNodeWidth(metrics),
-      height: workflowEditorMinimizedNodeHeight,
-    };
-  }
-
-  return getGraphEditorNodeSize(metrics);
+  return getGraphEditorNodeSize(
+    { ...toWorkflowEditorNodeMetrics(node), id: node.id } as Parameters<
+      typeof getGraphEditorNodeSize
+    >[0],
+    createWorkflowEditorNodeLayoutOptions({
+      objectConstructorExpression: () =>
+        formatWorkflowEditorObjectConstructorExpression(node as WorkflowEditorNode),
+    }),
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

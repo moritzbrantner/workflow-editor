@@ -6,27 +6,15 @@ import {
   validateWorkflowEditorConnection,
   type WorkflowEditorDocument,
   type WorkflowEditorNode,
-  type WorkflowEditorPortType,
   type WorkflowEditorTypeDefinition,
 } from "./core";
 import { toUiWorkflowBuilderNodes } from "./react/workflow-builder-adapters";
 import {
-  getWorkflowEditorMinimizedNodeWidth,
-  workflowEditorMinimizedNodeHeight,
-} from "./core-rendered-node-size";
+  createWorkflowEditorNodeLayoutOptions,
+  type WorkflowEditorNodeLayoutDrafts,
+} from "./core-node-layout";
 
 const workflowEditorSnapDistance = 28;
-const workflowEditorObjectConstructorMinNodeWidth = 460;
-const workflowEditorNodePortHeight = 64;
-const workflowEditorNodePortGap = 8;
-const workflowEditorObjectConstructorMinOutputPanelHeight = 148;
-const workflowEditorObjectConstructorValidationHeight = 20;
-
-type WorkflowEditorObjectConstructorLayoutOptions = {
-  objectConstructorExpression?: string;
-  objectConstructorValidationMessage?: string;
-  showPortColumnHeaders?: boolean;
-};
 
 type WorkflowEditorPoint = {
   x: number;
@@ -226,182 +214,45 @@ function getWorkflowEditorPortCenter<TNodeData extends Record<string, unknown>>(
     return null;
   }
 
-  const uiNode = toUiWorkflowBuilderNodes([node])[0]!;
-  const size = getWorkflowEditorRenderedNodeSize(uiNode);
+  const size = getWorkflowEditorRenderedNodeSize(node);
 
   return {
     x: node.x + (direction === "input" ? 0 : size.width),
-    y: node.y + getWorkflowEditorPortCenterOffset(uiNode, direction, portIndex),
+    y: node.y + getWorkflowEditorPortCenterOffset(node, direction, portIndex),
   };
 }
 
-export function getWorkflowEditorRenderedNodeSize(
-  node: ReturnType<typeof toUiWorkflowBuilderNodes>[number],
-  options: WorkflowEditorObjectConstructorLayoutOptions = {},
+function workflowEditorNodeLayoutOptions(
+  node: WorkflowEditorNode<unknown>,
+  drafts: WorkflowEditorNodeLayoutDrafts,
 ) {
-  if (node.minimized === true && node.variant !== "compact") {
-    return {
-      width: getWorkflowEditorMinimizedNodeWidth(node),
-      height: workflowEditorMinimizedNodeHeight,
-    };
-  }
-
-  const size = getWorkflowNodeSize(node, {
-    showPortColumnHeaders: options.showPortColumnHeaders,
+  return createWorkflowEditorNodeLayoutOptions({
+    objectConstructorExpression: () =>
+      formatWorkflowEditorObjectConstructorExpression(node as WorkflowEditorNode),
+    ...drafts,
   });
+}
 
-  if (node.kind === "json.object") {
-    return {
-      ...size,
-      height: Math.max(
-        size.height,
-        getWorkflowEditorObjectConstructorRenderedHeight(node, size, options),
-      ),
-      width: Math.max(
-        size.width,
-        getWorkflowEditorObjectConstructorRenderedWidth(
-          node,
-          options.objectConstructorExpression,
-          options.objectConstructorValidationMessage,
-        ),
-      ),
-    };
-  }
-
-  return size;
+/** The node's rendered size, from the same geometry model as the canvas (#48). */
+export function getWorkflowEditorRenderedNodeSize(
+  node: WorkflowEditorNode<unknown>,
+  drafts: WorkflowEditorNodeLayoutDrafts = {},
+) {
+  const uiNode = toUiWorkflowBuilderNodes([node])[0]!;
+  return getWorkflowNodeSize(uiNode, workflowEditorNodeLayoutOptions(node, drafts));
 }
 
 export function getWorkflowEditorPortCenterOffset(
-  node: ReturnType<typeof toUiWorkflowBuilderNodes>[number],
+  node: WorkflowEditorNode<unknown>,
   direction: "input" | "output",
   portIndex: number,
-  options: WorkflowEditorObjectConstructorLayoutOptions = {},
+  drafts: WorkflowEditorNodeLayoutDrafts = {},
 ) {
-  if (node.minimized === true && node.variant !== "compact") {
-    const portCount =
-      direction === "input" ? (node.inputs?.length ?? 0) : (node.outputs?.length ?? 0);
-    return ((portIndex + 1) / (portCount + 1)) * workflowEditorMinimizedNodeHeight;
-  }
-
-  const offset = getWorkflowNodePortCenterOffset(node, portIndex, {
-    showPortColumnHeaders: options.showPortColumnHeaders,
-  });
-
-  if (
-    node.kind === "json.object" &&
-    direction === "output" &&
-    node.outputs?.[portIndex]?.id === "value"
-  ) {
-    return (
-      offset -
-      workflowEditorNodePortHeight / 2 +
-      getWorkflowEditorObjectConstructorOutputPanelHeight(
-        node,
-        options.objectConstructorExpression,
-        options.objectConstructorValidationMessage,
-      ) /
-        2
-    );
-  }
-
-  return offset;
-}
-
-export function getWorkflowEditorObjectConstructorRenderedWidth(
-  node: ReturnType<typeof toUiWorkflowBuilderNodes>[number],
-  expressionOverride?: string,
-  validationMessage?: string,
-) {
-  const expression = expressionOverride ?? getWorkflowEditorObjectConstructorExpression(node);
-  const longestLine = Math.max(
-    ...expression.split("\n").map((line) => line.length),
-    validationMessage?.length ?? 0,
-    0,
+  const uiNode = toUiWorkflowBuilderNodes([node])[0]!;
+  return getWorkflowNodePortCenterOffset(
+    uiNode,
+    portIndex,
+    workflowEditorNodeLayoutOptions(node, drafts),
+    direction,
   );
-  const expressionWidth = 260 + Math.max(0, longestLine - 24) * 6;
-
-  return Math.max(workflowEditorObjectConstructorMinNodeWidth, expressionWidth);
-}
-
-export function getWorkflowEditorObjectConstructorOutputPanelHeight(
-  node: ReturnType<typeof toUiWorkflowBuilderNodes>[number],
-  expressionOverride?: string,
-  validationMessage?: string,
-) {
-  const expression = expressionOverride ?? getWorkflowEditorObjectConstructorExpression(node);
-  const lineCount = Math.max(3, expression.split("\n").length);
-  const validationHeight = validationMessage ? workflowEditorObjectConstructorValidationHeight : 0;
-  const expressionHeight = 58 + lineCount * 16 + validationHeight;
-
-  return Math.max(workflowEditorObjectConstructorMinOutputPanelHeight, expressionHeight);
-}
-
-export function getWorkflowEditorObjectConstructorTextAreaHeight(
-  node: ReturnType<typeof toUiWorkflowBuilderNodes>[number],
-  expressionOverride?: string,
-  validationMessage?: string,
-) {
-  const validationHeight = validationMessage ? workflowEditorObjectConstructorValidationHeight : 0;
-
-  return Math.max(
-    76,
-    getWorkflowEditorObjectConstructorOutputPanelHeight(
-      node,
-      expressionOverride,
-      validationMessage,
-    ) -
-      52 -
-      validationHeight,
-  );
-}
-
-function getWorkflowEditorObjectConstructorRenderedHeight(
-  node: ReturnType<typeof toUiWorkflowBuilderNodes>[number],
-  size: { height: number },
-  options: WorkflowEditorObjectConstructorLayoutOptions = {},
-) {
-  const inputCount = node.inputs?.length ?? 0;
-  const outputCount = node.outputs?.length ?? 0;
-  const portCount = Math.max(inputCount, outputCount, 1);
-  const currentPortColumnHeight =
-    portCount * workflowEditorNodePortHeight +
-    Math.max(portCount - 1, 0) * workflowEditorNodePortGap;
-  const expandedOutputHeight = getWorkflowEditorObjectConstructorOutputPanelHeight(
-    node,
-    options.objectConstructorExpression,
-    options.objectConstructorValidationMessage,
-  );
-
-  return size.height + Math.max(0, expandedOutputHeight - currentPortColumnHeight);
-}
-
-function getWorkflowEditorObjectConstructorExpression(
-  node: ReturnType<typeof toUiWorkflowBuilderNodes>[number],
-) {
-  return formatWorkflowEditorObjectConstructorExpression({
-    id: node.id,
-    label: node.label,
-    kind: node.kind,
-    x: node.x,
-    y: node.y,
-    inputs: node.inputs?.map((input) => ({
-      ...input,
-      type: getWorkflowEditorPortTypeFromMetadata(input) ?? { kind: "any" },
-    })),
-    outputs: node.outputs?.map((output) => ({
-      ...output,
-      type: getWorkflowEditorPortTypeFromMetadata(output) ?? { kind: "any" },
-    })),
-    data: node.metadata,
-  });
-}
-
-function getWorkflowEditorPortTypeFromMetadata(
-  port: NonNullable<ReturnType<typeof toUiWorkflowBuilderNodes>[number]["inputs"]>[number],
-): WorkflowEditorPortType | null {
-  const metadataType = port.metadata?.workflowEditorType;
-
-  return metadataType && typeof metadataType === "object" && "kind" in metadataType
-    ? (metadataType as WorkflowEditorPortType)
-    : null;
 }
