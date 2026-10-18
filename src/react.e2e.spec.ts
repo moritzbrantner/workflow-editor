@@ -446,32 +446,22 @@ test.describe("WorkflowWorkbench desktop", () => {
     expect(expandedNodeBox).not.toBeNull();
     expect(outputCardBox).not.toBeNull();
     expect(expandedNodeBox!.width).toBeLessThanOrEqual(240);
-    expect(expandedInputBox!.x + expandedInputBox!.width / 2).toBeGreaterThan(outputCardBox!.x);
-    expect(expandedInputBox!.x + expandedInputBox!.width / 2).toBeLessThan(
-      outputCardBox!.x + outputCardBox!.width,
-    );
-    expect(expandedInputBox!.y + expandedInputBox!.height / 2).toBeGreaterThan(outputCardBox!.y);
-    expect(expandedInputBox!.y + expandedInputBox!.height / 2).toBeLessThan(
-      outputCardBox!.y + outputCardBox!.height,
-    );
-    expect(expandedInputBox!.y).toBeGreaterThanOrEqual(outputCardBox!.y);
-    expect(expandedInputBox!.y + expandedInputBox!.height).toBeLessThanOrEqual(
-      outputCardBox!.y + outputCardBox!.height,
-    );
-    expect(
-      Math.abs(
-        expandedInputBox!.x +
-          expandedInputBox!.width / 2 -
-          (outputCardBox!.x + outputCardBox!.width / 2),
+    // Expanded, the editor sits natively in the node body between the header and the ports.
+    await expect(
+      page.locator(
+        '[data-slot="workflow-builder-node"][data-node-id="json-string"] [data-slot="graph-node-body"]',
       ),
-    ).toBeLessThanOrEqual(1.5);
+    ).toContainText("");
     expect(
-      Math.abs(
-        expandedInputBox!.y +
-          expandedInputBox!.height / 2 -
-          (outputCardBox!.y + outputCardBox!.height / 2),
+      await valueInput.evaluate((element) =>
+        Boolean(element.closest('[data-slot="graph-node-body"]')),
       ),
-    ).toBeLessThanOrEqual(1.5);
+    ).toBe(true);
+    expect(expandedInputBox!.x).toBeGreaterThanOrEqual(expandedNodeBox!.x);
+    expect(expandedInputBox!.x + expandedInputBox!.width).toBeLessThanOrEqual(
+      expandedNodeBox!.x + expandedNodeBox!.width,
+    );
+    expect(expandedInputBox!.y + expandedInputBox!.height).toBeLessThanOrEqual(outputCardBox!.y);
 
     await page.getByRole("button", { name: "Minimize String", exact: true }).click();
     await expect(valueInput).toBeVisible();
