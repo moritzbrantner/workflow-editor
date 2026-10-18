@@ -681,6 +681,9 @@ export function formatWorkflowEditorObjectDecompositionExpression<TNodeData = Re
 // @public
 export function formatWorkflowEditorPortPayload(payload: WorkflowEditorPortPayload): string;
 
+// @public
+export function formatWorkflowExecutionDuration(durationMs: number): string;
+
 // @public (undocumented)
 export function fromUiWorkflowBuilderEdges<TData = Record<string, unknown>>(uiEdges: GraphCanvasEdge[], previousEdges: Array<WorkflowEditorEdge<TData>>): Array<WorkflowEditorEdge<TData>>;
 
@@ -721,6 +724,15 @@ export function getWorkflowEditorReferenceDiagnostics<TNodeData = Record<string,
     includeRecursive?: boolean;
     maxDepth?: number;
 }): WorkflowEditorReferenceDiagnostic[];
+
+// @public
+export function getWorkflowExecutionEdgeStatus(snapshot: WorkflowExecutionEdgeSnapshot): "idle" | "running" | "success" | "error";
+
+// @public
+export function getWorkflowExecutionNodeDuration(snapshot: WorkflowExecutionNodeSnapshot): number | undefined;
+
+// @public
+export function getWorkflowExecutionNodePresentation(snapshot: WorkflowExecutionNodeSnapshot): WorkflowExecutionPresentation;
 
 // @public (undocumented)
 export function hasWorkflowEditorNodeComposition<TNodeData = Record<string, unknown>>(node: WorkflowEditorNode<TNodeData>): node is WorkflowEditorNode<TNodeData> & {
@@ -2195,6 +2207,9 @@ export type WorkflowEditorProps<TNodeData extends Record<string, unknown> = Reco
     onSelectionChange?: (selection: WorkflowWorkbenchSelection<TNodeData, TEdgeData>) => void;
     renderNodeTemplate?: WorkflowWorkbenchProps<TNodeData, TEdgeData, TTemplateData>["renderNodeTemplate"];
     renderInspector?: WorkflowWorkbenchProps<TNodeData, TEdgeData, TTemplateData>["renderInspector"];
+    execution?: WorkflowWorkbenchProps<TNodeData, TEdgeData, TTemplateData>["execution"];
+    formatExecutionLabel?: WorkflowWorkbenchProps<TNodeData, TEdgeData, TTemplateData>["formatExecutionLabel"];
+    renderExecutionDetails?: WorkflowWorkbenchProps<TNodeData, TEdgeData, TTemplateData>["renderExecutionDetails"];
     renderToolbarActions?: (context: Parameters<NonNullable<WorkflowWorkbenchProps<TNodeData, TEdgeData, TTemplateData>["renderToolbarActions"]>>[0]) => ReactNode;
 };
 
@@ -2352,6 +2367,48 @@ export type WorkflowEditorWorkflowReference = {
 };
 
 // @public (undocumented)
+export type WorkflowExecutionEdgeSnapshot = {
+    state: WorkflowExecutionEdgeState;
+    summary?: string;
+};
+
+// @public (undocumented)
+export type WorkflowExecutionEdgeState = "idle" | "active" | "transferred" | "blocked" | (string & {});
+
+// @public (undocumented)
+export type WorkflowExecutionNodeSnapshot = {
+    state: WorkflowExecutionNodeState;
+    nodeRunId?: string;
+    attemptId?: string;
+    attempt?: number;
+    progress?: number;
+    startedAt?: string;
+    endedAt?: string;
+    durationMs?: number;
+    outputSummary?: string;
+    errorSummary?: string;
+};
+
+// @public
+export type WorkflowExecutionNodeState = "queued" | "running" | "succeeded" | "failed" | "skipped" | "cancelled" | "unknown" | (string & {});
+
+// @public
+export type WorkflowExecutionPresentation = {
+    status: "idle" | "running" | "success" | "error" | "warning";
+    tone: "neutral" | "info" | "success" | "error" | "warning";
+    label: string;
+};
+
+// @public (undocumented)
+export type WorkflowExecutionSnapshot = {
+    runId: string;
+    state?: WorkflowExecutionNodeState;
+    mode?: "live" | "historical";
+    nodes: Readonly<Record<string, WorkflowExecutionNodeSnapshot>>;
+    edges?: Readonly<Record<string, WorkflowExecutionEdgeSnapshot>>;
+};
+
+// @public (undocumented)
 export type WorkflowGraphOperation<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>, TPortType = WorkflowEditorPortType> = GraphEditorOperation<TNodeData, TEdgeData, TPortType>;
 
 // @public (undocumented)
@@ -2459,6 +2516,13 @@ export type WorkflowWorkbenchController<TNodeData extends Record<string, unknown
 export type WorkflowWorkbenchControllerProps<TNodeData extends Record<string, unknown> = Record<string, unknown>, TEdgeData extends Record<string, unknown> = Record<string, unknown>, TTemplateData = TNodeData> = WorkflowWorkbenchProps<TNodeData, TEdgeData, TTemplateData>;
 
 // @public (undocumented)
+export type WorkflowWorkbenchExecutionContext<TNodeData extends Record<string, unknown> = Record<string, unknown>> = {
+    execution: WorkflowExecutionSnapshot;
+    node: WorkflowEditorNode<TNodeData>;
+    snapshot?: WorkflowExecutionNodeSnapshot;
+};
+
+// @public (undocumented)
 export function WorkflowWorkbenchInspector<TNodeData extends Record<string, unknown> = Record<string, unknown>, TEdgeData extends Record<string, unknown> = Record<string, unknown>, TTemplateData = TNodeData>(input: {
     controller: WorkflowWorkbenchController<TNodeData, TEdgeData, TTemplateData>;
 }): react_jsx_runtime.JSX.Element;
@@ -2466,6 +2530,7 @@ export function WorkflowWorkbenchInspector<TNodeData extends Record<string, unkn
 // @public (undocumented)
 export type WorkflowWorkbenchInspectorContext<TNodeData extends Record<string, unknown> = Record<string, unknown>, TEdgeData extends Record<string, unknown> = Record<string, unknown>> = {
     document: WorkflowEditorDocument<TNodeData, TEdgeData>;
+    execution?: WorkflowExecutionSnapshot;
     documentReferences?: WorkflowEditorDocumentReferenceOption[];
     readOnly: boolean;
     selection: WorkflowEditorSelectionState;
@@ -2548,6 +2613,9 @@ export type WorkflowWorkbenchProps<TNodeData extends Record<string, unknown> = R
     onViewportChange?: (viewport: WorkflowEditorViewport) => void;
     onOpenWorkflowReference?: (node: WorkflowEditorNode<TNodeData>) => void;
     onCreateWorkflowReference?: (node: WorkflowEditorNode<TNodeData>) => void;
+    execution?: WorkflowExecutionSnapshot | null;
+    formatExecutionLabel?: (snapshot: WorkflowExecutionNodeSnapshot, node: WorkflowEditorNode<TNodeData>) => string;
+    renderExecutionDetails?: (context: WorkflowWorkbenchExecutionContext<TNodeData>) => ReactNode;
     renderNodeTemplate?: (template: WorkflowWorkbenchPaletteItem<TTemplateData>) => ReactNode;
     renderInspector?: (context: WorkflowWorkbenchInspectorContext<TNodeData, TEdgeData>) => ReactNode;
     renderToolbarActions?: (context: WorkflowWorkbenchInspectorContext<TNodeData, TEdgeData>) => ReactNode;
@@ -2571,11 +2639,11 @@ export function wouldCreateWorkflowEditorCycle<TNodeData = Record<string, unknow
 
 // Warnings were encountered during analysis:
 //
-// dist/core-template-registry-CMoU4Gla.d.ts:5:5 - (ae-forgotten-export) The symbol "WorkflowEditorNodeTemplateDiagnosticCode" needs to be exported by the entry point index.d.ts
+// dist/core-execution-Dl1aOYPA.d.ts:5:5 - (ae-forgotten-export) The symbol "WorkflowEditorNodeTemplateDiagnosticCode" needs to be exported by the entry point index.d.ts
 // dist/editor.d.ts:47:5 - (ae-forgotten-export) The symbol "ChromeController" needs to be exported by the entry point index.d.ts
-// dist/editor.d.ts:260:5 - (ae-forgotten-export) The symbol "WorkflowEditorStorageRecovery" needs to be exported by the entry point index.d.ts
-// dist/react.d.ts:128:9 - (ae-forgotten-export) The symbol "WorkflowWorkbenchPaletteCategoryGroup" needs to be exported by the entry point index.d.ts
-// dist/react.d.ts:135:9 - (ae-forgotten-export) The symbol "WorkflowWorkbenchOverlayPosition" needs to be exported by the entry point index.d.ts
+// dist/editor.d.ts:264:5 - (ae-forgotten-export) The symbol "WorkflowEditorStorageRecovery" needs to be exported by the entry point index.d.ts
+// dist/react.d.ts:135:9 - (ae-forgotten-export) The symbol "WorkflowWorkbenchPaletteCategoryGroup" needs to be exported by the entry point index.d.ts
+// dist/react.d.ts:142:9 - (ae-forgotten-export) The symbol "WorkflowWorkbenchOverlayPosition" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 
