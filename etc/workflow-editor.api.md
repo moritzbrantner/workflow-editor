@@ -2798,6 +2798,7 @@ export type WorkflowEditorProps<TNodeData extends Record<string, unknown> = Reco
     renderInspector?: WorkflowWorkbenchProps<TNodeData, TEdgeData, TTemplateData>["renderInspector"];
     execution?: WorkflowWorkbenchProps<TNodeData, TEdgeData, TTemplateData>["execution"];
     triggerActivation?: WorkflowWorkbenchProps<TNodeData, TEdgeData, TTemplateData>["triggerActivation"];
+    humanTasks?: WorkflowWorkbenchProps<TNodeData, TEdgeData, TTemplateData>["humanTasks"];
     onRunWorkflow?: (values: Record<string, unknown>, profile: WorkflowEditorInputProfile | undefined) => void;
     inspectorFieldRenderers?: WorkflowWorkbenchProps<TNodeData, TEdgeData, TTemplateData>["inspectorFieldRenderers"];
     formatExecutionLabel?: WorkflowWorkbenchProps<TNodeData, TEdgeData, TTemplateData>["formatExecutionLabel"];
@@ -3349,6 +3350,7 @@ export type WorkflowWorkbenchProps<TNodeData extends Record<string, unknown> = R
     nodeTemplates?: ReadonlyArray<WorkflowWorkbenchPaletteItem<TTemplateData>>;
     triggerActivation?: WorkflowWorkbenchTriggerActivation;
     inputProfiles?: WorkflowWorkbenchInputProfiles;
+    humanTasks?: WorkflowWorkbenchHumanTasks;
     inspectorFieldRenderers?: WorkflowWorkbenchInspectorFieldRenderers;
     typeDefinitions?: readonly WorkflowEditorTypeDefinition[];
     documentReferences?: WorkflowEditorDocumentReferenceOption[];
@@ -3399,21 +3401,22 @@ export function writeWorkflowEditorFieldPath<T extends Record<string, unknown>>(
 // Warnings were encountered during analysis:
 //
 // dist/core-execution-CGmd-Aon.d.ts:5:5 - (ae-forgotten-export) The symbol "WorkflowEditorNodeTemplateDiagnosticCode" needs to be exported by the entry point index.d.ts
-// dist/editor.d.ts:181:5 - (ae-forgotten-export) The symbol "ChromeController" needs to be exported by the entry point index.d.ts
-// dist/editor.d.ts:299:5 - (ae-forgotten-export) The symbol "WorkflowEditorBundleActions" needs to be exported by the entry point index.d.ts
-// dist/editor.d.ts:299:5 - (ae-forgotten-export) The symbol "WorkflowEditorComparisonActions" needs to be exported by the entry point index.d.ts
-// dist/editor.d.ts:299:5 - (ae-forgotten-export) The symbol "WorkflowEditorDocumentTabActions" needs to be exported by the entry point index.d.ts
-// dist/editor.d.ts:420:5 - (ae-forgotten-export) The symbol "WorkflowEditorBundleImportState" needs to be exported by the entry point index.d.ts
-// dist/editor.d.ts:421:5 - (ae-forgotten-export) The symbol "WorkflowEditorBundleError" needs to be exported by the entry point index.d.ts
-// dist/editor.d.ts:422:5 - (ae-forgotten-export) The symbol "WorkflowEditorDocumentTab" needs to be exported by the entry point index.d.ts
-// dist/editor.d.ts:423:5 - (ae-forgotten-export) The symbol "WorkflowEditorComparisonState" needs to be exported by the entry point index.d.ts
-// dist/editor.d.ts:424:5 - (ae-forgotten-export) The symbol "WorkflowEditorPendingRestore" needs to be exported by the entry point index.d.ts
-// dist/editor.d.ts:425:5 - (ae-forgotten-export) The symbol "WorkflowEditorStorageRecovery" needs to be exported by the entry point index.d.ts
-// dist/editor.d.ts:460:9 - (ae-forgotten-export) The symbol "WorkflowEditorComparisonSide" needs to be exported by the entry point index.d.ts
-// dist/react.d.ts:153:5 - (ae-forgotten-export) The symbol "WorkflowWorkbenchTriggerActivation" needs to be exported by the entry point index.d.ts
-// dist/react.d.ts:155:5 - (ae-forgotten-export) The symbol "WorkflowWorkbenchInputProfiles" needs to be exported by the entry point index.d.ts
-// dist/react.d.ts:179:9 - (ae-forgotten-export) The symbol "WorkflowWorkbenchPaletteCategoryGroup" needs to be exported by the entry point index.d.ts
-// dist/react.d.ts:186:9 - (ae-forgotten-export) The symbol "WorkflowWorkbenchOverlayPosition" needs to be exported by the entry point index.d.ts
+// dist/editor.d.ts:182:5 - (ae-forgotten-export) The symbol "ChromeController" needs to be exported by the entry point index.d.ts
+// dist/editor.d.ts:300:5 - (ae-forgotten-export) The symbol "WorkflowEditorBundleActions" needs to be exported by the entry point index.d.ts
+// dist/editor.d.ts:300:5 - (ae-forgotten-export) The symbol "WorkflowEditorComparisonActions" needs to be exported by the entry point index.d.ts
+// dist/editor.d.ts:300:5 - (ae-forgotten-export) The symbol "WorkflowEditorDocumentTabActions" needs to be exported by the entry point index.d.ts
+// dist/editor.d.ts:423:5 - (ae-forgotten-export) The symbol "WorkflowEditorBundleImportState" needs to be exported by the entry point index.d.ts
+// dist/editor.d.ts:424:5 - (ae-forgotten-export) The symbol "WorkflowEditorBundleError" needs to be exported by the entry point index.d.ts
+// dist/editor.d.ts:425:5 - (ae-forgotten-export) The symbol "WorkflowEditorDocumentTab" needs to be exported by the entry point index.d.ts
+// dist/editor.d.ts:426:5 - (ae-forgotten-export) The symbol "WorkflowEditorComparisonState" needs to be exported by the entry point index.d.ts
+// dist/editor.d.ts:427:5 - (ae-forgotten-export) The symbol "WorkflowEditorPendingRestore" needs to be exported by the entry point index.d.ts
+// dist/editor.d.ts:428:5 - (ae-forgotten-export) The symbol "WorkflowEditorStorageRecovery" needs to be exported by the entry point index.d.ts
+// dist/editor.d.ts:463:9 - (ae-forgotten-export) The symbol "WorkflowEditorComparisonSide" needs to be exported by the entry point index.d.ts
+// dist/react.d.ts:178:5 - (ae-forgotten-export) The symbol "WorkflowWorkbenchTriggerActivation" needs to be exported by the entry point index.d.ts
+// dist/react.d.ts:180:5 - (ae-forgotten-export) The symbol "WorkflowWorkbenchInputProfiles" needs to be exported by the entry point index.d.ts
+// dist/react.d.ts:204:9 - (ae-forgotten-export) The symbol "WorkflowWorkbenchPaletteCategoryGroup" needs to be exported by the entry point index.d.ts
+// dist/react.d.ts:211:9 - (ae-forgotten-export) The symbol "WorkflowWorkbenchOverlayPosition" needs to be exported by the entry point index.d.ts
+// dist/react.d.ts:286:5 - (ae-forgotten-export) The symbol "WorkflowWorkbenchHumanTasks" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 
