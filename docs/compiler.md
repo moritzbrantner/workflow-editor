@@ -14,6 +14,33 @@ The compiler emits `@moritzbrantner/workflow/compiled` version 1: a deterministi
 
 Version 1 rejects nested workflow references and embedded compositions instead of giving them implicit runtime semantics. Those features can receive explicit compilation semantics in a later contract version without coupling the runner to editor internals.
 
+## Composed nodes (#19)
+
+By default (`compositions: "reject"`) a composed node, meaning a non-iteration node with an embedded
+`composition`, reports `composition-not-supported`. The host can choose another mode:
+
+```ts
+compileWorkflowEditorDocument(document, { compositions: "expand" }); // or "opaque"
+```
+
+- **`opaque`:** the composed node compiles as one ordinary node with its own `kind`, ports and
+  `data`. The embedded subgraph is not in the output, so the host executes that kind as a black box.
+- **`expand`:** the embedded subgraph is inlined, including composed nodes nested in other composed
+  nodes or in iteration bodies.
+  - Inner nodes and edges get addresses `<composed id>/<inner id>`, for example
+    `outer/inner/double`.
+  - Connections to a wrapper input are rewired to every input boundary of that port. Extra fan-out
+    edges get ids `<edge id>#<n>`.
+  - Connections from a wrapper output start at that port's output boundary.
+  - Types, cardinality and the DAG are validated on the expanded graph, so a mismatch behind a
+    wrapper port is reported on the rewired edge.
+
+Expanded output is ordinary compiled v1 (or v2 with iterations), so a runner needs no new
+concepts. Provenance is kept in the source map: `createCompiledWorkflowSourceMap` maps
+`outer/inner/double` to `nodes.outer.composition.nodes.inner.composition.nodes.double`. Authored
+ids should not contain `/`. `expandWorkflowEditorCompositions(document)` returns the expanded
+document without compiling it. The shared fixture is `fixtures/compiled-v1-composed-expanded.json`.
+
 Compiled ports carry their declared `cardinality` and delivery `payload` (see [port payloads](port-payloads.md)). Ports without them omit the fields, so existing version 1 consumers and fixtures are unaffected.
 
 ## Version 3: Workflow References (TECH-005, #95)
@@ -150,7 +177,7 @@ with its own `iteration` contract, and every nesting level validates its own fin
 to completion for each outer iteration. The shared fixture is
 `fixtures/compiled-v2-nested-iteration.json`. A nested iteration's required inputs must be fed by a body edge or an outer-body
 input boundary; otherwise compilation reports `iteration-input-unconnected`. Composed nodes inside
-bodies are still rejected.
+bodies follow the `compositions` mode (see Composed nodes).
 
 ### Workflow References in bodies (#95, #97)
 
