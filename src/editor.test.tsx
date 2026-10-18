@@ -293,6 +293,36 @@ describe("@moritzbrantner/workflow-editor editor shell", () => {
     expect(screen.getByTestId("save-state").textContent).toBe("Save error");
   });
 
+  test("keeps the save badge on the import error while an in-flight save completes", async () => {
+    let finishSave: (() => void) | undefined;
+    const saveLibrary = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finishSave = resolve;
+        }),
+    );
+
+    render(
+      <WorkflowEditor
+        storage={{ loadLibrary: vi.fn(async () => ({ status: "empty" as const })), saveLibrary }}
+        onError={vi.fn()}
+      />,
+    );
+    // The initial save is still pending when the import is rejected.
+    await waitFor(() => expect(saveLibrary).toHaveBeenCalled());
+    fireEvent.change(screen.getByLabelText("Import workflow JSON"), {
+      target: { files: [new File(["{not json"], "broken.json", { type: "application/json" })] },
+    });
+    await screen.findByRole("alert");
+    expect(screen.getByTestId("save-state").textContent).toBe("Save error");
+
+    await act(async () => finishSave?.());
+    expect(screen.getByTestId("save-state").textContent).toBe("Save error");
+
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(screen.getByTestId("save-state").textContent).toBe("Saved");
+  });
+
   test("explains a rejected import until it is dismissed", async () => {
     const handleError = vi.fn();
     const saveLibrary = vi.fn(async () => {});
