@@ -270,3 +270,97 @@ export const ExecutionMixed: Story = {
     />
   ),
 };
+
+const allFieldKindsTemplate = {
+  id: "story-all-field-kinds",
+  label: "Configured task",
+  kind: "story.configured",
+  inspectorFields: [
+    { path: "name", label: "Name", kind: "text" as const, required: true },
+    { path: "retries", label: "Retries", kind: "number" as const, min: 0, max: 5, defaultValue: 1 },
+    { path: "enabled", label: "Enabled", kind: "boolean" as const, defaultValue: true },
+    {
+      path: "mode",
+      label: "Mode",
+      kind: "select" as const,
+      defaultValue: "fast",
+      options: [
+        { label: "Fast", value: "fast" },
+        { label: "Thorough", value: "thorough" },
+      ],
+    },
+    {
+      path: "regions",
+      label: "Regions",
+      kind: "multi-select" as const,
+      options: [
+        { label: "EU", value: "eu" },
+        { label: "US", value: "us" },
+      ],
+    },
+    { path: "payload", label: "Payload", kind: "json" as const },
+    {
+      path: "filter",
+      label: "Filter",
+      kind: "expression" as const,
+      placeholder: "item.amount > 0",
+    },
+    { path: "auth.token", label: "Token", kind: "secret-ref" as const, section: "Advanced" },
+    { path: "headers", label: "Headers", kind: "key-value" as const, section: "Advanced" },
+    {
+      path: "color",
+      label: "Color",
+      kind: "custom" as const,
+      renderer: "swatch",
+      section: "Advanced",
+    },
+  ],
+};
+
+/** Every built-in inspector field kind, plus a host renderer for the custom `swatch` field. */
+export const SchemaInspectorFields: Story = {
+  render: () => {
+    function SchemaFieldsStory() {
+      const [document, setDocument] = useState(
+        () =>
+          normalizeWorkflowEditorDocument({
+            nodes: [
+              {
+                id: "configured",
+                label: "Configured task",
+                kind: "story.configured",
+                x: 80,
+                y: 80,
+                data: { name: "Nightly sync", color: "#2563eb" },
+              },
+            ],
+            edges: [],
+          }).document,
+      );
+      return (
+        <div className="h-screen min-h-[680px] bg-zinc-50">
+          <WorkflowWorkbench
+            document={document}
+            nodeTemplates={[allFieldKindsTemplate]}
+            selectedNodeId="configured"
+            onDocumentChange={setDocument}
+            inspectorFieldRenderers={{
+              fields: {
+                swatch: ({ value, onChange, readOnly }) => (
+                  <input
+                    type="color"
+                    aria-label="Color"
+                    disabled={readOnly}
+                    value={typeof value === "string" ? value : "#000000"}
+                    onChange={(event) => onChange(event.currentTarget.value)}
+                  />
+                ),
+              },
+            }}
+          />
+        </div>
+      );
+    }
+    return <SchemaFieldsStory />;
+  },
+};

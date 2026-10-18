@@ -148,6 +148,8 @@ import {
   workflowEditorMinimizedNodeHeight,
 } from "./core-rendered-node-size";
 import { formatShortcutLabel } from "./shortcut-label";
+import type { WorkflowEditorInspectorFieldDefinition } from "./core-inspector-fields";
+import type { WorkflowWorkbenchInspectorFieldRenderers } from "./react/inspector-field-sections";
 import {
   formatWorkflowExecutionDuration,
   getWorkflowExecutionEdgeStatus,
@@ -196,6 +198,11 @@ export {
   WorkflowEditorCurrentNodeTypesPanel,
   WorkflowEditorCurrentNodesPanel,
 } from "./react/workbench-panels";
+export type {
+  WorkflowWorkbenchInspectorFieldRenderer,
+  WorkflowWorkbenchInspectorFieldRendererProps,
+  WorkflowWorkbenchInspectorFieldRenderers,
+} from "./react/inspector-field-sections";
 export { WorkflowWorkbenchInspector } from "./react/workbench-inspector";
 export { WorkflowWorkbenchOverlayPanel } from "./react/workbench-overlay-panel";
 export { WorkflowWorkbenchPalette } from "./react/workbench-palette";
@@ -263,6 +270,11 @@ export type WorkflowWorkbenchInspectorContext<
   updateSelectedNode: (patch: Partial<WorkflowEditorNode<TNodeData>>) => void;
   updateSelectedEdge: (patch: Partial<WorkflowEditorEdge<TEdgeData>>) => void;
   updateSelectedNodeWorkflowReference: (documentId: string | null) => void;
+  /** Schema-driven data fields for a node, from the template whose `kind` matches the node. */
+  inspectorFields?: (
+    node: WorkflowEditorNode<TNodeData>,
+  ) => readonly WorkflowEditorInspectorFieldDefinition[];
+  inspectorFieldRenderers?: WorkflowWorkbenchInspectorFieldRenderers;
 };
 
 export type WorkflowWorkbenchController<
@@ -406,6 +418,8 @@ export type WorkflowWorkbenchProps<
   selectedGroupIds?: readonly string[] | null;
   readOnly?: boolean;
   nodeTemplates?: ReadonlyArray<WorkflowWorkbenchPaletteItem<TTemplateData>>;
+  /** Host renderers that replace built-in inspector field kinds or individual fields. */
+  inspectorFieldRenderers?: WorkflowWorkbenchInspectorFieldRenderers;
   typeDefinitions?: readonly WorkflowEditorTypeDefinition[];
   documentReferences?: WorkflowEditorDocumentReferenceOption[];
   portTypeColors?: Readonly<Record<string, string>>;
@@ -592,6 +606,7 @@ export function WorkflowWorkbench<
   nodeTemplates = defaultWorkflowEditorNodeTemplates as ReadonlyArray<
     WorkflowWorkbenchPaletteItem<TTemplateData>
   >,
+  inspectorFieldRenderers,
   typeDefinitions,
   documentReferences,
   portTypeColors,
@@ -1341,6 +1356,9 @@ export function WorkflowWorkbench<
     updateSelectedEdge,
     updateSelectedNode,
     updateSelectedNodeWorkflowReference,
+    inspectorFields: (node: WorkflowEditorNode<TNodeData>) =>
+      inspectorFieldsForNode(nodeTemplates, node),
+    ...(inspectorFieldRenderers ? { inspectorFieldRenderers } : {}),
   } satisfies WorkflowWorkbenchInspectorContext<TNodeData, TEdgeData>;
 
   const createTemplateNode = (
@@ -3382,6 +3400,7 @@ export function useWorkflowWorkbenchController<
   nodeTemplates = defaultWorkflowEditorNodeTemplates as ReadonlyArray<
     WorkflowWorkbenchPaletteItem<TTemplateData>
   >,
+  inspectorFieldRenderers,
   typeDefinitions,
   documentReferences,
   portTypeColors,
@@ -4010,6 +4029,9 @@ export function useWorkflowWorkbenchController<
     updateSelectedEdge,
     updateSelectedNode,
     updateSelectedNodeWorkflowReference,
+    inspectorFields: (node: WorkflowEditorNode<TNodeData>) =>
+      inspectorFieldsForNode(nodeTemplates, node),
+    ...(inspectorFieldRenderers ? { inspectorFieldRenderers } : {}),
   } satisfies WorkflowWorkbenchInspectorContext<TNodeData, TEdgeData>;
 
   const graphCommands = [
@@ -6174,5 +6196,19 @@ function WorkflowExecutionDetails<TNodeData extends Record<string, unknown>>({
       )}
       {renderExecutionDetails?.({ execution, node, ...(snapshot ? { snapshot } : {}) })}
     </section>
+  );
+}
+
+/** The inspector fields of the first template whose `kind` matches the node. */
+function inspectorFieldsForNode<TTemplateData>(
+  templates: ReadonlyArray<WorkflowWorkbenchPaletteItem<TTemplateData>>,
+  node: { kind?: string },
+): readonly WorkflowEditorInspectorFieldDefinition[] {
+  if (!node.kind) {
+    return [];
+  }
+  return (
+    templates.find((template) => template.kind === node.kind && template.inspectorFields)
+      ?.inspectorFields ?? []
   );
 }

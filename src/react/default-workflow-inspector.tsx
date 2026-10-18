@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 import { Button, Input, cn } from "@moritzbrantner/ui";
 
 import {
@@ -24,6 +26,7 @@ import {
   validateWorkflowEditorIterationNode,
   workflowEditorIterationBound,
   workflowEditorPortTypeSource,
+  readWorkflowEditorFieldValue,
   type WorkflowEditorDocument,
   type WorkflowEditorIterationDiagnostic,
   type WorkflowEditorNode,
@@ -35,13 +38,43 @@ import {
   type InspectorFieldValue,
 } from "./inspector-panel";
 import { WorkflowPortPayloadEditor, withWorkflowEditorPortPayload } from "./port-payload-editor";
+import {
+  applyInspectorFieldDrafts,
+  createInspectorFieldSections,
+  inspectorFieldIdPrefix,
+  validateInspectorFieldDrafts,
+  visibleInspectorFields,
+} from "./inspector-field-sections";
+import { WorkflowSharedFieldsInspector } from "./shared-fields-inspector";
 
 export function DefaultWorkflowInspector<
   TNodeData extends Record<string, unknown>,
   TEdgeData extends Record<string, unknown>,
 >({ context }: { context: WorkflowWorkbenchInspectorContext<TNodeData, TEdgeData> }) {
+  const fieldNodeId = context.selectedNode?.id;
+  const [fieldDrafts, setFieldDrafts] = useState<Record<string, InspectorFieldValue>>({});
+  useEffect(() => setFieldDrafts({}), [fieldNodeId]);
+
   if (context.selectedNode) {
     const node = context.selectedNode;
+    const allDataFields = context.inspectorFields?.(node) ?? [];
+    const initialFieldDrafts = createInspectorFieldSections({
+      fields: allDataFields,
+      values: (field) => readWorkflowEditorFieldValue(field, node.data),
+      readOnly: context.readOnly,
+    }).defaultValues;
+    const currentFieldDrafts = { ...initialFieldDrafts, ...fieldDrafts };
+    const dataFields = visibleInspectorFields(
+      allDataFields,
+      applyInspectorFieldDrafts(node.data, allDataFields, currentFieldDrafts, initialFieldDrafts),
+    );
+    const dataFieldSections = createInspectorFieldSections({
+      fields: dataFields,
+      values: (field) => readWorkflowEditorFieldValue(field, node.data),
+      renderers: context.inspectorFieldRenderers,
+      readOnly: context.readOnly,
+      node: node as WorkflowEditorNode<Record<string, unknown>>,
+    });
     const referenceOptions = createWorkflowReferenceOptions(context.documentReferences, node);
     const referencedDocumentId = node.workflowRef?.documentId ?? "";
     const referenceMissing =
@@ -83,7 +116,15 @@ export function DefaultWorkflowInspector<
               ? { workflowDocumentId: `Missing workflow document: ${referencedDocumentId}` }
               : {}),
             ...iteration?.validationMessages,
+            ...validateInspectorFieldDrafts(dataFields, currentFieldDrafts),
           }}
+          onValuesChange={(values) =>
+            setFieldDrafts(
+              Object.fromEntries(
+                Object.entries(values).filter(([id]) => id.startsWith(inspectorFieldIdPrefix)),
+              ),
+            )
+          }
           defaultValues={{
             label: node.label,
             description: node.description ?? "",
@@ -101,6 +142,7 @@ export function DefaultWorkflowInspector<
             ...arrayConstructorDefaultValues,
             ...objectConstructorDefaultValues,
             ...objectDecompositionDefaultValues,
+            ...dataFieldSections.defaultValues,
           }}
           sections={[
             {
@@ -116,6 +158,7 @@ export function DefaultWorkflowInspector<
                 { id: "status", label: "Status", type: "text" },
               ],
             },
+            ...dataFieldSections.sections,
             ...(context.documentReferences
               ? [
                   {
@@ -291,7 +334,9 @@ export function DefaultWorkflowInspector<
             if (context.documentReferences) {
               patch.workflowRef =
                 typeof values.workflowDocumentId === "string" && values.workflowDocumentId
-                  ? { documentId: values.workflowDocumentId }
+                  ? values.workflowDocumentId === node.workflowRef?.documentId
+                    ? node.workflowRef
+                    : { documentId: values.workflowDocumentId }
                   : undefined;
             }
 
@@ -360,9 +405,21 @@ export function DefaultWorkflowInspector<
               } as unknown as TNodeData;
             }
 
+            if (dataFields.length > 0) {
+              patch.data = applyInspectorFieldDrafts(
+                (patch.data ?? node.data) as TNodeData | undefined,
+                dataFields,
+                values,
+                initialFieldDrafts,
+              );
+            }
+
             context.updateSelectedNode(patch);
           }}
         />
+        {context.selectedNodes.length > 1 && context.inspectorFields ? (
+          <WorkflowSharedFieldsInspector context={context} />
+        ) : null}
         {node.inputs?.length || node.outputs?.length ? (
           <section className="grid gap-2 px-4" aria-label="Port delivery">
             <h3 className="text-sm font-semibold">Port delivery</h3>

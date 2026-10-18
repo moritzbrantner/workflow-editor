@@ -368,6 +368,11 @@ export type WorkflowEditorProps<
   renderInspector?: WorkflowWorkbenchProps<TNodeData, TEdgeData, TTemplateData>["renderInspector"];
   /** Host-supplied run state shown over the canvas; never stored in the document. */
   execution?: WorkflowWorkbenchProps<TNodeData, TEdgeData, TTemplateData>["execution"];
+  inspectorFieldRenderers?: WorkflowWorkbenchProps<
+    TNodeData,
+    TEdgeData,
+    TTemplateData
+  >["inspectorFieldRenderers"];
   formatExecutionLabel?: WorkflowWorkbenchProps<
     TNodeData,
     TEdgeData,
@@ -665,6 +670,7 @@ export function WorkflowEditor<
   renderNodeTemplate,
   renderInspector,
   execution,
+  inspectorFieldRenderers,
   formatExecutionLabel,
   renderExecutionDetails,
   renderToolbarActions,
@@ -1780,6 +1786,7 @@ export function WorkflowEditor<
           onOpenWorkflowReference={canOpenNestedWorkflow ? openWorkflowReference : undefined}
           onCreateWorkflowReference={canOpenNestedWorkflow ? createWorkflowReference : undefined}
           execution={execution}
+          inspectorFieldRenderers={inspectorFieldRenderers}
           formatExecutionLabel={formatExecutionLabel}
           renderExecutionDetails={renderExecutionDetails}
           onDocumentChange={updateDocument}
