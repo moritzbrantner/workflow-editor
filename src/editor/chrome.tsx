@@ -3,6 +3,10 @@ import { useRef } from "react";
 import { Badge, Button, Input, WorkbenchToolbar } from "@moritzbrantner/ui";
 
 import { canRedoWorkflowEditorHistory, canUndoWorkflowEditorHistory } from "../history";
+import {
+  WorkflowEditorBundleTransferButtons,
+  WorkflowEditorBundleTransferStatus,
+} from "./bundle-transfer";
 import type { WorkflowEditorController, WorkflowEditorSaveState } from "../editor";
 
 type ChromeController<
@@ -25,6 +29,7 @@ export function WorkflowEditorSaveStateBadge<
         {formatSaveState(controller.saveState)}
       </Badge>
       <WorkflowEditorImportErrorAlert controller={controller} />
+      <WorkflowEditorBundleTransferStatus controller={controller} />
       <WorkflowEditorStorageRecoveryAlert controller={controller} />
       <WorkflowEditorDocumentProblems controller={controller} />
     </>
@@ -283,6 +288,7 @@ export function WorkflowEditorImportExportControls<
       >
         Export JSON
       </Button>
+      <WorkflowEditorBundleTransferButtons controller={controller} />
     </div>
   );
 }
