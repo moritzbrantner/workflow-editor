@@ -1414,6 +1414,23 @@ test.describe("WorkflowWorkbench accessibility and responsive smoke", () => {
     await expectNodeCount(page, 4);
     await expect(announcer).toHaveText("Added node Decision.");
 
+    // Compose and restore by keyboard (#18): toolbar Compose, then the node menu's Restore.
+    await pressShortcut(page, "Mod+A");
+    const compose = page.getByRole("button", { name: "Compose", exact: true });
+    await compose.focus();
+    await page.keyboard.press("Enter");
+    await expectNodeCount(page, 1);
+    await expect(compose).toBeFocused();
+    const composedMenu = page.locator('[data-slot="workflow-node-menu-trigger"]:visible').first();
+    await composedMenu.focus();
+    await page.keyboard.press("Enter");
+    await page.getByRole("menuitem", { name: "Restore composition" }).focus();
+    await page.keyboard.press("Enter");
+    await expectNodeCount(page, 4);
+    await expect
+      .poll(() => page.evaluate(() => document.activeElement?.getAttribute("data-slot")))
+      .toBe("workflow-builder-surface");
+
     await pressShortcut(page, "Mod+A");
     await pressShortcut(page, "Mod+G");
     await expect(announcer).toHaveText(/^Grouped 4 nodes as /);
