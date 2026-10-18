@@ -78,6 +78,9 @@ export function applyWorkflowRunnerEventToSnapshot(snapshot: WorkflowExecutionSn
 }): WorkflowExecutionSnapshot | undefined;
 
 // @public
+export function areWorkflowEditorTemplateRevisionsCompatible(a: Pick<WorkflowEditorNodeTemplate<unknown>, "inputs" | "outputs">, b: Pick<WorkflowEditorNodeTemplate<unknown>, "inputs" | "outputs">): boolean;
+
+// @public
 export function assertWorkflowEditorDocument<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(value: unknown, options?: WorkflowEditorDocumentValidationOptions): asserts value is WorkflowEditorDocument<TNodeData, TEdgeData>;
 
 // @public
@@ -186,6 +189,13 @@ export function createWorkflowEditorLibraryReferenceResolver<TNodeData = Record<
 
 // @public
 export function createWorkflowEditorNodeTemplateRegistry<TData = Record<string, unknown>>(templates: readonly WorkflowEditorNodeTemplate<TData>[], options?: WorkflowEditorTypeValidationOptions): WorkflowEditorNodeTemplateRegistry<TData>;
+
+// @public
+export function createWorkflowEditorSharedTemplateRevision<TData>(node: WorkflowEditorNode<TData>, templates: readonly WorkflowEditorNodeTemplate<TData>[], options: {
+    templateId: string;
+    label?: string;
+    category?: string;
+}): WorkflowEditorNodeTemplate<TData>;
 
 // @public (undocumented)
 export function createWorkflowEditorVersion<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(entry: WorkflowEditorLibraryEntry<TNodeData, TEdgeData>, options?: {
@@ -716,6 +726,9 @@ export const defaultWorkflowWorkbenchHotkeys: {
     nudgeUp: string;
 };
 
+// @public
+export function detachWorkflowEditorLinkedNode<TNodeData, TEdgeData>(document: WorkflowEditorDocument<TNodeData, TEdgeData>, nodeId: string): WorkflowEditorDocument<TNodeData, TEdgeData>;
+
 // @public (undocumented)
 export function detectWorkflowEditorCycles<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(document: WorkflowEditorDocument<TNodeData, TEdgeData>): string[][];
 
@@ -883,6 +896,9 @@ export function isWorkflowEditorObjectConstructorSchema(value: unknown): value i
 // @public (undocumented)
 export function isWorkflowEditorObjectDecompositionNode<TNodeData = Record<string, unknown>>(node: WorkflowEditorNode<TNodeData>): boolean;
 
+// @public
+export function isWorkflowEditorPaletteTemplate<TData>(template: WorkflowEditorNodeTemplate<TData>, templates: readonly WorkflowEditorNodeTemplate<TData>[]): boolean;
+
 // @public (undocumented)
 export function isWorkflowEditorPortPayloadLike(value: unknown): value is WorkflowEditorPortPayload;
 
@@ -898,11 +914,30 @@ export function isWorkflowEditorSecretLikePath(path: string): boolean;
 // @public (undocumented)
 export function isWorkflowEditorSecretReference(value: unknown): value is WorkflowEditorSecretReference;
 
+// @public
+export function latestWorkflowEditorSharedTemplates<TData>(templates: readonly WorkflowEditorNodeTemplate<TData>[]): Map<string, WorkflowEditorNodeTemplate<TData>>;
+
 // @public (undocumented)
 export function layoutWorkflowEditorDocument<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(document: WorkflowEditorDocument<TNodeData, TEdgeData>, options?: WorkflowEditorLayoutOptions<TNodeData, TEdgeData>): WorkflowEditorLayoutResult<TNodeData, TEdgeData>;
 
 // @public (undocumented)
 export function listWorkflowEditorDocumentReferenceOptions<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(library: WorkflowEditorLibrary<TNodeData, TEdgeData>): WorkflowEditorDocumentReferenceOption[];
+
+// @public
+export function listWorkflowEditorLinkedInstances<TData>(documents: ReadonlyArray<{
+    id: string;
+    name: string;
+    document: WorkflowEditorDocument<TData>;
+}>, templateId: string, templates: readonly WorkflowEditorNodeTemplate<TData>[]): {
+    documentId: string;
+    documentName: string;
+    nodeId: string;
+    label: string;
+    revision: number;
+}[];
+
+// @public
+export function listWorkflowEditorSharedTemplateRevisions<TData>(templates: readonly WorkflowEditorNodeTemplate<TData>[], templateId: string): WorkflowEditorNodeTemplate<TData>[];
 
 // Warning: (ae-forgotten-export) The symbol "WorkflowEditorLibraryLoadResult" needs to be exported by the entry point index.d.ts
 //
@@ -947,6 +982,9 @@ export function pasteWorkflowEditorClipboardPayload<TNodeData = Record<string, u
 
 // @public
 export function planWorkflowEditorBundleImport<TNodeData, TEdgeData>(library: WorkflowEditorLibrary<TNodeData, TEdgeData>, bundle: WorkflowEditorBundle<TNodeData, TEdgeData>, strategy: WorkflowEditorBundleCollisionStrategy): WorkflowEditorBundleImportPlan;
+
+// @public
+export function planWorkflowEditorLinkedTemplateUpgrade<TNodeData, TEdgeData>(document: WorkflowEditorDocument<TNodeData, TEdgeData>, nodeId: string, revision: number, templates: readonly WorkflowEditorNodeTemplate<TNodeData>[]): WorkflowEditorLinkedTemplateUpgradePlan | undefined;
 
 // @public (undocumented)
 export function readWorkflowEditorDocumentFile<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(file: Blob): Promise<WorkflowEditorRestoredDocumentFile<TNodeData, TEdgeData>>;
@@ -1007,6 +1045,15 @@ export function resolveWorkflowEditorDocumentReference<TNodeData = Record<string
 
 // @public
 export function resolveWorkflowEditorInputValues(document: WorkflowEditorDocument<unknown, unknown>, values: Readonly<Record<string, unknown>>): Record<string, unknown>;
+
+// @public
+export function resolveWorkflowEditorLinkedNodes<TNodeData, TEdgeData>(document: WorkflowEditorDocument<TNodeData, TEdgeData>, templates: readonly WorkflowEditorNodeTemplate<TNodeData>[]): {
+    document: WorkflowEditorDocument<TNodeData, TEdgeData>;
+    diagnostics: WorkflowEditorLinkedTemplateDiagnostic[];
+};
+
+// @public (undocumented)
+export function resolveWorkflowEditorLinkedTemplate<TData>(ref: WorkflowEditorLinkedTemplateRef, templates: readonly WorkflowEditorNodeTemplate<TData>[]): WorkflowEditorLinkedTemplateResolution<TData> | undefined;
 
 // @public
 export function resolveWorkflowEditorPortTypeColor(type: WorkflowEditorPortType, portTypeColors?: Readonly<Record<string, string>>): string;
@@ -1103,6 +1150,9 @@ export function updateWorkflowEditorObjectConstructorSchemaInNode<TNodeData = Re
 
 // @public (undocumented)
 export function updateWorkflowEditorObjectDecompositionPropertiesInNode<TNodeData = Record<string, unknown>>(node: WorkflowEditorNode<TNodeData>, propertyKeysByPortId: Record<string, string>): WorkflowEditorNode<TNodeData>;
+
+// @public
+export function upgradeWorkflowEditorLinkedNode<TNodeData, TEdgeData>(document: WorkflowEditorDocument<TNodeData, TEdgeData>, nodeId: string, revision: number, templates: readonly WorkflowEditorNodeTemplate<TNodeData>[]): WorkflowEditorDocument<TNodeData, TEdgeData>;
 
 // @public (undocumented)
 export function upsertWorkflowEditorEntry<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(library: WorkflowEditorLibrary<TNodeData, TEdgeData>, entry: WorkflowEditorLibraryEntry<TNodeData, TEdgeData>, options?: {
@@ -2549,6 +2599,36 @@ export type WorkflowEditorLibraryInput<TNodeData = Record<string, unknown>, TEdg
 // @public (undocumented)
 export const workflowEditorLibraryVersion = 1;
 
+// @public (undocumented)
+export type WorkflowEditorLinkedTemplateDiagnostic = {
+    code: "missing-linked-template" | "missing-linked-template-revision";
+    nodeId: string;
+    templateId: string;
+    revision: number;
+    message: string;
+    path: string;
+};
+
+// @public (undocumented)
+export type WorkflowEditorLinkedTemplateRef = WorkflowEditorSharedTemplateIdentity;
+
+// @public (undocumented)
+export type WorkflowEditorLinkedTemplateResolution<TData = Record<string, unknown>> = {
+    template: WorkflowEditorNodeTemplate<TData>;
+    revision: number;
+    upgrade?: {
+        revision: number;
+        template: WorkflowEditorNodeTemplate<TData>;
+    };
+};
+
+// @public (undocumented)
+export type WorkflowEditorLinkedTemplateUpgradePlan = {
+    revision: number;
+    removedEdgeIds: string[];
+    changedPortIds: string[];
+};
+
 // @public
 export const workflowEditorMixedFieldValue: unique symbol;
 
@@ -2558,6 +2638,10 @@ export type WorkflowEditorNode<TData = Record<string, unknown>> = Omit<GraphEdit
     outputs?: WorkflowEditorPort[];
     workflowRef?: WorkflowEditorWorkflowReference;
     composition?: WorkflowEditorNodeComposition<TData>;
+    templateRef?: {
+        templateId: string;
+        revision: number;
+    };
     persistence?: WorkflowEditorNodePersistence;
 };
 
@@ -2578,6 +2662,10 @@ export type WorkflowEditorNodeTemplate<TData = Record<string, unknown>> = Omit<G
     outputs?: WorkflowEditorPort[];
     workflowRef?: WorkflowEditorWorkflowReference;
     composition?: WorkflowEditorNodeComposition<TData>;
+    shared?: {
+        templateId: string;
+        revision: number;
+    };
     inspectorFields?: WorkflowEditorInspectorFieldDefinition[];
 };
 
@@ -2896,6 +2984,15 @@ export function WorkflowEditorSettingsPanel<TNodeData extends Record<string, unk
 export type WorkflowEditorSharedInspectorField = {
     field: WorkflowEditorInspectorFieldDefinition;
     value: unknown;
+};
+
+// @public (undocumented)
+export function workflowEditorSharedTemplateId(templateId: string, revision: number): string;
+
+// @public
+export type WorkflowEditorSharedTemplateIdentity = {
+    templateId: string;
+    revision: number;
 };
 
 // @public (undocumented)
@@ -3400,7 +3497,7 @@ export function writeWorkflowEditorFieldPath<T extends Record<string, unknown>>(
 
 // Warnings were encountered during analysis:
 //
-// dist/core-execution-CGmd-Aon.d.ts:5:5 - (ae-forgotten-export) The symbol "WorkflowEditorNodeTemplateDiagnosticCode" needs to be exported by the entry point index.d.ts
+// dist/core-execution-Dq4srmPS.d.ts:5:5 - (ae-forgotten-export) The symbol "WorkflowEditorNodeTemplateDiagnosticCode" needs to be exported by the entry point index.d.ts
 // dist/editor.d.ts:182:5 - (ae-forgotten-export) The symbol "ChromeController" needs to be exported by the entry point index.d.ts
 // dist/editor.d.ts:300:5 - (ae-forgotten-export) The symbol "WorkflowEditorBundleActions" needs to be exported by the entry point index.d.ts
 // dist/editor.d.ts:300:5 - (ae-forgotten-export) The symbol "WorkflowEditorComparisonActions" needs to be exported by the entry point index.d.ts

@@ -1416,6 +1416,14 @@ export function WorkflowWorkbench<
       outputs: template.outputs,
       data: template.data as TNodeData | undefined,
       workflowRef: template.workflowRef,
+      ...(template.shared
+        ? {
+            templateRef: {
+              templateId: template.shared.templateId,
+              revision: template.shared.revision,
+            },
+          }
+        : {}),
       composition: template.composition as WorkflowEditorNode<TNodeData>["composition"],
     };
 
@@ -3896,6 +3904,14 @@ export function useWorkflowWorkbenchController<
       outputs: template.outputs,
       data: template.data as TNodeData | undefined,
       workflowRef: template.workflowRef,
+      ...(template.shared
+        ? {
+            templateRef: {
+              templateId: template.shared.templateId,
+              revision: template.shared.revision,
+            },
+          }
+        : {}),
       composition: template.composition as WorkflowEditorNode<TNodeData>["composition"],
     };
     if (!Number.isFinite(node.x)) {

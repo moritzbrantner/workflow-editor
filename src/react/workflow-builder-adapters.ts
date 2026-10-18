@@ -116,6 +116,7 @@ export function fromUiWorkflowBuilderNodes<TData = Record<string, unknown>>(
       outputs: previousNode?.outputs ?? restoreWorkflowEditorPortsFromUi(node.outputs),
       data: (node.metadata as TData | undefined) ?? previousNode?.data,
       workflowRef: previousNode?.workflowRef,
+      templateRef: previousNode?.templateRef,
       composition: previousNode?.composition,
     };
   });

@@ -192,6 +192,11 @@ export type WorkflowEditorNode<TData = Record<string, unknown>> = Omit<
   workflowRef?: WorkflowEditorWorkflowReference;
   composition?: WorkflowEditorNodeComposition<TData>;
   /**
+   * A linked instance of a shared template (#65): the template identity and the revision it
+   * resolves to. Its ports and composition are re-resolved from the catalog.
+   */
+  templateRef?: { templateId: string; revision: number };
+  /**
    * When the runner persists this node's result (Runner TECH-011). Absent means the default:
    * results persist with the terminal run result. `"on-completion"` asks the runner to hand the
    * result to host persistence as soon as this node completes.
@@ -327,6 +332,11 @@ export type WorkflowEditorNodeTemplate<TData = Record<string, unknown>> = Omit<
   outputs?: WorkflowEditorPort[];
   workflowRef?: WorkflowEditorWorkflowReference;
   composition?: WorkflowEditorNodeComposition<TData>;
+  /**
+   * Marks this template as one immutable published revision of a shared template (#65). Nodes
+   * created from it are linked instances (`templateRef`).
+   */
+  shared?: { templateId: string; revision: number };
   /** Typed inspector fields for the data of nodes created from this template (matched by kind). */
   inspectorFields?: WorkflowEditorInspectorFieldDefinition[];
 };

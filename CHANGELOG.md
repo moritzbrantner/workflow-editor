@@ -4,6 +4,11 @@
 
 ### Minor Changes
 
+- Linked shared templates, headless model (#65, TECH-001), documented in `docs/linked-templates.md`.
+  - Published revisions are immutable catalog templates with `shared: { templateId, revision }`.
+  - Linked nodes carry `templateRef` and resolve through the catalog: compatible revisions propagate, incompatible ones wait for an explicit `upgradeWorkflowEditorLinkedNode` (planned with `planWorkflowEditorLinkedTemplateUpgrade`), and `detachWorkflowEditorLinkedNode` makes a local copy.
+  - Missing templates or revisions are diagnosed.
+  - `compileWorkflowEditorDocument` takes `nodeTemplates` to resolve linked nodes first.
 - Pending human tasks in connected runs (#105).
   - `WorkflowWorkbench` and `WorkflowEditor` take `humanTasks={{ pending, respond }}`. The host reads the waits from Workflow Engine (`listPendingTasks`) and answers through `respondToTask`.
   - For a selected node with a pending task, the inspector shows **Pending task** with the prompt and context. An approval has **Approve** and **Reject** with an optional comment. A typed input has a value field checked by the port type checker (`validateWorkflowEditorHumanTaskResponse`).
