@@ -67,6 +67,8 @@ export type WorkflowEditorLibrary<
   version: typeof workflowEditorLibraryVersion;
   activeDocumentId: string | null;
   documents: Array<WorkflowEditorLibraryEntry<TNodeData, TEdgeData>>;
+  /** Documents open as editor tabs, in tab order (#100). */
+  openDocumentIds?: string[];
 };
 
 export type WorkflowEditorDocumentReferenceOption = {
@@ -165,6 +167,7 @@ export type WorkflowEditorLibraryInput<
 > = {
   activeDocumentId?: string | null;
   documents?: Array<WorkflowEditorLibraryEntry<TNodeData, TEdgeData>>;
+  openDocumentIds?: readonly string[];
 };
 
 export type WorkflowEditorRestoredDocumentFile<
@@ -235,11 +238,17 @@ export function createWorkflowEditorLibrary<
       ? input.activeDocumentId
       : (documents[0]?.id ?? null);
 
+  const documentIds = new Set(documents.map((entry) => entry.id));
+  const openDocumentIds = [...new Set(input.openDocumentIds ?? [])].filter((id) =>
+    documentIds.has(id),
+  );
+
   return {
     format: workflowEditorLibraryFormat,
     version: workflowEditorLibraryVersion,
     activeDocumentId,
     documents,
+    ...(openDocumentIds.length ? { openDocumentIds } : {}),
   };
 }
 
@@ -360,6 +369,7 @@ export function upsertWorkflowEditorEntry<
     : [normalizedEntry, ...library.documents];
 
   return createWorkflowEditorLibrary({
+    openDocumentIds: library.openDocumentIds,
     activeDocumentId:
       options.activate || !library.activeDocumentId ? normalizedEntry.id : library.activeDocumentId,
     documents,
@@ -378,6 +388,7 @@ export function removeWorkflowEditorEntry<
     library.activeDocumentId === documentId ? (documents[0]?.id ?? null) : library.activeDocumentId;
 
   return createWorkflowEditorLibrary({
+    openDocumentIds: library.openDocumentIds,
     activeDocumentId,
     documents,
   });
@@ -394,6 +405,7 @@ export function renameWorkflowEditorEntry<
   const nextName = name.trim() || "Untitled Workflow";
   const updatedAt = new Date().toISOString();
   return createWorkflowEditorLibrary({
+    openDocumentIds: library.openDocumentIds,
     activeDocumentId: library.activeDocumentId,
     documents: library.documents.map((entry) =>
       entry.id === documentId ? { ...entry, name: nextName, updatedAt } : entry,
@@ -830,6 +842,9 @@ export function parseWorkflowEditorLibrary<
     library: createWorkflowEditorLibrary({
       activeDocumentId: typeof value.activeDocumentId === "string" ? value.activeDocumentId : null,
       documents,
+      openDocumentIds: Array.isArray(value.openDocumentIds)
+        ? value.openDocumentIds.filter((id): id is string => typeof id === "string")
+        : undefined,
     }),
   };
 }

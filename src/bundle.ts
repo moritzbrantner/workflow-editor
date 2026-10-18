@@ -765,7 +765,11 @@ export function applyWorkflowEditorBundleImportPlan<TNodeData, TEdgeData>(
     }
   }
 
-  return createWorkflowEditorLibrary({ activeDocumentId: plan.rootDocumentId, documents });
+  return createWorkflowEditorLibrary({
+    activeDocumentId: plan.rootDocumentId,
+    documents,
+    openDocumentIds: library.openDocumentIds,
+  });
 }
 
 function rewriteReferences<TNodeData, TEdgeData>(

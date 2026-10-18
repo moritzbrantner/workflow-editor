@@ -632,18 +632,19 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     await waitFor(() =>
       expect(screen.getByTestId("active-node-count").textContent).toBe("0 nodes"),
     );
-    expect((screen.getByRole("button", { name: "Parent" }) as HTMLButtonElement).disabled).toBe(
-      false,
-    );
+    // The child opens in its own tab with a link back to the parent (#100).
     expect(
-      (screen.getByRole("button", { name: "Input Workflow" }) as HTMLButtonElement).disabled,
-    ).toBe(true);
+      screen.getByRole("button", { name: "Switch to Input Workflow" }).getAttribute("aria-current"),
+    ).toBe("page");
+    expect(
+      screen.getByRole("button", { name: "Switch to Parent" }).getAttribute("aria-current"),
+    ).toBeNull();
     expect(handlePathChange).toHaveBeenLastCalledWith([
       { documentId: "parent" },
       expect.objectContaining({ documentId: expect.stringMatching(/^workflow-/) }),
     ]);
 
-    fireEvent.click(screen.getByRole("button", { name: "Parent" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open parent workflow" }));
     await waitFor(() =>
       expect(screen.getByTestId("active-node-count").textContent).toBe("3 nodes"),
     );
@@ -694,9 +695,11 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
         .getAllByRole("button", { name: "Open workflow" })
         .find((button) => !(button as HTMLButtonElement).disabled)!,
     );
+    // A self-reference stays in the document's one tab, with a parent link one level up.
     await waitFor(() =>
-      expect(screen.getAllByRole("button", { name: "Recursive" })).toHaveLength(2),
+      expect(screen.getByRole("button", { name: "Open parent workflow" })).not.toBeNull(),
     );
+    expect(screen.getAllByRole("button", { name: /^Switch to / })).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "Self" }));
     const cappedOpenButtons = screen.queryAllByRole("button", { name: "Open workflow" });
     expect(cappedOpenButtons.every((button) => (button as HTMLButtonElement).disabled)).toBe(true);
