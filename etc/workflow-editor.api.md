@@ -791,6 +791,9 @@ export function isWorkflowEditorInspectorFieldPath(path: unknown): path is strin
 // @public (undocumented)
 export function isWorkflowEditorInspectorFieldVisible(field: WorkflowEditorInspectorFieldDefinition, data: unknown): boolean;
 
+// @public
+export function isWorkflowEditorIterationMeasurementBoundary(wrapperPortId: string): boolean;
+
 // @public (undocumented)
 export function isWorkflowEditorIterationNode<TNodeData>(node: WorkflowEditorNode<TNodeData>): boolean;
 
@@ -941,6 +944,9 @@ export function saveWorkflowEditorLibrary<TNodeData = Record<string, unknown>, T
 
 // @public
 export function stringifyWorkflowEditorBundle(bundle: WorkflowEditorBundle<unknown, unknown>): string;
+
+// @public
+export function syncWorkflowEditorIterationResultPort<TNodeData>(node: WorkflowEditorNode<TNodeData>): WorkflowEditorNode<TNodeData>;
 
 // @public (undocumented)
 export function topologicallySortWorkflowEditorNodes<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(document: WorkflowEditorDocument<TNodeData, TEdgeData>): WorkflowEditorNode<TNodeData>[];
@@ -2014,10 +2020,21 @@ export type WorkflowEditorIterationDiagnostic = {
 export type WorkflowEditorIterationDiagnosticCode = "iteration-bound-required" | "iteration-bound-invalid" | "iteration-body-missing" | "iteration-boundary-invalid" | "iteration-state-type" | "iteration-stop-type" | "nested-iteration-not-supported";
 
 // @public
+export function workflowEditorIterationMeasurements<TNodeData>(node: WorkflowEditorNode<TNodeData>): Array<{
+    id: string;
+    nodeId: string;
+    portId: string;
+    type: WorkflowEditorPortType;
+}>;
+
+// @public
 export const workflowEditorIterationNodeKind = "control.iterate";
 
 // @public
-export function workflowEditorIterationResultType(stateType: WorkflowEditorPortType): WorkflowEditorPortType;
+export function workflowEditorIterationResultType(stateType: WorkflowEditorPortType, measurements?: ReadonlyArray<{
+    id: string;
+    type: WorkflowEditorPortType;
+}>): WorkflowEditorPortType;
 
 // @public (undocumented)
 export const workflowEditorJsonNodeTemplates: ({

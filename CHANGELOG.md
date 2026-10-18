@@ -9,6 +9,9 @@
   - Reference nodes carry `workflowRef: { workflow, maxDepth? }`.
   - The compiler reports `missing-workflow-reference`, `workflow-reference-interface` and `unbounded-recursive-reference`.
   - Documents without references compile as before.
+- Iteration measurements (TECH-004, #96): iteration bodies can expose named, typed measurement outputs besides `next` and `converged`.
+  - They compile to `iteration.body.outputs.measurements` and appear as `measurements` in the typed `result`.
+  - Bodies without measurements compile unchanged.
 - Build on current graph-editor (#26): `@moritzbrantner/graph-editor` is now pinned to graph-editor `main` (commit `3f72b6e`) as a git dependency, and `@moritzbrantner/ui` moves to `^1.1.0`.
   - Keyboard users can move selected nodes with **Shift+Arrow** (coarse) and **Alt+Shift+Arrow** (fine) (#18).
   - Hosts must import `@moritzbrantner/ui/component-sources.css` next to their theme stylesheet and add an `@source` for graph-editor's `dist` (see the Pages `styles.css`).
