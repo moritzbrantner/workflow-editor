@@ -40,7 +40,7 @@ test("authors native types, explains rejection, propagates branches, and reopens
   page,
 }, testInfo) => {
   await page.goto("http://127.0.0.1:4175/");
-  await page.getByRole("button", { name: "Lead Intake Automation", exact: true }).click();
+  await page.getByRole("button", { name: "Sales Data Pipeline", exact: true }).click();
   await page.getByLabel("Workflow document", { exact: true }).selectOption("typescript-ports");
   await page.keyboard.press("Escape");
   const mobile = testInfo.project.name === "mobile-chrome";

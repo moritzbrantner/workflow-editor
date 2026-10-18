@@ -31,7 +31,7 @@ test("explains invalid declarations, restores type intent on reopen, and rejects
 }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium", "Desktop journey; mobile is covered by PR tests");
   await page.goto("http://127.0.0.1:4175/");
-  await page.getByRole("button", { name: "Lead Intake Automation", exact: true }).click();
+  await page.getByRole("button", { name: "Sales Data Pipeline", exact: true }).click();
   await page.getByLabel("Workflow document", { exact: true }).selectOption("typescript-ports");
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Minimize node palette", exact: true }).click();

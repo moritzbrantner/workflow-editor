@@ -1359,7 +1359,7 @@ export function WorkflowEditor<
             <PopoverContent
               aria-label="Workflow document menu"
               align="start"
-              className="w-80 p-3"
+              className="z-[22000] w-80 p-3"
               onCloseAutoFocus={(event) => event.preventDefault()}
             >
               <div className="grid gap-3" onKeyDown={(event) => event.stopPropagation()}>
