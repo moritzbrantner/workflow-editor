@@ -6,6 +6,7 @@ import {
   isWorkflowEditorIterationNode,
   validateWorkflowEditorIterationNode,
   workflowEditorIterationBound,
+  workflowEditorIterationMeasurements,
   normalizeWorkflowEditorDocument,
   workflowEditorValidationPolicies,
   resolveWorkflowEditorDocumentTypes,
@@ -93,6 +94,13 @@ export type CompiledWorkflowIteration<
     outputs: {
       next: CompiledWorkflowIterationBoundary;
       converged?: CompiledWorkflowIterationBoundary;
+      /**
+       * Named, typed values computed by body nodes (TECH-004). The runner reports the last
+       * completed iteration's values in `result.measurements`; they are never a quality metric.
+       */
+      measurements?: Array<
+        CompiledWorkflowIterationBoundary & { id: string; type: WorkflowEditorPortType }
+      >;
     };
   };
 };
@@ -544,6 +552,7 @@ function compileIterationNode(
   };
   const next = boundary("next")!;
   const converged = boundary("converged");
+  const measurements = workflowEditorIterationMeasurements(node);
   const state = node.inputs!.find((port) => port.id === "state")!;
   const { iteration: _iteration, ...data } = (node.data ?? {}) as Record<string, unknown>;
 
@@ -571,7 +580,11 @@ function compileIterationNode(
               compareIds(a.nodeId, b.nodeId) ||
               compareIds(a.portId, b.portId),
           ),
-        outputs: { next, ...(converged ? { converged } : {}) },
+        outputs: {
+          next,
+          ...(converged ? { converged } : {}),
+          ...(measurements.length ? { measurements } : {}),
+        },
       },
     },
   };
