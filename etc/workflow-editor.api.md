@@ -109,6 +109,24 @@ export function commitWorkflowEditorHistory<TNodeData = Record<string, unknown>,
 // @public (undocumented)
 export function compactWorkflowEditorVersions<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(entry: WorkflowEditorLibraryEntry<TNodeData, TEdgeData>, maxVersions?: number): WorkflowEditorLibraryEntry<TNodeData, TEdgeData>;
 
+// @public
+export type CompiledWorkflowHumanTask = {
+    kind: "approval";
+    prompt: string;
+    outcomes: ["approved", "rejected"];
+} | {
+    kind: "input";
+    prompt: string;
+    responseType: WorkflowEditorPortType;
+};
+
+// @public
+export function compileWorkflowEditorHumanTask(node: WorkflowEditorNode<unknown>, pathPrefix?: string): {
+    humanTask: CompiledWorkflowHumanTask;
+} | {
+    diagnostics: WorkflowEditorHumanTaskDiagnostic[];
+};
+
 // @public (undocumented)
 export function composeWorkflowEditorNodes<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(document: WorkflowEditorDocument<TNodeData, TEdgeData>, nodeIds: readonly string[], options?: WorkflowEditorComposeNodesOptions<TNodeData>): WorkflowEditorDocument<TNodeData, TEdgeData>;
 
@@ -178,6 +196,37 @@ export const defaultWorkflowEditorMaxVersions = 20;
 
 // @public (undocumented)
 export const defaultWorkflowEditorNodeTemplates: ({
+    id: string;
+    label: string;
+    description: string;
+    kind: string;
+    category: string;
+    inputs: {
+        id: string;
+        label: string;
+        type: {
+            kind: "any";
+        };
+        optional: true;
+    }[];
+    outputs: {
+        id: string;
+        label: string;
+        type: {
+            kind: "typescript";
+            source: string;
+        };
+    }[];
+    data: {
+        prompt: string;
+    };
+    inspectorFields: {
+        path: string;
+        label: string;
+        kind: "text";
+        required: true;
+    }[];
+} | {
     id: string;
     label: string;
     description: string;
@@ -776,6 +825,11 @@ export function isWorkflowEditorBundleText(text: string): boolean;
 // @public (undocumented)
 export function isWorkflowEditorDirectedAcyclicGraph<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(document: WorkflowEditorDocument<TNodeData, TEdgeData>): boolean;
 
+// @public (undocumented)
+export function isWorkflowEditorHumanTaskNode(node: {
+    kind?: string;
+}): boolean;
+
 // @public
 export function isWorkflowEditorInspectorFieldPath(path: unknown): path is string;
 
@@ -1085,6 +1139,12 @@ export function validateWorkflowEditorDocument(value: unknown, options?: Workflo
 
 // @public
 export function validateWorkflowEditorFieldValue(field: WorkflowEditorInspectorFieldDefinition, value: unknown): string[];
+
+// @public
+export function validateWorkflowEditorHumanTaskResponse(humanTask: CompiledWorkflowHumanTask, response: unknown, options?: {
+    typeDeclarations?: string;
+    typeDefinitions?: readonly WorkflowEditorTypeDefinition[];
+}): string[];
 
 // @public
 export function validateWorkflowEditorInspectorFieldDefinitions(fields: unknown): WorkflowEditorInspectorFieldDiagnostic[];
@@ -1928,6 +1988,99 @@ export type WorkflowEditorHistoryState<TNodeData = Record<string, unknown>, TEdg
     present: WorkflowEditorDocument<TNodeData, TEdgeData>;
     future: Array<WorkflowEditorDocument<TNodeData, TEdgeData>>;
 };
+
+// @public
+export const workflowEditorHumanApprovalKind = "human.task.approval";
+
+// @public
+export type WorkflowEditorHumanApprovalResponse = {
+    decision: "approved" | "rejected";
+    comment?: string;
+};
+
+// @public (undocumented)
+export const workflowEditorHumanInputKind = "human.task.input";
+
+// @public
+export type WorkflowEditorHumanInputResponse<TValue = unknown> = {
+    value: TValue;
+    comment?: string;
+};
+
+// @public (undocumented)
+export type WorkflowEditorHumanTaskDiagnostic = {
+    code: "invalid-human-task";
+    message: string;
+    path: string;
+    nodeId: string;
+    portId?: string;
+};
+
+// @public (undocumented)
+export const workflowEditorHumanTaskNodeTemplates: ({
+    id: string;
+    label: string;
+    description: string;
+    kind: string;
+    category: string;
+    inputs: {
+        id: string;
+        label: string;
+        type: {
+            kind: "any";
+        };
+    }[];
+    outputs: {
+        id: string;
+        label: string;
+        type: {
+            kind: "any";
+        };
+        metadata: {
+            workflowTypeInference: string;
+        };
+    }[];
+    data: {
+        prompt: string;
+    };
+    inspectorFields: {
+        path: string;
+        label: string;
+        kind: "text";
+        required: true;
+    }[];
+} | {
+    id: string;
+    label: string;
+    description: string;
+    kind: string;
+    category: string;
+    inputs: {
+        id: string;
+        label: string;
+        type: {
+            kind: "any";
+        };
+        optional: true;
+    }[];
+    outputs: {
+        id: string;
+        label: string;
+        type: {
+            kind: "typescript";
+            source: string;
+        };
+    }[];
+    data: {
+        prompt: string;
+    };
+    inspectorFields: {
+        path: string;
+        label: string;
+        kind: "text";
+        required: true;
+    }[];
+})[];
 
 // @public
 export function WorkflowEditorImportErrorAlert(input: {
