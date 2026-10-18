@@ -14,6 +14,11 @@ export {
   type WorkflowEditorBundleImportState,
 } from "./editor/bundle-transfer";
 export {
+  WorkflowEditorDocumentTabs,
+  type WorkflowEditorDocumentTab,
+  type WorkflowEditorDocumentTabActions,
+} from "./editor/document-tabs";
+export {
   WorkflowEditorCompareVersionsButton,
   WorkflowEditorVersionComparison,
   type WorkflowEditorComparisonActions,
@@ -21,6 +26,12 @@ export {
   type WorkflowEditorComparisonState,
   type WorkflowEditorPendingRestore,
 } from "./editor/version-compare";
+import {
+  useWorkflowEditorDocumentTabs,
+  WorkflowEditorDocumentTabs,
+  type WorkflowEditorDocumentTab,
+  type WorkflowEditorDocumentTabActions,
+} from "./editor/document-tabs";
 import {
   useWorkflowEditorVersionComparison,
   WorkflowEditorCompareVersionsButton,
@@ -254,6 +265,8 @@ export type WorkflowEditorController<
   bundleImport: WorkflowEditorBundleImportState<TNodeData, TEdgeData> | null;
   /** The most recent rejected bundle export or import. */
   bundleError: WorkflowEditorBundleError | null;
+  /** Open document tabs (#100), each with the reference chain it was opened through. */
+  tabs: WorkflowEditorDocumentTab[];
   /** The open version comparison, if any. */
   comparison: WorkflowEditorComparisonState | null;
   /** A saved version waiting for restore confirmation. */
@@ -274,7 +287,8 @@ export type WorkflowEditorController<
     deleteDocument: () => void;
     dismissImportError: () => void;
   } & WorkflowEditorBundleActions &
-    WorkflowEditorComparisonActions & {
+    WorkflowEditorComparisonActions &
+    WorkflowEditorDocumentTabActions & {
       duplicateDocument: () => void;
       exportDocument: () => void;
       importDocumentFromFile: (file: File) => Promise<void>;
@@ -321,8 +335,13 @@ export type WorkflowEditorChrome<
     | "compact-menu"
     | "hidden"
     | WorkflowEditorChromeRenderer<TNodeData, TEdgeData, TTemplateData, TAppSettings>;
+  /**
+   * The document tabs replace the breadcrumb row by default (#100). `"breadcrumb"` keeps the
+   * legacy path row in addition to the tabs.
+   */
   documentPath?:
     | "default"
+    | "breadcrumb"
     | "hidden"
     | WorkflowEditorChromeRenderer<TNodeData, TEdgeData, TTemplateData, TAppSettings>;
   inspector?: WorkflowWorkbenchProps<TNodeData, TEdgeData, TTemplateData>["chrome"] extends infer C
@@ -1227,6 +1246,26 @@ export function WorkflowEditor<
     updateLibrary(nextLibrary);
   };
 
+  const activateDocumentPath = (path: WorkflowEditorDocumentPathItem[]) => {
+    const entry = workflowEditorEntryForPath(library, path);
+    if (!entry) {
+      return;
+    }
+    setSelection(emptyWorkflowEditorSelection);
+    setDocumentPath(path);
+    setHistoryByDocumentId((current) => ({
+      ...current,
+      [entry.id]: current[entry.id] ?? createWorkflowEditorHistory(entry.document),
+    }));
+    updateLibrary({ ...library, activeDocumentId: entry.id });
+  };
+  const documentTabs = useWorkflowEditorDocumentTabs({
+    library,
+    documentPath,
+    activatePath: activateDocumentPath,
+    updateLibrary: (nextLibrary) => setLibrary(nextLibrary),
+  });
+
   const selectDocumentPathItem = (index: number) => {
     const nextPath = documentPath.slice(0, index + 1);
     const nextEntry = workflowEditorEntryForPath(library, nextPath);
@@ -1323,6 +1362,7 @@ export function WorkflowEditor<
     importError,
     bundleImport: bundleTransfer.bundleImport,
     bundleError: bundleTransfer.bundleError,
+    tabs: documentTabs.tabs,
     comparison: versionComparison.comparison,
     pendingRestore: versionComparison.pendingRestore,
     storageRecovery,
@@ -1345,6 +1385,7 @@ export function WorkflowEditor<
       },
       ...bundleTransfer.actions,
       ...versionComparison.actions,
+      ...documentTabs.actions,
       duplicateDocument,
       exportDocument,
       importDocumentFromFile,
@@ -1385,189 +1426,194 @@ export function WorkflowEditor<
       ) : documentControlsChrome === "hidden" ||
         layout === "unstyled" ? null : documentControlsChrome === "compact-menu" ? (
         <WorkbenchToolbar className="flex flex-wrap items-center justify-between gap-2 border border-border bg-background px-2 py-1">
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button type="button" size="sm" variant="outline">
-                {activeEntry?.name ?? "Workflow"}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent
-              aria-label="Workflow document menu"
-              align="start"
-              className="z-[22000] w-80 p-3"
-              onCloseAutoFocus={(event) => event.preventDefault()}
-            >
-              <div className="grid gap-3" onKeyDown={(event) => event.stopPropagation()}>
-                <div className="grid gap-1.5">
-                  <h2 className="text-sm font-semibold">Workflow</h2>
-                  <select
-                    aria-label="Workflow document"
-                    className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-                    value={activeEntry?.id ?? ""}
-                    disabled={readOnly || library.documents.length === 0}
-                    onChange={(event) => selectDocument(event.target.value)}
-                  >
-                    {library.documents.map((entry) => (
-                      <option key={entry.id} value={entry.id}>
-                        {entry.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="grid gap-1.5">
-                  <Input
-                    aria-label="Document name"
-                    className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-                    value={nameDraft}
-                    disabled={readOnly || !activeEntry}
-                    onChange={(event) => setNameDraft(event.target.value)}
-                  />
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={readOnly || !activeEntry}
-                    onClick={renameDocument}
-                  >
-                    Rename
-                  </Button>
-                </div>
-
-                <div className="grid grid-cols-3 gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={readOnly}
-                    onClick={createDocument}
-                  >
-                    New
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={readOnly || !activeEntry}
-                    onClick={duplicateDocument}
-                  >
-                    Duplicate
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={readOnly || !activeEntry || library.documents.length <= 1}
-                    onClick={deleteDocument}
-                  >
-                    Delete
-                  </Button>
-                </div>
-
-                <hr className="border-border" />
-
-                <div className="grid gap-1.5">
-                  <h2 className="text-sm font-semibold">Versions and files</h2>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={readOnly || !activeEntry}
-                      onClick={saveVersion}
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button type="button" size="sm" variant="outline">
+                  {activeEntry?.name ?? "Workflow"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent
+                aria-label="Workflow document menu"
+                align="start"
+                className="z-[22000] w-80 p-3"
+                onCloseAutoFocus={(event) => event.preventDefault()}
+              >
+                <div className="grid gap-3" onKeyDown={(event) => event.stopPropagation()}>
+                  <div className="grid gap-1.5">
+                    <h2 className="text-sm font-semibold">Workflow</h2>
+                    <select
+                      aria-label="Workflow document"
+                      className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                      value={activeEntry?.id ?? ""}
+                      disabled={library.documents.length === 0}
+                      onChange={(event) => documentTabs.actions.openDocument(event.target.value)}
                     >
-                      Save version
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={readOnly || !selectedVersionId}
-                      onClick={restoreVersion}
-                    >
-                      Restore
-                    </Button>
-                    <WorkflowEditorCompareVersionsButton controller={editorController} />
+                      {library.documents.map((entry) => (
+                        <option key={entry.id} value={entry.id}>
+                          {entry.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
-                  <select
-                    aria-label="Saved versions"
-                    className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-                    value={selectedVersionId}
-                    disabled={readOnly || !activeEntry || activeEntry.versions.length === 0}
-                    onChange={(event) => setSelectedVersionId(event.target.value)}
-                  >
-                    <option value="">No saved versions</option>
-                    {activeEntry?.versions.map((version) => (
-                      <option key={version.id} value={version.id}>
-                        v{version.version} {version.name}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="grid grid-cols-2 gap-2">
-                    <input
-                      ref={importInputRef}
-                      aria-label="Import workflow JSON"
-                      className="hidden"
-                      type="file"
-                      accept="application/json,.json"
-                      disabled={readOnly}
-                      onChange={importDocument}
+
+                  <div className="grid gap-1.5">
+                    <Input
+                      aria-label="Document name"
+                      className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                      value={nameDraft}
+                      disabled={readOnly || !activeEntry}
+                      onChange={(event) => setNameDraft(event.target.value)}
                     />
                     <Button
                       type="button"
                       size="sm"
                       variant="outline"
-                      disabled={readOnly}
-                      onClick={() => importInputRef.current?.click()}
+                      disabled={readOnly || !activeEntry}
+                      onClick={renameDocument}
                     >
-                      Import JSON
+                      Rename
+                    </Button>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={readOnly}
+                      onClick={createDocument}
+                    >
+                      New
                     </Button>
                     <Button
                       type="button"
                       size="sm"
                       variant="outline"
-                      disabled={!activeEntry}
-                      onClick={exportDocument}
+                      disabled={readOnly || !activeEntry}
+                      onClick={duplicateDocument}
                     >
-                      Export JSON
+                      Duplicate
                     </Button>
-                    <WorkflowEditorBundleTransferButtons controller={editorController} />
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={readOnly || !activeEntry || library.documents.length <= 1}
+                      onClick={deleteDocument}
+                    >
+                      Delete
+                    </Button>
+                  </div>
+
+                  <hr className="border-border" />
+
+                  <div className="grid gap-1.5">
+                    <h2 className="text-sm font-semibold">Versions and files</h2>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={readOnly || !activeEntry}
+                        onClick={saveVersion}
+                      >
+                        Save version
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={readOnly || !selectedVersionId}
+                        onClick={restoreVersion}
+                      >
+                        Restore
+                      </Button>
+                      <WorkflowEditorCompareVersionsButton controller={editorController} />
+                    </div>
+                    <select
+                      aria-label="Saved versions"
+                      className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                      value={selectedVersionId}
+                      disabled={readOnly || !activeEntry || activeEntry.versions.length === 0}
+                      onChange={(event) => setSelectedVersionId(event.target.value)}
+                    >
+                      <option value="">No saved versions</option>
+                      {activeEntry?.versions.map((version) => (
+                        <option key={version.id} value={version.id}>
+                          v{version.version} {version.name}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        ref={importInputRef}
+                        aria-label="Import workflow JSON"
+                        className="hidden"
+                        type="file"
+                        accept="application/json,.json"
+                        disabled={readOnly}
+                        onChange={importDocument}
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={readOnly}
+                        onClick={() => importInputRef.current?.click()}
+                      >
+                        Import JSON
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={!activeEntry}
+                        onClick={exportDocument}
+                      >
+                        Export JSON
+                      </Button>
+                      <WorkflowEditorBundleTransferButtons controller={editorController} />
+                    </div>
+                  </div>
+
+                  {renderCompactMenuActions ? (
+                    <>
+                      <hr className="border-border" />
+                      <div className="grid gap-2">{renderCompactMenuActions()}</div>
+                    </>
+                  ) : null}
+
+                  <hr className="border-border" />
+
+                  <div className="grid gap-1.5 text-xs text-muted-foreground">
+                    <h2 className="text-sm font-semibold text-foreground">Hotkeys</h2>
+                    <div className="flex justify-between gap-3">
+                      <span>Duplicate selection</span>
+                      <span>
+                        {formatShortcutLabel(defaultWorkflowWorkbenchHotkeys.duplicateNode)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <span>Copy selection</span>
+                      <span>
+                        {formatShortcutLabel(defaultWorkflowWorkbenchHotkeys.copySelection)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <span>Paste selection</span>
+                      <span>
+                        {formatShortcutLabel(defaultWorkflowWorkbenchHotkeys.pasteSelection)}
+                      </span>
+                    </div>
                   </div>
                 </div>
-
-                {renderCompactMenuActions ? (
-                  <>
-                    <hr className="border-border" />
-                    <div className="grid gap-2">{renderCompactMenuActions()}</div>
-                  </>
-                ) : null}
-
-                <hr className="border-border" />
-
-                <div className="grid gap-1.5 text-xs text-muted-foreground">
-                  <h2 className="text-sm font-semibold text-foreground">Hotkeys</h2>
-                  <div className="flex justify-between gap-3">
-                    <span>Duplicate selection</span>
-                    <span>
-                      {formatShortcutLabel(defaultWorkflowWorkbenchHotkeys.duplicateNode)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-3">
-                    <span>Copy selection</span>
-                    <span>
-                      {formatShortcutLabel(defaultWorkflowWorkbenchHotkeys.copySelection)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-3">
-                    <span>Paste selection</span>
-                    <span>
-                      {formatShortcutLabel(defaultWorkflowWorkbenchHotkeys.pasteSelection)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </PopoverContent>
-          </Popover>
+              </PopoverContent>
+            </Popover>
+            {documentTabs.tabs.length > 1 ? (
+              <WorkflowEditorDocumentTabs controller={editorController} showOpenSelect={false} />
+            ) : null}
+          </div>
 
           <div className="flex items-center gap-2">
             <Button
@@ -1607,19 +1653,7 @@ export function WorkflowEditor<
         <>
           <WorkbenchToolbar className="flex flex-wrap items-center justify-between gap-3 border border-border bg-background px-3 py-2">
             <div className="flex flex-wrap items-center gap-2">
-              <select
-                aria-label="Workflow document"
-                className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-                value={activeEntry?.id ?? ""}
-                disabled={readOnly || library.documents.length === 0}
-                onChange={(event) => selectDocument(event.target.value)}
-              >
-                {library.documents.map((entry) => (
-                  <option key={entry.id} value={entry.id}>
-                    {entry.name}
-                  </option>
-                ))}
-              </select>
+              <WorkflowEditorDocumentTabs controller={editorController} />
               <Button
                 type="button"
                 size="sm"
@@ -1782,7 +1816,8 @@ export function WorkflowEditor<
       {typeof documentPathChrome === "function" ? (
         documentPathChrome(editorController)
       ) : documentPathChrome === "hidden" || layout === "unstyled" ? null : enableNestedWorkflows &&
-        showDocumentPath ? (
+        showDocumentPath &&
+        documentPathChrome === "breadcrumb" ? (
         <WorkbenchToolbar
           className="flex flex-wrap items-center gap-2 border border-border bg-background px-3 py-2"
           aria-label="Workflow path"
@@ -2394,6 +2429,26 @@ export function useWorkflowEditorController<
     }));
     updateLibrary(nextLibrary);
   };
+  const activateDocumentPath = (path: WorkflowEditorDocumentPathItem[]) => {
+    const entry = workflowEditorEntryForPath(library, path);
+    if (!entry) {
+      return;
+    }
+    setSelection(emptyWorkflowEditorSelection);
+    setDocumentPath(path);
+    setHistoryByDocumentId((current) => ({
+      ...current,
+      [entry.id]: current[entry.id] ?? createWorkflowEditorHistory(entry.document),
+    }));
+    updateLibrary({ ...library, activeDocumentId: entry.id });
+  };
+  const documentTabs = useWorkflowEditorDocumentTabs({
+    library,
+    documentPath,
+    activatePath: activateDocumentPath,
+    updateLibrary: (nextLibrary) => setLibrary(nextLibrary),
+  });
+
   const selectDocumentPathItem = (index: number) => {
     const nextPath = documentPath.slice(0, index + 1);
     const nextEntry = workflowEditorEntryForPath(library, nextPath);
@@ -2459,6 +2514,7 @@ export function useWorkflowEditorController<
     importError,
     bundleImport: bundleTransfer.bundleImport,
     bundleError: bundleTransfer.bundleError,
+    tabs: documentTabs.tabs,
     comparison: versionComparison.comparison,
     pendingRestore: versionComparison.pendingRestore,
     storageRecovery,
@@ -2481,6 +2537,7 @@ export function useWorkflowEditorController<
       },
       ...bundleTransfer.actions,
       ...versionComparison.actions,
+      ...documentTabs.actions,
       duplicateDocument,
       exportDocument,
       importDocumentFromFile,
