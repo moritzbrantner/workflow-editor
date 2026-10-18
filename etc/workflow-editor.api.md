@@ -2002,7 +2002,9 @@ export type WorkflowEditorIterationDiagnostic = {
 };
 
 // @public (undocumented)
-export type WorkflowEditorIterationDiagnosticCode = "iteration-bound-required" | "iteration-bound-invalid" | "iteration-body-missing" | "iteration-boundary-invalid" | "iteration-state-type" | "iteration-stop-type" | "nested-iteration-not-supported";
+export type WorkflowEditorIterationDiagnosticCode = "iteration-bound-required" | "iteration-bound-invalid" | "iteration-body-missing" | "iteration-boundary-invalid" | "iteration-state-type" | "iteration-stop-type"
+/** @deprecated Nested iterations compile since #97; no longer reported. */
+| "nested-iteration-not-supported";
 
 // @public
 export const workflowEditorIterationNodeKind = "control.iterate";

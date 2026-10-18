@@ -30,6 +30,7 @@ export type WorkflowEditorIterationDiagnosticCode =
   | "iteration-boundary-invalid"
   | "iteration-state-type"
   | "iteration-stop-type"
+  /** @deprecated Nested iterations compile since #97; no longer reported. */
   | "nested-iteration-not-supported";
 
 export type WorkflowEditorIterationDiagnostic = {
@@ -307,16 +308,7 @@ export function validateWorkflowEditorIterationNode<TNodeData>(
     }
   }
 
-  for (const bodyNode of body.nodes) {
-    if (isWorkflowEditorIterationNode(bodyNode)) {
-      report(
-        "nested-iteration-not-supported",
-        `Iteration ${node.id} body contains another iteration (${bodyNode.id}); nested iteration is not supported yet.`,
-        `composition.nodes.${bodyNode.id}`,
-      );
-    }
-  }
-
+  // Nested iterations are allowed (#97); each one validates its own bound and body when compiled.
   return diagnostics;
 }
 

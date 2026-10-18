@@ -4,6 +4,7 @@
 
 ### Minor Changes
 
+- Nested bounded iterations (#97): an iteration body may contain another `control.iterate` node. It compiles into compiled v2 with its own bound and body checks. `nested-iteration-not-supported` is no longer reported.
 - Build on current graph-editor (#26): `@moritzbrantner/graph-editor` is now pinned to graph-editor `main` (commit `3f72b6e`) as a git dependency, and `@moritzbrantner/ui` moves to `^1.1.0`.
   - Keyboard users can move selected nodes with **Shift+Arrow** (coarse) and **Alt+Shift+Arrow** (fine) (#18).
   - Hosts must import `@moritzbrantner/ui/component-sources.css` next to their theme stylesheet and add an `@source` for graph-editor's `dist` (see the Pages `styles.css`).
