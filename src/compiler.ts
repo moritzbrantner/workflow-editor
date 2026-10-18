@@ -538,3 +538,14 @@ function compileIterationNode(
     },
   };
 }
+
+export {
+  createCompiledWorkflowReport,
+  createCompiledWorkflowSourceMap,
+  fingerprintCompiledWorkflow,
+  getCompiledWorkflowStages,
+  serializeCompiledWorkflow,
+  type WorkflowEditorCompiledSource,
+  type WorkflowEditorCompiledSourceMap,
+  type WorkflowEditorCompiledWorkflowReport,
+} from "./compiler-report";

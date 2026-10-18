@@ -156,6 +156,10 @@ import {
   type WorkflowExecutionNodeSnapshot,
   type WorkflowExecutionSnapshot,
 } from "./core-execution";
+import {
+  describeWorkflowWorkbenchConnectionRejection,
+  describeWorkflowWorkbenchDocumentChange,
+} from "./react/workbench-announcements";
 
 export {
   createWorkflowWorkbenchPaletteCategoryGroups,
@@ -432,11 +436,24 @@ export type WorkflowWorkbenchProps<
   ) => string;
   /** Host content for the selected node's execution details, such as inspect/retry/cancel actions. */
   renderExecutionDetails?: (context: WorkflowWorkbenchExecutionContext<TNodeData>) => ReactNode;
+  /**
+   * Host-owned document history. When provided, undo/redo commands and their keyboard shortcuts
+   * use it instead of the workbench's internal operation history.
+   */
+  history?: WorkflowWorkbenchHistoryControls;
   renderNodeTemplate?: (template: WorkflowWorkbenchPaletteItem<TTemplateData>) => ReactNode;
   renderInspector?: (context: WorkflowWorkbenchInspectorContext<TNodeData, TEdgeData>) => ReactNode;
   renderToolbarActions?: (
     context: WorkflowWorkbenchInspectorContext<TNodeData, TEdgeData>,
   ) => ReactNode;
+};
+
+/** Undo/redo controls supplied by a host that owns the document history. */
+export type WorkflowWorkbenchHistoryControls = {
+  canUndo: boolean;
+  canRedo: boolean;
+  undo: () => void;
+  redo: () => void;
 };
 
 export const defaultWorkflowWorkbenchHotkeys = {
@@ -593,6 +610,7 @@ export function WorkflowWorkbench<
   execution,
   formatExecutionLabel,
   renderExecutionDetails,
+  history: hostHistory,
   renderNodeTemplate,
   renderInspector,
   renderToolbarActions,
@@ -653,6 +671,40 @@ export function WorkflowWorkbench<
       ? inspectorPosition
       : inspectorPanelBehavior.controlledState.position;
   const documentContext = useMemo(() => createWorkflowEditorDocumentContext(document), [document]);
+  const [announcement, setAnnouncement] = useState("");
+  const announcedDocumentRef = useRef(document);
+  const focusWithinWorkbenchRef = useRef(false);
+
+  useEffect(() => {
+    const previous = announcedDocumentRef.current;
+    announcedDocumentRef.current = document;
+    const message = describeWorkflowWorkbenchDocumentChange(previous, document);
+    if (message) {
+      setAnnouncement(message);
+    }
+
+    // Keep keyboard users on the canvas when the focused element was removed by an edit
+    // (deletion, undo, redo, composition) instead of dropping focus to the page body.
+    const ownerDocument = containerRef.current?.ownerDocument;
+    if (!ownerDocument || !focusWithinWorkbenchRef.current) {
+      return;
+    }
+    const frame = ownerDocument.defaultView?.requestAnimationFrame(() => {
+      const active = ownerDocument.activeElement;
+      if (active && active !== ownerDocument.body && active.isConnected) {
+        return;
+      }
+      containerRef.current
+        ?.querySelector<HTMLElement>("[data-slot='workflow-builder-surface']")
+        ?.focus({ preventScroll: true });
+    });
+    return () => {
+      if (frame !== undefined) {
+        ownerDocument.defaultView?.cancelAnimationFrame(frame);
+      }
+    };
+  }, [document]);
+
   const externalSelectionProvided =
     selectedNodeIds !== undefined ||
     selectedEdgeIds !== undefined ||
@@ -939,6 +991,10 @@ export function WorkflowWorkbench<
     const nextDocument = connectWorkflowEditorNodes(document, connection, { typeDefinitions });
 
     if (nextDocument === document) {
+      const validity = validateWorkflowEditorConnection(document, connection, { typeDefinitions });
+      if (!validity.valid) {
+        setAnnouncement(describeWorkflowWorkbenchConnectionRejection(validity));
+      }
       return;
     }
 
@@ -1699,6 +1755,26 @@ export function WorkflowWorkbench<
     emitGraphRuntimeSelection(nextRuntime.selection, nextDocument, { syncRuntime: false });
   };
 
+  const undoWorkbench = () => {
+    if (hostHistory) {
+      if (!readOnly && hostHistory.canUndo) {
+        hostHistory.undo();
+      }
+      return;
+    }
+    undoGraphRuntime();
+  };
+
+  const redoWorkbench = () => {
+    if (hostHistory) {
+      if (!readOnly && hostHistory.canRedo) {
+        hostHistory.redo();
+      }
+      return;
+    }
+    redoGraphRuntime();
+  };
+
   const fitWorkflowWorkbenchView = () => {
     if (document.nodes.length === 0) {
       commitViewportChange({ x: 0, y: 0, zoom: 1 });
@@ -1731,10 +1807,10 @@ export function WorkflowWorkbench<
   const runGraphCommand = (commandId: GraphWorkbenchCommandId | string) => {
     switch (commandId) {
       case "undo":
-        undoGraphRuntime();
+        undoWorkbench();
         return;
       case "redo":
-        redoGraphRuntime();
+        redoWorkbench();
         return;
       case "copy":
         copySelection();
@@ -2331,14 +2407,14 @@ export function WorkflowWorkbench<
     {
       id: "undo",
       label: "Undo",
-      disabled: readOnly || !graphRuntime.canUndo,
-      run: undoGraphRuntime,
+      disabled: readOnly || !(hostHistory?.canUndo ?? graphRuntime.canUndo),
+      run: undoWorkbench,
     },
     {
       id: "redo",
       label: "Redo",
-      disabled: readOnly || !graphRuntime.canRedo,
-      run: redoGraphRuntime,
+      disabled: readOnly || !(hostHistory?.canRedo ?? graphRuntime.canRedo),
+      run: redoWorkbench,
     },
     {
       id: "copy",
@@ -2413,8 +2489,8 @@ export function WorkflowWorkbench<
     selectedDiagnostics: graphRuntime.selectedDiagnostics,
     history: {
       ...graphRuntime.operationHistory,
-      canUndo: graphRuntime.canUndo,
-      canRedo: graphRuntime.canRedo,
+      canUndo: hostHistory?.canUndo ?? graphRuntime.canUndo,
+      canRedo: hostHistory?.canRedo ?? graphRuntime.canRedo,
     },
     palette: {
       groups: paletteGroups as unknown as Array<WorkflowWorkbenchPaletteCategoryGroup<TNodeData>>,
@@ -2457,8 +2533,8 @@ export function WorkflowWorkbench<
           history: options?.history,
           selectionAfter: options?.selectionAfter,
         }),
-      undo: undoGraphRuntime,
-      redo: redoGraphRuntime,
+      undo: undoWorkbench,
+      redo: redoWorkbench,
       copySelection: async () => copySelection(),
       pasteSelection,
       duplicateSelection,
@@ -2598,6 +2674,26 @@ export function WorkflowWorkbench<
   return (
     <div
       data-slot="workbench-layout"
+      onFocusCapture={() => {
+        focusWithinWorkbenchRef.current = true;
+      }}
+      onBlurCapture={(event) => {
+        const nextFocus = event.relatedTarget;
+        if (nextFocus instanceof Node) {
+          if (!event.currentTarget.contains(nextFocus)) {
+            focusWithinWorkbenchRef.current = false;
+          }
+          return;
+        }
+        // Focus left to nowhere: either the user clicked away (target stays connected) or an
+        // edit removed the focused element, in which case focus is restored to the canvas.
+        const blurred = event.target;
+        queueMicrotask(() => {
+          if (blurred.isConnected) {
+            focusWithinWorkbenchRef.current = false;
+          }
+        });
+      }}
       className={cn(
         layout === "unstyled"
           ? "min-h-0 min-w-0 text-foreground"
@@ -3235,6 +3331,15 @@ export function WorkflowWorkbench<
           </div>
         </div>
       </main>
+      <div
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        data-slot="workflow-workbench-announcer"
+        className="sr-only"
+      >
+        {announcement}
+      </div>
     </div>
   );
 }
