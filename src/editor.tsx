@@ -14,11 +14,9 @@ import { type ChangeEvent, type ReactNode, useEffect, useMemo, useRef, useState 
 import {
   Badge,
   Button,
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
   Input,
   SearchField,
   Textarea,
@@ -1287,20 +1285,21 @@ export function WorkflowEditor<
       ) : documentControlsChrome === "hidden" ||
         layout === "unstyled" ? null : documentControlsChrome === "compact-menu" ? (
         <WorkbenchToolbar className="flex flex-wrap items-center justify-between gap-2 border border-border bg-background px-2 py-1">
-          <DropdownMenu modal={false}>
-            <DropdownMenuTrigger asChild>
+          <Popover>
+            <PopoverTrigger asChild>
               <Button type="button" size="sm" variant="outline">
                 {activeEntry?.name ?? "Workflow"}
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
+            </PopoverTrigger>
+            <PopoverContent
+              aria-label="Workflow document menu"
               align="start"
               className="w-80 p-3"
               onCloseAutoFocus={(event) => event.preventDefault()}
             >
               <div className="grid gap-3" onKeyDown={(event) => event.stopPropagation()}>
                 <div className="grid gap-1.5">
-                  <DropdownMenuLabel className="px-0">Workflow</DropdownMenuLabel>
+                  <h2 className="text-sm font-semibold">Workflow</h2>
                   <select
                     aria-label="Workflow document"
                     className="h-9 rounded-md border border-input bg-background px-2 text-sm"
@@ -1365,10 +1364,10 @@ export function WorkflowEditor<
                   </Button>
                 </div>
 
-                <DropdownMenuSeparator />
+                <hr className="border-border" />
 
                 <div className="grid gap-1.5">
-                  <DropdownMenuLabel className="px-0">Versions and files</DropdownMenuLabel>
+                  <h2 className="text-sm font-semibold">Versions and files</h2>
                   <div className="grid grid-cols-2 gap-2">
                     <Button
                       type="button"
@@ -1436,15 +1435,15 @@ export function WorkflowEditor<
 
                 {renderCompactMenuActions ? (
                   <>
-                    <DropdownMenuSeparator />
+                    <hr className="border-border" />
                     <div className="grid gap-2">{renderCompactMenuActions()}</div>
                   </>
                 ) : null}
 
-                <DropdownMenuSeparator />
+                <hr className="border-border" />
 
                 <div className="grid gap-1.5 text-xs text-muted-foreground">
-                  <DropdownMenuLabel className="px-0 text-foreground">Hotkeys</DropdownMenuLabel>
+                  <h2 className="text-sm font-semibold text-foreground">Hotkeys</h2>
                   <div className="flex justify-between gap-3">
                     <span>Duplicate selection</span>
                     <span>
@@ -1465,8 +1464,8 @@ export function WorkflowEditor<
                   </div>
                 </div>
               </div>
-            </DropdownMenuContent>
-          </DropdownMenu>
+            </PopoverContent>
+          </Popover>
 
           <div className="flex items-center gap-2">
             <Button
@@ -1750,6 +1749,7 @@ export function WorkflowEditor<
             aria-label="Workflow types"
             className="absolute bottom-0 right-0 top-10 z-[21000] grid w-80 max-w-full content-start gap-3 overflow-auto rounded-md border border-border bg-card p-3 shadow-md"
           >
+            <h2 className="sr-only">Workflow types</h2>
             <Button type="button" size="sm" variant="outline" onClick={() => setShowTypes(false)}>
               Close types
             </Button>

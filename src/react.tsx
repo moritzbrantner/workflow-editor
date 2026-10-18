@@ -2616,10 +2616,27 @@ export function WorkflowWorkbench<
         // Focus left to nowhere: either the user clicked away (target stays connected) or an
         // edit removed the focused element, in which case focus is restored to the canvas.
         const blurred = event.target;
+        const ownerDocument = event.currentTarget.ownerDocument;
         queueMicrotask(() => {
-          if (blurred.isConnected) {
+          // A blurred element that is still rendered and enabled means the user moved focus away; a
+          // removed, hidden or disabled one (for example "Create nested workflow" once it opens the
+          // nested workflow) does not.
+          if (
+            blurred.isConnected &&
+            blurred.getClientRects().length > 0 &&
+            !blurred.matches(":disabled")
+          ) {
             focusWithinWorkbenchRef.current = false;
+            return;
           }
+          ownerDocument.defaultView?.requestAnimationFrame(() => {
+            const active = ownerDocument.activeElement;
+            if (focusWithinWorkbenchRef.current && (!active || active === ownerDocument.body)) {
+              containerRef.current
+                ?.querySelector<HTMLElement>("[data-slot='workflow-builder-surface']")
+                ?.focus({ preventScroll: true });
+            }
+          });
         });
       }}
       className={cn(
