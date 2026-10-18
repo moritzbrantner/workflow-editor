@@ -230,6 +230,7 @@ export {
   type WorkflowEditorTriggerType,
 } from "./core-triggers";
 import { normalizeWorkflowEditorTriggers } from "./core-triggers";
+export {
   getWorkflowEditorInputDeclarations,
   resolveWorkflowEditorInputValues,
   validateWorkflowEditorInputValues,
