@@ -100,6 +100,27 @@ export function WorkflowWorkbenchToolbar<
       >
         Ungroup
       </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={controller.readOnly || controller.selection.nodeIds.length === 0}
+        onClick={controller.actions.composeSelection}
+      >
+        Compose
+      </Button>
+      {controller.selectedNode?.composition &&
+      controller.selectedNode.kind !== "control.iterate" ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={controller.readOnly}
+          onClick={() => controller.actions.restoreComposition()}
+        >
+          Restore composition
+        </Button>
+      ) : null}
       {controller.workflow.documentReferences ? (
         controller.selectedNode?.workflowRef?.documentId ? (
           <Button

@@ -3217,6 +3217,8 @@ export type WorkflowWorkbenchController<TNodeData extends Record<string, unknown
         deleteSelection: () => void;
         duplicateSelection: () => void;
         groupSelection: () => void;
+        composeSelection: () => void;
+        restoreComposition: (nodeId?: string) => void;
         openSelectedNodeWorkflow: () => void;
         pasteSelection: () => Promise<void>;
         renameSelectedGroup: (label: string) => void;

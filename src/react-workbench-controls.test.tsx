@@ -197,6 +197,45 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     expect(readStatefulDocument().edges).toHaveLength(0);
   });
 
+  test("composes the selection and restores it from the toolbar and node menu (#18)", async () => {
+    render(
+      <StatefulWorkbench
+        initialSelection={{
+          nodeIds: ["input", "transform"],
+          edgeIds: [],
+          primary: { type: "node", id: "input" },
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Compose" }));
+    await waitFor(() => expect(readStatefulDocument().nodes).toHaveLength(2));
+    const composed = readStatefulDocument().nodes.find((node) => node.composition)!;
+    expect(composed.composition?.nodes.map((node) => node.id).sort()).toEqual([
+      "input",
+      "transform",
+    ]);
+    expect(readStatefulSelection()).toMatchObject({ nodeIds: [composed.id] });
+
+    // The toolbar offers Restore for the selected composed node; the node menu offers it too.
+    expect(screen.getByRole("button", { name: "Restore composition" })).not.toBeNull();
+    fireEvent.keyDown(screen.getByRole("button", { name: `Open ${composed.label} menu` }), {
+      key: "Enter",
+    });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Restore composition" }));
+    await waitFor(() =>
+      expect(
+        readStatefulDocument()
+          .nodes.map((node) => node.id)
+          .sort(),
+      ).toEqual(["input", "output", "transform"]),
+    );
+    expect(readStatefulDocument().edges).toContainEqual(
+      expect.objectContaining({ sourceNodeId: "input", targetNodeId: "transform" }),
+    );
+    expect(readStatefulSelection().nodeIds.sort()).toEqual(["input", "transform"]);
+  });
+
   test("deletes a workflow node from its node action menu", async () => {
     render(<StatefulWorkbench />);
 

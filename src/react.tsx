@@ -97,6 +97,9 @@ import {
   connectWorkflowEditorNodes,
   copyWorkflowEditorSelection,
   createWorkflowEditorGroup,
+  composeWorkflowEditorNodes,
+  restoreWorkflowEditorComposedNode,
+  isWorkflowEditorIterationNode,
   createWorkflowEditorDocumentContext,
   createWorkflowEditorGraphIndex,
   defaultWorkflowEditorNodeTemplates,
@@ -367,6 +370,10 @@ export type WorkflowWorkbenchController<
     deleteSelection: () => void;
     duplicateSelection: () => void;
     groupSelection: () => void;
+    /** Wraps the selected nodes into one composed node (#18). */
+    composeSelection: () => void;
+    /** Restores a composed node's embedded nodes in place (#18); defaults to the primary node. */
+    restoreComposition: (nodeId?: string) => void;
     openSelectedNodeWorkflow: () => void;
     pasteSelection: () => Promise<void>;
     renameSelectedGroup: (label: string) => void;
@@ -1716,6 +1723,22 @@ export function WorkflowWorkbench<
     }
   };
 
+  const composeSelection = () => {
+    const result = readOnly
+      ? undefined
+      : composeWorkflowWorkbenchSelection(document, latestSelectionRef.current.nodeIds);
+    if (!result) return;
+    commitDocument(result.document);
+    emitSelectionState(result.selection, result.document);
+  };
+
+  const restoreComposition = (nodeId = latestSelectionRef.current.primary?.id) => {
+    const result = readOnly ? undefined : restoreWorkflowWorkbenchComposition(document, nodeId);
+    if (!result) return;
+    commitDocument(result.document);
+    emitSelectionState(result.selection, result.document);
+  };
+
   const ungroupSelection = () => {
     if (readOnly || !selectedGroup) {
       return;
@@ -2679,6 +2702,8 @@ export function WorkflowWorkbench<
       deleteSelection,
       duplicateSelection,
       groupSelection,
+      composeSelection,
+      restoreComposition,
       openSelectedNodeWorkflow,
       pasteSelection,
       renameSelectedGroup,
@@ -2864,6 +2889,28 @@ export function WorkflowWorkbench<
               >
                 Ungroup
               </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="!h-6 !min-h-6 !px-2 !text-xs"
+                disabled={readOnly || selection.nodeIds.length === 0}
+                onClick={composeSelection}
+              >
+                Compose
+              </Button>
+              {selectedNode && isWorkflowEditorComposedNode(selectedNode) ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="!h-6 !min-h-6 !px-2 !text-xs"
+                  disabled={readOnly}
+                  onClick={() => restoreComposition()}
+                >
+                  Restore composition
+                </Button>
+              ) : null}
               <Button
                 type="button"
                 size="sm"
@@ -3065,6 +3112,16 @@ export function WorkflowWorkbench<
                                 window.setTimeout(() => setRenamingNodeId(node.id), 0);
                               },
                             },
+                            ...(documentContext.nodeById.get(node.id) &&
+                            isWorkflowEditorComposedNode(documentContext.nodeById.get(node.id)!)
+                              ? [
+                                  {
+                                    id: "restore-composition",
+                                    label: "Restore composition",
+                                    onSelect: () => restoreComposition(node.id),
+                                  },
+                                ]
+                              : []),
                             {
                               id: "delete",
                               label: "Delete",
@@ -4003,6 +4060,30 @@ export function useWorkflowWorkbenchController<
       );
     }
   };
+  const composeSelection = () => {
+    const result = readOnly
+      ? undefined
+      : composeWorkflowWorkbenchSelection(document, latestSelectionRef.current.nodeIds);
+    if (!result) return;
+    dispatchGraphOperation(
+      createWorkflowWorkbenchDocumentOperation(result.document, result.selection),
+      {
+        emitSelection: false,
+      },
+    );
+    setSelection(result.selection, result.document);
+  };
+  const restoreComposition = (nodeId = latestSelectionRef.current.primary?.id) => {
+    const result = readOnly ? undefined : restoreWorkflowWorkbenchComposition(document, nodeId);
+    if (!result) return;
+    dispatchGraphOperation(
+      createWorkflowWorkbenchDocumentOperation(result.document, result.selection),
+      {
+        emitSelection: false,
+      },
+    );
+    setSelection(result.selection, result.document);
+  };
   const ungroupSelection = () => {
     if (readOnly || !selectedGroup) {
       return;
@@ -4344,6 +4425,8 @@ export function useWorkflowWorkbenchController<
       deleteSelection,
       duplicateSelection,
       groupSelection,
+      composeSelection,
+      restoreComposition,
       openSelectedNodeWorkflow: () => selectedNode && onOpenWorkflowReference?.(selectedNode),
       pasteSelection,
       renameSelectedGroup,
@@ -5863,4 +5946,44 @@ function WorkflowObjectConstructorExpressionControl<TNodeData extends Record<str
       ) : null}
     </div>
   );
+}
+
+/** Composes `nodeIds` and selects the new composed node; `undefined` when nothing changes. */
+function composeWorkflowWorkbenchSelection<TNodeData, TEdgeData>(
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>,
+  nodeIds: readonly string[],
+) {
+  const nextDocument = composeWorkflowEditorNodes(document, nodeIds);
+  if (nextDocument === document) return undefined;
+  const previousIds = new Set(document.nodes.map((node) => node.id));
+  const composed = nextDocument.nodes.find((node) => !previousIds.has(node.id));
+  const selection: WorkflowEditorSelectionState = composed
+    ? { nodeIds: [composed.id], edgeIds: [], primary: { type: "node", id: composed.id } }
+    : { nodeIds: [], edgeIds: [] };
+  return { document: nextDocument, selection };
+}
+
+/** Restores a composed node and selects its restored nodes; `undefined` when nothing changes. */
+function restoreWorkflowWorkbenchComposition<TNodeData, TEdgeData>(
+  document: WorkflowEditorDocument<TNodeData, TEdgeData>,
+  nodeId: string | undefined,
+) {
+  const node = nodeId ? document.nodes.find((candidate) => candidate.id === nodeId) : undefined;
+  if (!node || !isWorkflowEditorComposedNode(node)) return undefined;
+  const nextDocument = restoreWorkflowEditorComposedNode(document, node.id);
+  if (nextDocument === document) return undefined;
+  const nextIds = new Set(nextDocument.nodes.map((candidate) => candidate.id));
+  const restoredIds = (node.composition?.nodes ?? [])
+    .map((child) => child.id)
+    .filter((id) => nextIds.has(id));
+  const selection: WorkflowEditorSelectionState = {
+    nodeIds: restoredIds,
+    edgeIds: [],
+    ...(restoredIds[0] ? { primary: { type: "node", id: restoredIds[0] } } : {}),
+  };
+  return { document: nextDocument, selection };
+}
+
+function isWorkflowEditorComposedNode(node: WorkflowEditorNode<unknown>) {
+  return !!node.composition && !isWorkflowEditorIterationNode(node);
 }
