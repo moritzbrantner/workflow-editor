@@ -261,6 +261,11 @@ export {
   type WorkflowExecutionPresentation,
   type WorkflowExecutionSnapshot,
 } from "./core-execution";
+export {
+  applyWorkflowRunnerEventToSnapshot,
+  createWorkflowExecutionSnapshotFromRunnerEvents,
+  type WorkflowRunnerLifecycleEvent,
+} from "./core-execution-events";
 
 export class WorkflowEditorDocumentValidationError extends Error {
   override name = "WorkflowEditorDocumentValidationError" as const;

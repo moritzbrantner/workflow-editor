@@ -72,6 +72,12 @@ export function applyWorkflowEditorBundleImportPlan<TNodeData, TEdgeData>(librar
 export function applyWorkflowGraphOperation<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>, TPortType = WorkflowEditorPortType>(state: WorkflowGraphRuntimeState<TNodeData, TEdgeData, TPortType>, operation: WorkflowGraphOperation<TNodeData, TEdgeData, TPortType>, options?: Parameters<typeof applyGraphEditorOperation>[2]): WorkflowGraphRuntimeState<TNodeData, TEdgeData, TPortType>;
 
 // @public
+export function applyWorkflowRunnerEventToSnapshot(snapshot: WorkflowExecutionSnapshot | undefined, event: WorkflowRunnerLifecycleEvent | {
+    type: string;
+    runId?: string;
+}): WorkflowExecutionSnapshot | undefined;
+
+// @public
 export function assertWorkflowEditorDocument<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(value: unknown, options?: WorkflowEditorDocumentValidationOptions): asserts value is WorkflowEditorDocument<TNodeData, TEdgeData>;
 
 // @public
@@ -160,6 +166,14 @@ export function createWorkflowEditorVersion<TNodeData = Record<string, unknown>,
     createdAt?: string;
     maxVersions?: number;
 }): WorkflowEditorLibraryEntry<TNodeData, TEdgeData>;
+
+// @public
+export function createWorkflowExecutionSnapshotFromRunnerEvents(events: ReadonlyArray<WorkflowRunnerLifecycleEvent | {
+    type: string;
+    runId?: string;
+}>, options?: {
+    mode?: WorkflowExecutionSnapshot["mode"];
+}): WorkflowExecutionSnapshot | undefined;
 
 // @public (undocumented)
 export function createWorkflowGraphRuntime<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>, TPortType = WorkflowEditorPortType>(options: GraphEditorRuntimeOptions<TNodeData, TEdgeData, TPortType>): WorkflowGraphRuntimeState<TNodeData, TEdgeData, TPortType>;
@@ -2724,6 +2738,83 @@ export type WorkflowGraphRuntimeState<TNodeData = Record<string, unknown>, TEdge
 
 // @public (undocumented)
 export type WorkflowGraphWorkbenchController<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>, TPortType = WorkflowEditorPortType> = GraphWorkbenchController<TNodeData, TEdgeData, TPortType>;
+
+// @public
+export type WorkflowRunnerLifecycleEvent = {
+    type: "run.started";
+    runId: string;
+    timestamp: string;
+} | {
+    type: "node.started";
+    runId: string;
+    nodeId: string;
+    attempt: number;
+    timestamp: string;
+} | {
+    type: "node.succeeded";
+    runId: string;
+    nodeId: string;
+    attempt: number;
+    timestamp: string;
+    outputs?: Record<string, unknown>;
+} | {
+    type: "node.skipped";
+    runId: string;
+    nodeId: string;
+    timestamp: string;
+} | {
+    type: "node.retrying";
+    runId: string;
+    nodeId: string;
+    attempt: number;
+    nextAttempt: number;
+    reason: string;
+    timestamp: string;
+} | {
+    type: "node.failed";
+    runId: string;
+    nodeId: string;
+    attempt: number;
+    timestamp: string;
+    error: {
+        message?: string;
+    };
+} | {
+    type: "node.suspended";
+    runId: string;
+    nodeId: string;
+    attempt: number;
+    taskId: string;
+    timestamp: string;
+} | {
+    type: "node.iteration";
+    runId: string;
+    nodeId: string;
+    iteration: number;
+    converged: boolean;
+    timestamp: string;
+} | {
+    type: "run.succeeded";
+    runId: string;
+    timestamp: string;
+} | {
+    type: "run.failed";
+    runId: string;
+    timestamp: string;
+} | {
+    type: "run.cancelled";
+    runId: string;
+    timestamp: string;
+} | {
+    type: "run.suspended";
+    runId: string;
+    timestamp: string;
+} | {
+    type: "run.resumed";
+    runId: string;
+    nodeId: string;
+    timestamp: string;
+};
 
 // @public (undocumented)
 export function WorkflowWorkbench<TNodeData extends Record<string, unknown> = Record<string, unknown>, TEdgeData extends Record<string, unknown> = Record<string, unknown>, TTemplateData = TNodeData>(input: WorkflowWorkbenchProps<TNodeData, TEdgeData, TTemplateData>): react.JSX.Element;
