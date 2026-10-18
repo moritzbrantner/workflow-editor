@@ -1,4 +1,5 @@
 import { NativeWorkflowTypes } from "./editor/native-types";
+import { buildWorkflowEditorBundle, stringifyWorkflowEditorBundle } from "./bundle";
 import {
   connectWorkflowEditorNodes,
   addWorkflowEditorObjectDecompositionOutputToNode,
@@ -28,6 +29,7 @@ import {
   resolveWorkflowEditorSettings,
   useWorkflowEditorController,
   type WorkflowEditorDocument,
+  type WorkflowEditorLibrary,
   type WorkflowEditorSettings,
   type WorkflowEditorTypeDefinition,
 } from "@moritzbrantner/workflow-editor";
@@ -318,6 +320,99 @@ describe("@moritzbrantner/workflow-editor editor shell", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  test("imports a workflow bundle after previewing and resolving collisions", async () => {
+    const reference = (id: string, documentId: string) => ({
+      id,
+      label: id,
+      x: 0,
+      y: 0,
+      workflowRef: { documentId },
+    });
+    const sourceLibrary = createWorkflowEditorLibrary({
+      activeDocumentId: "root",
+      documents: [
+        createWorkflowEditorEntry({
+          id: "root",
+          name: "Root",
+          document: { nodes: [reference("call-child", "child")], edges: [] },
+        }),
+        createWorkflowEditorEntry({ id: "child", name: "Child", document }),
+      ],
+    });
+    const built = buildWorkflowEditorBundle(sourceLibrary, "root");
+    if (!built.ok) {
+      throw new Error("bundle export failed");
+    }
+    const saveLibrary = vi.fn(async (_library: WorkflowEditorLibrary) => {});
+
+    render(
+      <WorkflowEditor
+        initialLibrary={sourceLibrary}
+        storage={{ loadLibrary: vi.fn(async () => ({ status: "empty" as const })), saveLibrary }}
+      />,
+    );
+    await waitFor(() => expect(saveLibrary).toHaveBeenCalled());
+
+    fireEvent.change(screen.getByLabelText("Import workflow bundle"), {
+      target: {
+        files: [new File([stringifyWorkflowEditorBundle(built.value)], "root.bundle.json")],
+      },
+    });
+
+    const plan = await screen.findByRole("region", { name: "Bundle import" });
+    expect(plan.textContent).toContain("Already in library");
+    const confirm = screen.getByRole("button", { name: "Confirm import" });
+    expect((confirm as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.change(screen.getByLabelText("Collision strategy"), {
+      target: { value: "duplicate" },
+    });
+    expect(plan.textContent).toContain("→ root-copy");
+    fireEvent.click(screen.getByRole("button", { name: "Confirm import" }));
+
+    await waitFor(() => {
+      const saved = saveLibrary.mock.calls.at(-1)?.[0];
+      expect(saved?.activeDocumentId).toBe("root-copy");
+      expect(
+        saved?.documents.find((entry) => entry.id === "root-copy")?.document.nodes[0]?.workflowRef,
+      ).toEqual({ documentId: "child-copy" });
+    });
+    expect(screen.queryByRole("region", { name: "Bundle import" })).toBeNull();
+  });
+
+  test("rejects exporting a bundle with a missing reference", async () => {
+    const handleError = vi.fn();
+    render(
+      <WorkflowEditor
+        initialLibrary={createWorkflowEditorLibrary({
+          documents: [
+            createWorkflowEditorEntry({
+              id: "root",
+              name: "Root",
+              document: {
+                nodes: [
+                  { id: "call", label: "Call", x: 0, y: 0, workflowRef: { documentId: "gone" } },
+                ],
+                edges: [],
+              },
+            }),
+          ],
+        })}
+        storage={{
+          loadLibrary: vi.fn(async () => ({ status: "empty" as const })),
+          saveLibrary: vi.fn(async () => {}),
+        }}
+        onError={handleError}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Export bundle" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("Bundle export rejected:");
+    expect(alert.textContent).toContain('references missing workflow "gone"');
+    expect(handleError).toHaveBeenCalled();
   });
 
   test("places document controls through custom editor chrome", async () => {

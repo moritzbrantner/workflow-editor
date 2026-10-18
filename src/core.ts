@@ -949,8 +949,26 @@ export function updateWorkflowEditorNodeWorkflowReference<
   reference: WorkflowEditorWorkflowReference | null,
 ): WorkflowEditorDocument<TNodeData, TEdgeData> {
   return updateWorkflowEditorNode(document, nodeId, {
-    workflowRef: reference?.documentId ? { documentId: reference.documentId } : undefined,
+    workflowRef: normalizeWorkflowEditorWorkflowReference(reference),
   } as Partial<WorkflowEditorNode<TNodeData>>);
+}
+
+/** Keeps the document id and a valid finite `maxDepth`; returns `undefined` without a target. */
+export function normalizeWorkflowEditorWorkflowReference(
+  reference: WorkflowEditorWorkflowReference | null | undefined,
+): WorkflowEditorWorkflowReference | undefined {
+  if (!reference?.documentId) {
+    return undefined;
+  }
+
+  return isWorkflowEditorReferenceDepth(reference.maxDepth)
+    ? { documentId: reference.documentId, maxDepth: reference.maxDepth }
+    : { documentId: reference.documentId };
+}
+
+/** Whether `value` is a valid reference depth bound: a positive safe integer. */
+export function isWorkflowEditorReferenceDepth(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 }
 
 export function getWorkflowEditorReferencedDocumentIds<
@@ -4321,9 +4339,7 @@ function normalizeWorkflowEditorNode<TNodeData = Record<string, unknown>>(
     y: Number.isFinite(node.y) ? node.y : 0,
     inputs: normalizePorts(node.inputs),
     outputs: normalizePorts(node.outputs),
-    workflowRef: node.workflowRef?.documentId
-      ? { documentId: node.workflowRef.documentId }
-      : undefined,
+    workflowRef: normalizeWorkflowEditorWorkflowReference(node.workflowRef),
     composition: node.composition
       ? normalizeWorkflowEditorNodeComposition(
           node.composition,

@@ -63,11 +63,21 @@ export function addWorkflowEditorObjectDecompositionOutputToNode<TNodeData = Rec
 // @public (undocumented)
 export function analyzeWorkflowEditorPortTypes<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(document: WorkflowEditorDocument<TNodeData, TEdgeData>, options?: WorkflowEditorTypeValidationOptions): WorkflowEditorTypeDiagnostic[];
 
+// @public
+export function applyWorkflowEditorBundleImportPlan<TNodeData, TEdgeData>(library: WorkflowEditorLibrary<TNodeData, TEdgeData>, bundle: WorkflowEditorBundle<TNodeData, TEdgeData>, plan: WorkflowEditorBundleImportPlan, options?: {
+    now?: string;
+}): WorkflowEditorLibrary<TNodeData, TEdgeData>;
+
 // @public (undocumented)
 export function applyWorkflowGraphOperation<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>, TPortType = WorkflowEditorPortType>(state: WorkflowGraphRuntimeState<TNodeData, TEdgeData, TPortType>, operation: WorkflowGraphOperation<TNodeData, TEdgeData, TPortType>, options?: Parameters<typeof applyGraphEditorOperation>[2]): WorkflowGraphRuntimeState<TNodeData, TEdgeData, TPortType>;
 
 // @public
 export function assertWorkflowEditorDocument<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(value: unknown, options?: WorkflowEditorDocumentValidationOptions): asserts value is WorkflowEditorDocument<TNodeData, TEdgeData>;
+
+// @public
+export function buildWorkflowEditorBundle<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(library: WorkflowEditorLibrary<TNodeData, TEdgeData>, rootDocumentId: string, options?: {
+    exportedAt?: string;
+}): WorkflowEditorBundleResult<WorkflowEditorBundle<TNodeData, TEdgeData>>;
 
 // @public (undocumented)
 export function buildWorkflowEditorDocumentFile<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(document: WorkflowEditorDocument<TNodeData, TEdgeData>, options?: {
@@ -87,6 +97,11 @@ export function canRedoWorkflowEditorHistory<TNodeData = Record<string, unknown>
 
 // @public (undocumented)
 export function canUndoWorkflowEditorHistory<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(history: WorkflowEditorHistoryState<TNodeData, TEdgeData>): boolean;
+
+// Warning: (ae-forgotten-export) The symbol "ReferenceSite" needs to be exported by the entry point index.d.ts
+//
+// @public
+export function collectWorkflowEditorReferenceSites<TNodeData, TEdgeData>(document: WorkflowEditorDocument<TNodeData, TEdgeData>): ReferenceSite[];
 
 // @public (undocumented)
 export function commitWorkflowEditorHistory<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(history: WorkflowEditorHistoryState<TNodeData, TEdgeData>, document: WorkflowEditorDocument<TNodeData, TEdgeData>, options?: WorkflowEditorHistoryOptions): WorkflowEditorHistoryState<TNodeData, TEdgeData>;
@@ -746,6 +761,9 @@ export function hasWorkflowEditorWorkflowReference<TData = Record<string, unknow
 // @public (undocumented)
 export function isWorkflowEditorArrayConstructorNode<TNodeData = Record<string, unknown>>(node: WorkflowEditorNode<TNodeData>): boolean;
 
+// @public
+export function isWorkflowEditorBundleText(text: string): boolean;
+
 // @public (undocumented)
 export function isWorkflowEditorDirectedAcyclicGraph<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(document: WorkflowEditorDocument<TNodeData, TEdgeData>): boolean;
 
@@ -766,6 +784,9 @@ export function isWorkflowEditorPortPayloadLike(value: unknown): value is Workfl
 
 // @public (undocumented)
 export function isWorkflowEditorPortTypeAssignable(source: WorkflowEditorPortType, target: WorkflowEditorPortType, typeDefinitions?: readonly WorkflowEditorTypeDefinition[]): boolean;
+
+// @public
+export function isWorkflowEditorReferenceDepth(value: unknown): value is number;
 
 // @public (undocumented)
 export function layoutWorkflowEditorDocument<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(document: WorkflowEditorDocument<TNodeData, TEdgeData>, options?: WorkflowEditorLayoutOptions<TNodeData, TEdgeData>): WorkflowEditorLayoutResult<TNodeData, TEdgeData>;
@@ -796,6 +817,12 @@ export function normalizeWorkflowEditorDocument<TNodeData = Record<string, unkno
 // @public (undocumented)
 export function normalizeWorkflowEditorSelection<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(document: WorkflowEditorDocument<TNodeData, TEdgeData>, selection: WorkflowEditorSelectionState): WorkflowEditorSelectionState;
 
+// @public
+export function normalizeWorkflowEditorWorkflowReference(reference: WorkflowEditorWorkflowReference | null | undefined): WorkflowEditorWorkflowReference | undefined;
+
+// @public
+export function parseWorkflowEditorBundle<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(text: string): WorkflowEditorBundleResult<WorkflowEditorBundle<TNodeData, TEdgeData>>;
+
 // @public (undocumented)
 export function parseWorkflowEditorDocumentFile<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(text: string): WorkflowEditorDocumentFile<TNodeData, TEdgeData>;
 
@@ -804,6 +831,9 @@ export function parseWorkflowEditorObjectConstructorExpression(expression: strin
 
 // @public (undocumented)
 export function pasteWorkflowEditorClipboardPayload<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(document: WorkflowEditorDocument<TNodeData, TEdgeData>, payload: WorkflowEditorClipboardPayload<TNodeData, TEdgeData>, options?: WorkflowEditorPasteOptions): WorkflowEditorPasteResult<TNodeData, TEdgeData>;
+
+// @public
+export function planWorkflowEditorBundleImport<TNodeData, TEdgeData>(library: WorkflowEditorLibrary<TNodeData, TEdgeData>, bundle: WorkflowEditorBundle<TNodeData, TEdgeData>, strategy: WorkflowEditorBundleCollisionStrategy): WorkflowEditorBundleImportPlan;
 
 // @public (undocumented)
 export function readWorkflowEditorDocumentFile<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(file: Blob): Promise<WorkflowEditorRestoredDocumentFile<TNodeData, TEdgeData>>;
@@ -872,6 +902,9 @@ export function restoreWorkflowEditorVersion<TNodeData = Record<string, unknown>
 
 // @public (undocumented)
 export function saveWorkflowEditorLibrary<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(storage: WorkflowEditorStorageAdapter<TNodeData, TEdgeData>, library: WorkflowEditorLibrary<TNodeData, TEdgeData>): Promise<void>;
+
+// @public
+export function stringifyWorkflowEditorBundle(bundle: WorkflowEditorBundle<unknown, unknown>): string;
 
 // @public (undocumented)
 export function topologicallySortWorkflowEditorNodes<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(document: WorkflowEditorDocument<TNodeData, TEdgeData>): WorkflowEditorNode<TNodeData>[];
@@ -953,6 +986,8 @@ export function useWorkflowEditorController<TNodeData extends Record<string, unk
     documentProblems: WorkflowEditorDocumentDiagnostic[];
     history: WorkflowEditorHistoryState<TNodeData, TEdgeData>;
     importError: string | null;
+    bundleImport: WorkflowEditorBundleImportState<TNodeData, TEdgeData> | null;
+    bundleError: WorkflowEditorBundleError | null;
     storageRecovery: WorkflowEditorStorageRecovery | null;
     library: WorkflowEditorLibrary<TNodeData, TEdgeData>;
     nameDraft: string;
@@ -963,10 +998,6 @@ export function useWorkflowEditorController<TNodeData extends Record<string, unk
     settings: WorkflowEditorSettings<TAppSettings>;
     workbench: WorkflowWorkbenchController<TNodeData, TEdgeData, TTemplateData>;
     actions: {
-        createDocument: () => void;
-        createWorkflowReference: (node: WorkflowEditorNode<TNodeData>) => void;
-        deleteDocument: () => void;
-        dismissImportError: () => void;
         duplicateDocument: () => void;
         exportDocument: () => void;
         importDocumentFromFile: (file: File) => Promise<void>;
@@ -986,6 +1017,16 @@ export function useWorkflowEditorController<TNodeData extends Record<string, unk
         setSelection: react.Dispatch<react.SetStateAction<_moritzbrantner_graph_editor_core.GraphEditorSelectionState>>;
         undo: () => void;
         updateActiveDocument: (document: WorkflowEditorDocument<TNodeData, TEdgeData>) => void;
+        exportBundle: () => void;
+        importBundleFromFile: (file: File) => Promise<void>;
+        setBundleImportStrategy: (strategy: WorkflowEditorBundleCollisionStrategy) => void;
+        applyBundleImport: () => void;
+        cancelBundleImport: () => void;
+        dismissBundleError: () => void;
+        createDocument: () => void;
+        createWorkflowReference: (node: WorkflowEditorNode<TNodeData>) => void;
+        deleteDocument: () => void;
+        dismissImportError: () => void;
     };
 };
 
@@ -1045,6 +1086,104 @@ export type WorkflowEditorBuiltInSettings = {
 export function WorkflowEditorBuiltInSettingsPanel<TNodeData extends Record<string, unknown> = Record<string, unknown>, TEdgeData extends Record<string, unknown> = Record<string, unknown>, TTemplateData = TNodeData, TAppSettings extends Record<string, unknown> = Record<string, unknown>>(input: {
     controller: WorkflowEditorController<TNodeData, TEdgeData, TTemplateData, TAppSettings>;
 }): react.JSX.Element;
+
+// @public (undocumented)
+export type WorkflowEditorBundle<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>> = {
+    format: typeof workflowEditorBundleFormat;
+    version: typeof workflowEditorBundleVersion;
+    exportedAt: string;
+    rootDocumentId: string;
+    documents: Array<WorkflowEditorBundleDocument<TNodeData, TEdgeData>>;
+    references: WorkflowEditorBundleReference[];
+};
+
+// @public (undocumented)
+export const workflowEditorBundleCollisionStrategies: readonly WorkflowEditorBundleCollisionStrategy[];
+
+// @public (undocumented)
+export type WorkflowEditorBundleCollisionStrategy = "reuse" | "replace" | "duplicate" | "abort";
+
+// @public (undocumented)
+export type WorkflowEditorBundleDiagnostic = {
+    code: WorkflowEditorBundleDiagnosticCode;
+    severity: "error" | "warning";
+    message: string;
+    path?: string;
+    documentId?: string;
+    nodePath?: string[];
+    cycle?: string[];
+};
+
+// @public (undocumented)
+export type WorkflowEditorBundleDiagnosticCode = "invalid-json" | "invalid-format" | "unsupported-future-version" | "unsupported-version" | "invalid-document" | "duplicate-document" | "missing-root" | "missing-reference" | "unbounded-recursive-reference" | "invalid-reference-bound" | "reference-mismatch" | "version-mismatch" | "document-collision";
+
+// @public (undocumented)
+export type WorkflowEditorBundleDocument<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>> = {
+    id: string;
+    name: string;
+    description?: string;
+    tags?: string[];
+    version: number;
+    updatedAt: string;
+    document: WorkflowEditorDocument<TNodeData, TEdgeData>;
+};
+
+// @public
+export const workflowEditorBundleFormat = "@moritzbrantner/workflow-editor/bundle";
+
+// @public (undocumented)
+export type WorkflowEditorBundleImportAction = "create" | "reuse" | "replace" | "duplicate";
+
+// @public (undocumented)
+export type WorkflowEditorBundleImportItem = {
+    sourceDocumentId: string;
+    targetDocumentId: string;
+    name: string;
+    action: WorkflowEditorBundleImportAction;
+    collision: boolean;
+    bundleVersion: number;
+    existingVersion?: number;
+};
+
+// @public (undocumented)
+export type WorkflowEditorBundleImportPlan = {
+    strategy: WorkflowEditorBundleCollisionStrategy;
+    rootDocumentId: string;
+    items: WorkflowEditorBundleImportItem[];
+    rewrites: WorkflowEditorBundleReferenceRewrite[];
+    diagnostics: WorkflowEditorBundleDiagnostic[];
+    canApply: boolean;
+};
+
+// @public
+export type WorkflowEditorBundleReference = {
+    sourceDocumentId: string;
+    nodePath: string[];
+    targetDocumentId: string;
+    targetVersion: number;
+    maxDepth?: number;
+};
+
+// @public (undocumented)
+export type WorkflowEditorBundleReferenceRewrite = {
+    documentId: string;
+    nodePath: string[];
+    from: string;
+    to: string;
+};
+
+// @public (undocumented)
+export type WorkflowEditorBundleResult<T> = {
+    ok: true;
+    value: T;
+    diagnostics: WorkflowEditorBundleDiagnostic[];
+} | {
+    ok: false;
+    diagnostics: WorkflowEditorBundleDiagnostic[];
+};
+
+// @public (undocumented)
+export const workflowEditorBundleVersion = 1;
 
 // @public (undocumented)
 export type WorkflowEditorCatalogController<TNodeData extends Record<string, unknown> = Record<string, unknown>, _TEdgeData extends Record<string, unknown> = Record<string, unknown>, TTemplateData = TNodeData, TAppSettings extends Record<string, unknown> = Record<string, unknown>> = {
@@ -1451,6 +1590,8 @@ export type WorkflowEditorController<TNodeData extends Record<string, unknown> =
     history: WorkflowEditorHistoryState<TNodeData, TEdgeData>;
     documentProblems: WorkflowEditorDocumentDiagnostic[];
     importError: string | null;
+    bundleImport: WorkflowEditorBundleImportState<TNodeData, TEdgeData> | null;
+    bundleError: WorkflowEditorBundleError | null;
     storageRecovery: WorkflowEditorStorageRecovery | null;
     library: WorkflowEditorLibrary<TNodeData, TEdgeData>;
     nameDraft: string;
@@ -1465,6 +1606,7 @@ export type WorkflowEditorController<TNodeData extends Record<string, unknown> =
         createWorkflowReference: (node: WorkflowEditorNode<TNodeData>) => void;
         deleteDocument: () => void;
         dismissImportError: () => void;
+    } & WorkflowEditorBundleActions & {
         duplicateDocument: () => void;
         exportDocument: () => void;
         importDocumentFromFile: (file: File) => Promise<void>;
@@ -2363,6 +2505,7 @@ export type WorkflowEditorViewport = GraphEditorViewport;
 // @public (undocumented)
 export type WorkflowEditorWorkflowReference = {
     documentId: string;
+    maxDepth?: number;
 };
 
 // @public (undocumented)
@@ -2647,9 +2790,12 @@ export function wouldCreateWorkflowEditorCycle<TNodeData = Record<string, unknow
 
 // Warnings were encountered during analysis:
 //
-// dist/core-execution-Dl1aOYPA.d.ts:5:5 - (ae-forgotten-export) The symbol "WorkflowEditorNodeTemplateDiagnosticCode" needs to be exported by the entry point index.d.ts
-// dist/editor.d.ts:46:5 - (ae-forgotten-export) The symbol "ChromeController" needs to be exported by the entry point index.d.ts
-// dist/editor.d.ts:263:5 - (ae-forgotten-export) The symbol "WorkflowEditorStorageRecovery" needs to be exported by the entry point index.d.ts
+// dist/core-execution-BDcV26dp.d.ts:5:5 - (ae-forgotten-export) The symbol "WorkflowEditorNodeTemplateDiagnosticCode" needs to be exported by the entry point index.d.ts
+// dist/editor.d.ts:88:5 - (ae-forgotten-export) The symbol "ChromeController" needs to be exported by the entry point index.d.ts
+// dist/editor.d.ts:200:5 - (ae-forgotten-export) The symbol "WorkflowEditorBundleActions" needs to be exported by the entry point index.d.ts
+// dist/editor.d.ts:310:5 - (ae-forgotten-export) The symbol "WorkflowEditorBundleImportState" needs to be exported by the entry point index.d.ts
+// dist/editor.d.ts:311:5 - (ae-forgotten-export) The symbol "WorkflowEditorBundleError" needs to be exported by the entry point index.d.ts
+// dist/editor.d.ts:312:5 - (ae-forgotten-export) The symbol "WorkflowEditorStorageRecovery" needs to be exported by the entry point index.d.ts
 // dist/react.d.ts:135:9 - (ae-forgotten-export) The symbol "WorkflowWorkbenchPaletteCategoryGroup" needs to be exported by the entry point index.d.ts
 // dist/react.d.ts:142:9 - (ae-forgotten-export) The symbol "WorkflowWorkbenchOverlayPosition" needs to be exported by the entry point index.d.ts
 
