@@ -338,11 +338,6 @@ function validateExecutableNode(
     }
   }
 
-  if (iteration && scope.inBody) {
-    // The enclosing iteration already reports nested-iteration-not-supported.
-    return diagnostics;
-  }
-
   if (iteration) {
     diagnostics.push(
       ...validateWorkflowEditorIterationNode(node, scope.options).map(

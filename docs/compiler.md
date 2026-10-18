@@ -141,6 +141,16 @@ The compiler rejects these cases with structured diagnostics:
 
 Body problems use the usual codes, with paths under `nodes.<id>.composition.`. The shared conformance fixture is `fixtures/compiled-v2-bounded-iteration.json`.
 
+### Nested iterations (#97)
+
+An iteration body may contain another `control.iterate` node. It compiles as an ordinary body node
+with its own `iteration` contract, and every nesting level validates its own finite
+`maxIterations` and body. Diagnostics use nested paths such as
+`nodes.outer.composition.nodes.inner.data.iteration.maxIterations`. The runner runs the inner loop
+to completion for each outer iteration. The shared fixture is
+`fixtures/compiled-v2-nested-iteration.json`. Composed nodes and Workflow References inside bodies
+are still rejected.
+
 ### Measurements (TECH-004, #96)
 
 An iteration body may expose named, typed **measurements** besides `next` and `converged`. These
