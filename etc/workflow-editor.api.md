@@ -2232,7 +2232,7 @@ export type WorkflowEditorIterationDiagnostic = {
 // @public (undocumented)
 export type WorkflowEditorIterationDiagnosticCode = "iteration-bound-required" | "iteration-bound-invalid" | "iteration-body-missing" | "iteration-boundary-invalid" | "iteration-state-type" | "iteration-stop-type"
 /** @deprecated Nested iterations compile since #97; no longer reported. */
-| "nested-iteration-not-supported";
+| "nested-iteration-not-supported" | "iteration-input-unconnected";
 
 // @public
 export function workflowEditorIterationMeasurements<TNodeData>(node: WorkflowEditorNode<TNodeData>): Array<{
