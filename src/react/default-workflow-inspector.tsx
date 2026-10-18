@@ -660,6 +660,7 @@ const iterationFieldByCode: Record<WorkflowEditorIterationDiagnostic["code"], st
   "iteration-body-missing": "stopCondition",
   "iteration-boundary-invalid": "stopCondition",
   "nested-iteration-not-supported": "stopCondition",
+  "iteration-input-unconnected": "stopCondition",
 };
 
 function describeWorkflowEditorIteration<TData>(

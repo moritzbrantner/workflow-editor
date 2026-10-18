@@ -62,6 +62,9 @@
 
 ### Patch Changes
 
+- Nested iterations must feed their required inputs (#97):
+  - Compilation reports `iteration-input-unconnected` for an inner `control.iterate` whose `state` or invariant inputs have no body edge or boundary.
+  - The shared `compiled-v2-nested-iteration.json` fixture now wires the inner loop through the outer body's boundaries, so runners can execute it.
 - JSON string/number/boolean/null value editors render natively inside the node (#44), through graph-editor's composition seams: the body slot when expanded and the minimized header slot when minimized (owner decision 2026-10-18). The portal and offset positioning code is gone. Editing still never drags the node. graph-editor is pinned to `323bbba`.
 - The save badge no longer flips from "Save error" back to "Saved" when a save that was already in flight finishes after a rejected import (#87). The import error stays on the badge until it is dismissed or replaced, and dismissing it shows the last save outcome again.
 - Accessibility (#18): the compact document menu is now a labelled popover instead of an ARIA menu holding form controls, the workflow types panel has a heading, and the Pages example has a page heading. When a focused workbench control is removed, hidden or disabled without a document edit (for example on drill-in to a nested workflow), focus returns to the canvas instead of the page body.

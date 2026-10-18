@@ -148,8 +148,9 @@ with its own `iteration` contract, and every nesting level validates its own fin
 `maxIterations` and body. Diagnostics use nested paths such as
 `nodes.outer.composition.nodes.inner.data.iteration.maxIterations`. The runner runs the inner loop
 to completion for each outer iteration. The shared fixture is
-`fixtures/compiled-v2-nested-iteration.json`. Composed nodes and Workflow References inside bodies
-are still rejected.
+`fixtures/compiled-v2-nested-iteration.json`. A nested iteration's required inputs must be fed by a body edge or an outer-body
+input boundary; otherwise compilation reports `iteration-input-unconnected`. Composed nodes and
+Workflow References inside bodies are still rejected.
 
 ### Measurements (TECH-004, #96)
 
