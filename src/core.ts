@@ -188,6 +188,9 @@ export {
   updateWorkflowEditorIterationStateType,
   validateWorkflowEditorIterationNode,
   workflowEditorIterationBound,
+  workflowEditorIterationMeasurements,
+  syncWorkflowEditorIterationResultPort,
+  isWorkflowEditorIterationMeasurementBoundary,
   workflowEditorIterationNodeKind,
   workflowEditorIterationResultType,
   type WorkflowEditorCreateIterationNodeOptions,
@@ -216,6 +219,18 @@ export {
   type WorkflowEditorNodeTemplateRegistry,
   type WorkflowEditorNodeTemplateRegistryEntry,
 } from "./core-template-registry";
+export {
+  compileWorkflowEditorHumanTask,
+  isWorkflowEditorHumanTaskNode,
+  validateWorkflowEditorHumanTaskResponse,
+  workflowEditorHumanApprovalKind,
+  workflowEditorHumanInputKind,
+  workflowEditorHumanTaskNodeTemplates,
+  type CompiledWorkflowHumanTask,
+  type WorkflowEditorHumanApprovalResponse,
+  type WorkflowEditorHumanInputResponse,
+  type WorkflowEditorHumanTaskDiagnostic,
+} from "./core-human-tasks";
 export {
   diffWorkflowEditorDocuments,
   isWorkflowEditorSecretLikePath,

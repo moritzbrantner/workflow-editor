@@ -2958,6 +2958,35 @@ export function WorkflowWorkbench<
               enableWheelZoom={false}
               measurePorts="dom"
               surfaceHeight="auto"
+              // JSON value editors render natively inside the node (graph-editor composition seams).
+              renderMinimizedNodeContent={({ node }) => {
+                const workflowNode = documentContext.nodeById.get(node.id);
+                return workflowNode && isWorkflowEditorJsonPrimitiveNode(workflowNode) ? (
+                  <WorkflowJsonPrimitiveNodeValueControl
+                    node={workflowNode}
+                    readOnly={readOnly}
+                    onFocusNode={selectWorkflowJsonPrimitiveNode}
+                    onValueChange={updateWorkflowJsonPrimitiveNodeValue}
+                  />
+                ) : null;
+              }}
+              getNodeBodyHeight={(node) => {
+                const workflowNode = documentContext.nodeById.get(node.id);
+                return workflowNode && isWorkflowEditorJsonPrimitiveNode(workflowNode)
+                  ? workflowJsonPrimitiveBodyHeight
+                  : 0;
+              }}
+              renderNodeBody={({ node }) => {
+                const workflowNode = documentContext.nodeById.get(node.id);
+                return workflowNode && isWorkflowEditorJsonPrimitiveNode(workflowNode) ? (
+                  <WorkflowJsonPrimitiveNodeValueControl
+                    node={workflowNode}
+                    readOnly={readOnly}
+                    onFocusNode={selectWorkflowJsonPrimitiveNode}
+                    onValueChange={updateWorkflowJsonPrimitiveNodeValue}
+                  />
+                ) : null;
+              }}
               minZoom={workflowEditorMinZoom}
               maxZoom={workflowEditorMaxZoom}
               viewport={document.viewport}
@@ -3165,13 +3194,6 @@ export function WorkflowWorkbench<
                   marquee={null}
                   primaryNodeId={primarySelectedNodeId}
                   selection={selection}
-                />
-                <WorkflowJsonPrimitiveNodeControls
-                  containerRef={containerRef}
-                  document={document}
-                  readOnly={readOnly}
-                  onFocusNode={selectWorkflowJsonPrimitiveNode}
-                  onValueChange={updateWorkflowJsonPrimitiveNodeValue}
                 />
                 <WorkflowNodeRenameControls
                   containerRef={containerRef}
@@ -4768,63 +4790,17 @@ function getWorkflowNodeRenameControlOffset<TNodeData>(
   };
 }
 
-function WorkflowJsonPrimitiveNodeControls<
-  TNodeData extends Record<string, unknown>,
-  TEdgeData extends Record<string, unknown>,
->({
-  containerRef,
-  document,
-  onFocusNode,
-  onValueChange,
-  readOnly,
-}: {
-  containerRef: RefObject<HTMLDivElement | null>;
-  document: WorkflowEditorDocument<TNodeData, TEdgeData>;
-  onFocusNode: (nodeId: string) => void;
-  onValueChange: (nodeId: string, value: string | number | boolean | null) => void;
-  readOnly: boolean;
-}) {
-  const primitiveNodes = document.nodes.filter(isWorkflowEditorJsonPrimitiveNode);
-  const nodeElements = useWorkflowWorkbenchNodeElementMap(containerRef, primitiveNodes);
+type WorkflowGroupOverlayDragState = {
+  groupId: string;
+  pointerId: number;
+  startClientX: number;
+  startClientY: number;
+  committedX: number;
+  committedY: number;
+};
 
-  if (primitiveNodes.length === 0) {
-    return null;
-  }
-
-  return (
-    <>
-      {primitiveNodes.map((node) => {
-        const target = nodeElements.get(node.id);
-        if (!target) {
-          return null;
-        }
-
-        const offset = getWorkflowJsonPrimitiveNodeControlOffset(node);
-
-        return createPortal(
-          <div
-            key={node.id}
-            className={workflowNodeControlFrameClassName}
-            style={{
-              left: offset.x,
-              top: offset.y,
-              width: offset.width,
-            }}
-          >
-            <WorkflowJsonPrimitiveNodeValueControl
-              node={node}
-              readOnly={readOnly}
-              onFocusNode={onFocusNode}
-              onValueChange={onValueChange}
-            />
-          </div>,
-          target,
-          node.id,
-        );
-      })}
-    </>
-  );
-}
+/** Body height reserved for an expanded JSON value node's editor. */
+const workflowJsonPrimitiveBodyHeight = 48;
 
 function WorkflowJsonPrimitiveNodeValueControl<TNodeData extends Record<string, unknown>>({
   node,
@@ -4948,52 +4924,6 @@ function WorkflowJsonPrimitiveNodeValueControl<TNodeData extends Record<string, 
       return null;
   }
 }
-
-function getWorkflowJsonPrimitiveNodeControlOffset<TNodeData>(node: WorkflowEditorNode<TNodeData>) {
-  const uiNode = toUiWorkflowBuilderNodes([node])[0]!;
-
-  if (uiNode.minimized === true && node.variant !== "compact") {
-    const size = getWorkflowEditorRenderedNodeSize(uiNode);
-
-    return {
-      x: 8,
-      y: 6,
-      width: Math.max(104, Math.min(128, size.width - 96)),
-    };
-  }
-
-  if (node.variant === "compact") {
-    return { x: 58, y: 13, width: 112 };
-  }
-
-  const size = {
-    ...getWorkflowEditorRenderedNodeSize(uiNode, { showPortColumnHeaders: false }),
-    width: getWorkflowEditorMinimizedNodeWidth(uiNode),
-  };
-  const width = Math.min(170, Math.max(112, size.width - 64));
-  const outputIndex = Math.max(
-    0,
-    (node.outputs ?? []).findIndex((output) => output.id === "value"),
-  );
-  const portCenterY = getWorkflowEditorPortCenterOffset(uiNode, "output", outputIndex, {
-    showPortColumnHeaders: false,
-  });
-
-  return {
-    x: Math.round((size.width - width) / 2),
-    y: Math.round(portCenterY - workflowJsonPrimitiveNodeControlHeight / 2),
-    width,
-  };
-}
-
-type WorkflowGroupOverlayDragState = {
-  groupId: string;
-  pointerId: number;
-  startClientX: number;
-  startClientY: number;
-  committedX: number;
-  committedY: number;
-};
 
 function WorkflowGroupOverlays<
   TNodeData extends Record<string, unknown>,
