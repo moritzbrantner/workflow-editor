@@ -4,6 +4,7 @@
 
 ### Minor Changes
 
+- One node geometry model (#48). Workflow nodes are sized and laid out only through graph-editor's layout options: inline minimized nodes (`minimizedNodeLayout="inline"`), per-node widths (`getNodeWidth`), composed body heights and no port column headers. Snapping, arrange and overlays use the same model. The generated CSS that patched graph-editor's node DOM is removed: minimized geometry, port-grid selectors, JSON-node badge hiding, object-constructor width and height overrides, and the minimized `className` overrides. So is the legacy object-constructor output-panel geometry. A new architecture ratchet test, `src/architecture-ratchet.unit.test.ts`, fails if such patches come back. The Object output of an object constructor and its Add property row now fit inside the node.
 - Node face versus inspector (#47, Decision Atlas 5.6), documented in `docs/node-editing.md`.
   - The canvas node no longer repeats description, category or kind. `toUiWorkflowBuilderNodes` omits the description, and `fromUiWorkflowBuilderNodes` restores it from the document node. The workbench hides the category/kind chip with graph-editor's `showNodeCategory={false}`.
   - The inspector no longer duplicates the on-node JSON source value editor.

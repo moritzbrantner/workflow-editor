@@ -62,7 +62,7 @@
     "react-dom": "^19.0.0"
   },
   "dependencies": {
-    "@moritzbrantner/graph-editor": "git+https://github.com/moritzbrantner/graph-editor.git#eff4e8bafc2f10c1474176e68c5fa91800b5fa5a",
+    "@moritzbrantner/graph-editor": "git+https://github.com/moritzbrantner/graph-editor.git#6272702d127a06b5e03c1e0aa750c201b8ce031a",
     "@moritzbrantner/ui": "^1.1.0",
     "lucide-react": "^1.17.0",
     "typescript": "6.0.3"
