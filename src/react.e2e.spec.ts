@@ -887,9 +887,10 @@ test.describe("WorkflowWorkbench desktop", () => {
     expect(surfaceBox).not.toBeNull();
 
     const beforeDrag = (await readDocument(page)).viewport ?? { x: 0, y: 0, zoom: 1 };
-    await page.mouse.move(surfaceBox!.x + surfaceBox!.width / 2, surfaceBox!.y + 340);
+    // Start below the nodes and stay inside the browser viewport for the whole drag.
+    await page.mouse.move(surfaceBox!.x + surfaceBox!.width / 2, surfaceBox!.y + 220);
     await page.mouse.down();
-    await page.mouse.move(surfaceBox!.x + surfaceBox!.width / 2 + 90, surfaceBox!.y + 400, {
+    await page.mouse.move(surfaceBox!.x + surfaceBox!.width / 2 + 90, surfaceBox!.y + 280, {
       steps: 6,
     });
     await page.mouse.up();
