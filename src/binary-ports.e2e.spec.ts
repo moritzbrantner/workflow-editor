@@ -128,7 +128,7 @@ const importedFile = {
 async function importRejectionDocument(page: Page) {
   await page.goto(workbench);
   await waitForLibrary(page);
-  await page.getByRole("button", { name: "Lead Intake Automation", exact: true }).click();
+  await page.getByRole("button", { name: "Sales Data Pipeline", exact: true }).click();
   await page.getByLabel("Import workflow JSON", { exact: true }).setInputFiles({
     name: "binary-ports.json",
     mimeType: "application/json",
@@ -191,7 +191,7 @@ test("shows the Binary Audio Ports example with buffered and streamed WAV fan-ou
   const entry = await libraryEntry(page, /^binary audio ports$/i);
   expect(entry, 'library example "Binary Audio Ports"').toBeDefined();
 
-  await page.getByRole("button", { name: "Lead Intake Automation", exact: true }).click();
+  await page.getByRole("button", { name: "Sales Data Pipeline", exact: true }).click();
   await page.getByLabel("Workflow document", { exact: true }).selectOption(entry!.id);
   await page.keyboard.press("Escape");
   await expect(page.getByRole("button", { name: entry!.name, exact: true })).toBeVisible();

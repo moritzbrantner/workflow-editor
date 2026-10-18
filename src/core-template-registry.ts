@@ -3,6 +3,7 @@ import {
   isWorkflowEditorMultiSourceInput,
   workflowEditorPortElementType,
 } from "./core-cardinality";
+import { validateWorkflowEditorInspectorFieldDefinitions } from "./core-inspector-fields";
 import { createWorkflowEditorTypeResolver } from "./core-type-resolver";
 import type {
   WorkflowEditorNodeTemplate,
@@ -17,7 +18,8 @@ export type WorkflowEditorNodeTemplateDiagnosticCode =
   | "duplicate-port-id"
   | "missing-type-reference"
   | "invalid-category-path"
-  | "invalid-composition";
+  | "invalid-composition"
+  | "invalid-inspector-field";
 
 export type WorkflowEditorNodeTemplateDiagnostic = {
   code: WorkflowEditorNodeTemplateDiagnosticCode;
@@ -172,6 +174,17 @@ export function createWorkflowEditorNodeTemplateRegistry<TData = Record<string, 
             add("invalid-template", `Template ${id} port ${port.id} needs a type.`, `${path}.type`);
           }
         });
+      }
+      if (template.inspectorFields !== undefined) {
+        for (const diagnostic of validateWorkflowEditorInspectorFieldDefinitions(
+          template.inspectorFields,
+        )) {
+          add(
+            "invalid-inspector-field",
+            `Template ${id}: ${diagnostic.message}`,
+            `${at}.inspectorFields${diagnostic.path}`,
+          );
+        }
       }
       if (template.composition !== undefined) {
         const composition = template.composition as unknown;

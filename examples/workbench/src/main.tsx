@@ -25,6 +25,12 @@ import {
   type WorkflowEditorTypeDefinition,
 } from "@moritzbrantner/workflow-editor";
 
+import {
+  dataPipelineDocument,
+  dataPipelineExampleId,
+  mediaPipelineDocument,
+  mediaPipelineExampleId,
+} from "./reference-examples";
 import "./styles.css";
 
 type ExampleNodeData = Record<string, unknown>;
@@ -163,6 +169,27 @@ const domainTemplates = [
     category: "Integration",
     inputs: [{ id: "body", label: "Body", type: objectType }],
     outputs: [{ id: "response", label: "Response", type: objectType }],
+    inspectorFields: [
+      { path: "url", label: "URL", kind: "text", required: true, pattern: "^https://" },
+      {
+        path: "method",
+        label: "Method",
+        kind: "select",
+        defaultValue: "GET",
+        options: [
+          { label: "GET", value: "GET" },
+          { label: "POST", value: "POST" },
+        ],
+      },
+      {
+        path: "body",
+        label: "Body",
+        kind: "json",
+        visibleWhen: { path: "method", equals: ["POST"] },
+      },
+      { path: "headers", label: "Headers", kind: "key-value", section: "Advanced" },
+      { path: "auth.token", label: "Token", kind: "secret-ref", section: "Advanced" },
+    ],
   },
   {
     id: "template-lead-source",
@@ -180,6 +207,26 @@ const domainTemplates = [
     category: "CRM",
     inputs: [{ id: "lead", label: "Lead", type: leadType }],
     outputs: [{ id: "score", label: "Score", type: numberType }],
+    inspectorFields: [
+      {
+        path: "model",
+        label: "Scoring model",
+        kind: "select",
+        defaultValue: "rules",
+        options: [
+          { label: "Rules", value: "rules" },
+          { label: "ML", value: "ml" },
+        ],
+      },
+      {
+        path: "threshold",
+        label: "Qualified at",
+        kind: "number",
+        min: 0,
+        max: 100,
+        defaultValue: 70,
+      },
+    ],
   },
   {
     id: "template-qualification-rule",
@@ -319,6 +366,26 @@ const nodeTemplates: ReadonlyArray<WorkflowEditorNodeTemplate<ExampleNodeData>> 
 function createExamplesLibrary(): ExampleLibrary {
   const documents = [
     createWorkflowEditorEntry({
+      id: dataPipelineExampleId,
+      name: "Sales Data Pipeline",
+      description:
+        "Source → normalize → validate → branch → warehouse or quarantine; compiled, not executed, in Pages.",
+      tags: ["data", "pipeline", "example"],
+      createdAt: seededAt,
+      updatedAt: seededAt,
+      document: dataPipelineDocument(),
+    }),
+    createWorkflowEditorEntry({
+      id: mediaPipelineExampleId,
+      name: "Product Image Generation",
+      description:
+        "Photo and prompt → one external ComfyUI operation → resize → published artifact; no model runs in Pages.",
+      tags: ["media", "ai", "asset", "example"],
+      createdAt: seededAt,
+      updatedAt: seededAt,
+      document: mediaPipelineDocument(),
+    }),
+    createWorkflowEditorEntry({
       id: "typescript-ports",
       name: "TypeScript ports",
       createdAt: seededAt,
@@ -402,7 +469,8 @@ function createExamplesLibrary(): ExampleLibrary {
   ];
 
   return createWorkflowEditorLibrary({
-    activeDocumentId: "lead-intake",
+    // First-time visitors open into the editable data pipeline (Decision Atlas 5.4).
+    activeDocumentId: dataPipelineExampleId,
     documents,
   });
 }

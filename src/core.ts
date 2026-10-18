@@ -228,6 +228,26 @@ export {
   type WorkflowEditorDiffSummary,
   type WorkflowEditorDocumentDiff,
 } from "./core-diff";
+export {
+  getWorkflowEditorSharedInspectorFields,
+  isWorkflowEditorInspectorFieldPath,
+  isWorkflowEditorInspectorFieldVisible,
+  isWorkflowEditorSecretReference,
+  readWorkflowEditorFieldPath,
+  readWorkflowEditorFieldValue,
+  validateWorkflowEditorFieldValue,
+  validateWorkflowEditorInspectorFieldDefinitions,
+  workflowEditorInspectorFieldKinds,
+  workflowEditorMixedFieldValue,
+  writeWorkflowEditorFieldPath,
+  type WorkflowEditorInspectorFieldDefinition,
+  type WorkflowEditorInspectorFieldDiagnostic,
+  type WorkflowEditorInspectorFieldKind,
+  type WorkflowEditorInspectorFieldOption,
+  type WorkflowEditorKeyValueRow,
+  type WorkflowEditorSecretReference,
+  type WorkflowEditorSharedInspectorField,
+} from "./core-inspector-fields";
 
 export {
   formatWorkflowExecutionDuration,
