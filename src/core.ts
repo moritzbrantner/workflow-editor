@@ -231,6 +231,25 @@ export {
 } from "./core-triggers";
 import { normalizeWorkflowEditorTriggers } from "./core-triggers";
 export {
+  areWorkflowEditorTemplateRevisionsCompatible,
+  createWorkflowEditorSharedTemplateRevision,
+  detachWorkflowEditorLinkedNode,
+  isWorkflowEditorPaletteTemplate,
+  latestWorkflowEditorSharedTemplates,
+  listWorkflowEditorLinkedInstances,
+  listWorkflowEditorSharedTemplateRevisions,
+  planWorkflowEditorLinkedTemplateUpgrade,
+  resolveWorkflowEditorLinkedNodes,
+  resolveWorkflowEditorLinkedTemplate,
+  upgradeWorkflowEditorLinkedNode,
+  workflowEditorSharedTemplateId,
+  type WorkflowEditorLinkedTemplateDiagnostic,
+  type WorkflowEditorLinkedTemplateRef,
+  type WorkflowEditorLinkedTemplateResolution,
+  type WorkflowEditorLinkedTemplateUpgradePlan,
+  type WorkflowEditorSharedTemplateIdentity,
+} from "./core-linked-templates";
+export {
   getWorkflowEditorInputDeclarations,
   resolveWorkflowEditorInputValues,
   validateWorkflowEditorInputValues,
@@ -4452,6 +4471,13 @@ function normalizeWorkflowEditorNode<TNodeData = Record<string, unknown>>(
     inputs: normalizePorts(node.inputs),
     outputs: normalizePorts(node.outputs),
     workflowRef: normalizeWorkflowEditorWorkflowReference(node.workflowRef),
+    templateRef:
+      typeof node.templateRef?.templateId === "string" &&
+      node.templateRef.templateId.trim() !== "" &&
+      Number.isInteger(node.templateRef.revision) &&
+      node.templateRef.revision > 0
+        ? { templateId: node.templateRef.templateId, revision: node.templateRef.revision }
+        : undefined,
     persistence: node.persistence === "on-completion" ? "on-completion" : undefined,
     composition: node.composition
       ? normalizeWorkflowEditorNodeComposition(

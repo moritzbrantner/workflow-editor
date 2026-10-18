@@ -1,4 +1,6 @@
 import { workflowEditorTypeDefinitionsSource } from "./core-type-source";
+import { resolveWorkflowEditorLinkedNodes } from "./core-linked-templates";
+import type { WorkflowEditorNodeTemplate } from "./core-types";
 import {
   expandWorkflowEditorCompositions,
   type WorkflowEditorCompositionMode,
@@ -219,6 +221,12 @@ export type WorkflowEditorCompileOptions = WorkflowEditorTypeValidationOptions &
    * `opaque` keeps each composed node as one node, `expand` inlines its embedded subgraph.
    */
   compositions?: WorkflowEditorCompositionMode;
+  /**
+   * The host's Node Template catalog. When given, linked shared-template nodes (#65) are resolved
+   * through it first (compatible newer revisions apply), and a missing template or revision is a
+   * compile error. Without it, linked nodes compile from their last resolved content.
+   */
+  nodeTemplates?: readonly WorkflowEditorNodeTemplate<unknown>[];
 };
 
 export type WorkflowEditorCompileDiagnosticCode =
@@ -227,6 +235,8 @@ export type WorkflowEditorCompileDiagnosticCode =
   | "missing-node-kind"
   | "nested-workflow-not-supported"
   | "composition-not-supported"
+  | "missing-linked-template"
+  | "missing-linked-template-revision"
   | "port-cardinality"
   | "invalid-dag"
   | "missing-workflow-reference"
@@ -437,7 +447,29 @@ export function compileWorkflowEditorDocument<
   document: WorkflowEditorDocument<TNodeData, TEdgeData>,
   options: WorkflowEditorCompileOptions = {},
 ): CompiledWorkflow<TNodeData> {
-  const { resolveWorkflowReference, compositions = "reject", ...typeOptions } = options;
+  const {
+    resolveWorkflowReference,
+    compositions = "reject",
+    nodeTemplates,
+    ...typeOptions
+  } = options;
+  if (nodeTemplates) {
+    const linked = resolveWorkflowEditorLinkedNodes(
+      document as unknown as WorkflowEditorDocument<unknown, unknown>,
+      nodeTemplates,
+    );
+    if (linked.diagnostics.length > 0) {
+      throw new WorkflowEditorCompileError(
+        linked.diagnostics.map(({ code, message, path, nodeId }) => ({
+          code,
+          message,
+          path,
+          nodeId,
+        })),
+      );
+    }
+    document = linked.document as unknown as WorkflowEditorDocument<TNodeData, TEdgeData>;
+  }
   if (resolveWorkflowReference && documentHasReferences(document)) {
     return compileWorkflowEditorReferenceClosure(
       document as unknown as WorkflowEditorDocument,
