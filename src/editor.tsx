@@ -348,6 +348,18 @@ export type WorkflowEditorProps<
     TTemplateData
   >["renderNodeTemplate"];
   renderInspector?: WorkflowWorkbenchProps<TNodeData, TEdgeData, TTemplateData>["renderInspector"];
+  /** Host-supplied run state shown over the canvas; never stored in the document. */
+  execution?: WorkflowWorkbenchProps<TNodeData, TEdgeData, TTemplateData>["execution"];
+  formatExecutionLabel?: WorkflowWorkbenchProps<
+    TNodeData,
+    TEdgeData,
+    TTemplateData
+  >["formatExecutionLabel"];
+  renderExecutionDetails?: WorkflowWorkbenchProps<
+    TNodeData,
+    TEdgeData,
+    TTemplateData
+  >["renderExecutionDetails"];
   renderToolbarActions?: (
     context: Parameters<
       NonNullable<
@@ -634,6 +646,9 @@ export function WorkflowEditor<
   onSelectionChange,
   renderNodeTemplate,
   renderInspector,
+  execution,
+  formatExecutionLabel,
+  renderExecutionDetails,
   renderToolbarActions,
   renderCompactMenuActions,
   renderChrome,
@@ -1717,6 +1732,9 @@ export function WorkflowEditor<
           layout={layout}
           onOpenWorkflowReference={canOpenNestedWorkflow ? openWorkflowReference : undefined}
           onCreateWorkflowReference={canOpenNestedWorkflow ? createWorkflowReference : undefined}
+          execution={execution}
+          formatExecutionLabel={formatExecutionLabel}
+          renderExecutionDetails={renderExecutionDetails}
           onDocumentChange={updateDocument}
           onSelectionChange={onSelectionChange}
           onSelectionStateChange={(nextSelection) => setSelection(nextSelection)}
