@@ -231,6 +231,8 @@ describe("@moritzbrantner/workflow-editor editor shell", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Restore version" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirm restore" }));
     await waitFor(() =>
       expect(screen.getByTestId("active-node-count").textContent).toBe("3 nodes"),
     );
@@ -607,6 +609,7 @@ describe("@moritzbrantner/workflow-editor editor shell", () => {
       expect(screen.getByTestId("version-document-json").textContent).toContain("after-version"),
     );
     fireEvent.click(screen.getByRole("button", { name: "Restore version" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm restore" }));
     await waitFor(() =>
       expect(screen.getByTestId("version-document-json").textContent).not.toContain(
         "after-version",
@@ -965,6 +968,7 @@ describe("@moritzbrantner/workflow-editor editor shell", () => {
       second,
     );
     fireEvent.click(screen.getByRole("button", { name: "Restore version", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm restore" }));
     expect((screen.getByLabelText("TypeScript declarations") as HTMLTextAreaElement).value).toBe(
       first,
     );
