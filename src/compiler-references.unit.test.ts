@@ -196,6 +196,34 @@ describe("compiled Workflow References (TECH-005, v3)", () => {
     expect(compile(leafDocument(), {}).version).toBe(1);
   });
 
+  it("compiles references inside iteration bodies (#95, #97)", () => {
+    const compiled = compile(iteratingCallerDocument(), { child: leafDocument() });
+    const loop = compiled.nodes.find((node) => node.id === "loop") as unknown as {
+      iteration: { body: { nodes: Array<{ id: string; workflowRef?: unknown }> } };
+    };
+    expect(loop.iteration.body.nodes.find((node) => node.id === "call")?.workflowRef).toEqual({
+      workflow: "child@1",
+    });
+    expect(Object.keys(compiled.workflows)).toEqual(["child@1"]);
+    expect(compiled).toEqual(
+      JSON.parse(
+        readFileSync(
+          resolve(process.cwd(), "fixtures/compiled-v3-reference-in-iteration.json"),
+          "utf8",
+        ),
+      ),
+    );
+  });
+
+  it("reports body reference problems at their nested paths", () => {
+    expect(diagnosticCodes(() => compile(iteratingCallerDocument(), {}))).toEqual([
+      ["missing-workflow-reference", "nodes.loop.composition.nodes.call.workflowRef"],
+    ]);
+    expect(diagnosticCodes(() => compileWorkflowEditorDocument(iteratingCallerDocument()))).toEqual(
+      [["nested-workflow-not-supported", "nodes.loop.composition.nodes.call.workflowRef"]],
+    );
+  });
+
   it("matches the shared v3 fixture", () => {
     const compiled = compile(callerDocument("countdown", 5), {
       countdown: callerDocument("countdown", 5),
@@ -211,4 +239,47 @@ describe("compiled Workflow References (TECH-005, v3)", () => {
   });
 });
 
-export { callerDocument, library };
+/** n → loop(max 3: body calls child on the state) → result. */
+function iteratingCallerDocument(): WorkflowEditorDocument {
+  const state = { kind: "typescript", source: "number" } as const;
+  return {
+    nodes: [
+      start(["n"]),
+      {
+        id: "loop",
+        label: "Repeat",
+        kind: "control.iterate",
+        x: 300,
+        y: 0,
+        inputs: [{ id: "state", label: "State", type: state }],
+        outputs: [
+          {
+            id: "result",
+            label: "Result",
+            type: {
+              kind: "typescript",
+              source:
+                '{ value: number; status: "converged" | "limit-exhausted"; iterations: number }',
+            },
+          },
+        ],
+        data: { iteration: { maxIterations: 3 } },
+        composition: {
+          nodes: [{ ...call("call", "child"), x: 0 }],
+          edges: [],
+          inputBoundaries: [{ wrapperPortId: "state", nodeId: "call", portId: "n" }],
+          outputBoundaries: [{ wrapperPortId: "next", nodeId: "call", portId: "result" }],
+        },
+      },
+      {
+        ...end([]),
+        inputs: [
+          { id: "result", label: "result", type: { kind: "typescript", source: "unknown" } },
+        ],
+      },
+    ],
+    edges: [link("start", "n", "loop", "state"), link("loop", "result", "end", "result")],
+  };
+}
+
+export { callerDocument, iteratingCallerDocument, leafDocument, library };

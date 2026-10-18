@@ -317,16 +317,16 @@ function validateExecutableNode(
     diagnostics.push({
       code: "missing-node-kind",
       message: `Workflow node ${node.id} has no executable kind.`,
-      path: `nodes.${node.id}.kind`,
+      path: `${scope.pathPrefix}nodes.${node.id}.kind`,
       nodeId: node.id,
     });
   }
 
-  if (node.workflowRef && !(scope.allowReferences && !scope.inBody)) {
+  if (node.workflowRef && !scope.allowReferences) {
     diagnostics.push({
       code: "nested-workflow-not-supported",
       message: `Workflow node ${node.id} references another workflow; compiler version 1 does not inline nested workflows yet.`,
-      path: `nodes.${node.id}.workflowRef`,
+      path: `${scope.pathPrefix}nodes.${node.id}.workflowRef`,
       nodeId: node.id,
     });
   }
@@ -363,7 +363,7 @@ function validateExecutableNode(
     diagnostics.push({
       code: "composition-not-supported",
       message: `Workflow node ${node.id} contains an embedded composition; restore or flatten it before compilation.`,
-      path: `nodes.${node.id}.composition`,
+      path: `${scope.pathPrefix}nodes.${node.id}.composition`,
       nodeId: node.id,
     });
   }
@@ -429,7 +429,7 @@ export function compileWorkflowEditorDocument<
   options: WorkflowEditorCompileOptions = {},
 ): CompiledWorkflow<TNodeData> {
   const { resolveWorkflowReference, ...typeOptions } = options;
-  if (resolveWorkflowReference && documentHasTopLevelReferences(document)) {
+  if (resolveWorkflowReference && documentHasReferences(document)) {
     return compileWorkflowEditorReferenceClosure(
       document as unknown as WorkflowEditorDocument,
       typeOptions,
@@ -439,10 +439,55 @@ export function compileWorkflowEditorDocument<
   return compileWorkflowEditorDocumentBase(document, typeOptions, false);
 }
 
-function documentHasTopLevelReferences(document: WorkflowEditorDocument<unknown, unknown>) {
+/** Whether any node, including nodes inside iteration bodies, references another workflow. */
+function documentHasReferences(document: {
+  nodes?: ReadonlyArray<WorkflowEditorNode<unknown> | undefined>;
+}): boolean {
   return (
-    Array.isArray(document.nodes) && document.nodes.some((node) => node?.workflowRef?.documentId)
+    Array.isArray(document.nodes) &&
+    document.nodes.some(
+      (node) =>
+        !!node?.workflowRef?.documentId ||
+        (!!node?.composition &&
+          isWorkflowEditorIterationNode(node) &&
+          documentHasReferences(node.composition)),
+    )
   );
+}
+
+type ReferenceSite = {
+  node: WorkflowEditorNode;
+  compiledNode?: CompiledWorkflowReferenceNode;
+  /** Authoring path prefix of the scope that holds `node`. */
+  pathPrefix: string;
+};
+
+/** Reference-capable nodes paired with their compiled nodes, descending into iteration bodies. */
+function referenceSites(
+  nodes: readonly WorkflowEditorNode[],
+  compiledNodes: readonly unknown[],
+  pathPrefix: string,
+): ReferenceSite[] {
+  return nodes.flatMap((node) => {
+    const compiledNode = compiledNodes.find(
+      (candidate) => (candidate as { id?: string }).id === node.id,
+    ) as
+      | (CompiledWorkflowReferenceNode & { iteration?: { body?: { nodes?: unknown[] } } })
+      | undefined;
+    const sites: ReferenceSite[] = node.workflowRef?.documentId
+      ? [{ node, compiledNode, pathPrefix }]
+      : [];
+    if (node.composition && isWorkflowEditorIterationNode(node)) {
+      sites.push(
+        ...referenceSites(
+          node.composition.nodes,
+          compiledNode?.iteration?.body?.nodes ?? [],
+          `${pathPrefix}nodes.${node.id}.composition.`,
+        ),
+      );
+    }
+    return sites;
+  });
 }
 
 function compileWorkflowEditorDocumentBase<
@@ -519,7 +564,7 @@ type CompileScope = {
   /** Prefix that places body diagnostics inside their iteration node. */
   pathPrefix: string;
   inBody: boolean;
-  /** Top-level Workflow References compile into the v3 closure (bodies still reject them). */
+  /** Workflow References, top-level or in iteration bodies, compile into the v3 closure. */
   allowReferences?: boolean;
 };
 
@@ -745,10 +790,10 @@ function compileWorkflowEditorReferenceClosure(
     }
 
     const declarations = document.typeDeclarations;
-    for (const node of document.nodes) {
-      const reference = node.workflowRef;
-      if (!reference?.documentId) continue;
-      const path = `${pathPrefix}nodes.${node.id}.workflowRef`;
+    for (const site of referenceSites(document.nodes, compiled.nodes, pathPrefix)) {
+      const { node } = site;
+      const reference = node.workflowRef!;
+      const path = `${site.pathPrefix}nodes.${node.id}.workflowRef`;
       const target = resolve({ documentId: reference.documentId });
       if (!target) {
         diagnostics.push({
@@ -774,12 +819,10 @@ function compileWorkflowEditorReferenceClosure(
           typeDeclarations: [declarations, target.document.typeDeclarations]
             .filter(Boolean)
             .join("\n"),
-          path: `${pathPrefix}nodes.${node.id}`,
+          path: `${site.pathPrefix}nodes.${node.id}`,
         }),
       );
-      const compiledNode = compiled.nodes.find((candidate) => candidate.id === node.id) as
-        | CompiledWorkflowReferenceNode
-        | undefined;
+      const compiledNode = site.compiledNode;
       if (compiledNode) {
         compiledNode.workflowRef = {
           workflow: targetKey,
