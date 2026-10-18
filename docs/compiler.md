@@ -43,6 +43,7 @@ keep compiled v1/v2. The shared fixture is `fixtures/compiled-v3-workflow-refere
   `unbounded-recursive-reference`, and the runner enforces the bound. Missing documents report
   `missing-workflow-reference`. Diagnostics inside a referenced definition use paths prefixed with
   `workflows.<key>.`.
+
 ## Human tasks (editor #105, Engine TECH-001)
 
 Nodes of kind `human.task.approval` and `human.task.input` (default templates **Approval** and
