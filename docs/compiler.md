@@ -19,7 +19,7 @@ Compiled ports carry their declared `cardinality` and delivery `payload` (see [p
 ## Version 3: Workflow References (TECH-005, #95)
 
 Pass `resolveWorkflowReference` (for a library, `createWorkflowEditorLibraryReferenceResolver(library)`)
-to compile documents whose top-level nodes reference other Workflow Documents. Without a resolver,
+to compile documents whose nodes, top-level or inside iteration bodies, reference other Workflow Documents. Without a resolver,
 references are still rejected with `nested-workflow-not-supported`. Documents without references
 keep compiled v1/v2. The shared fixture is `fixtures/compiled-v3-workflow-references.json`.
 
@@ -149,8 +149,17 @@ with its own `iteration` contract, and every nesting level validates its own fin
 `nodes.outer.composition.nodes.inner.data.iteration.maxIterations`. The runner runs the inner loop
 to completion for each outer iteration. The shared fixture is
 `fixtures/compiled-v2-nested-iteration.json`. A nested iteration's required inputs must be fed by a body edge or an outer-body
-input boundary; otherwise compilation reports `iteration-input-unconnected`. Composed nodes and
-Workflow References inside bodies are still rejected.
+input boundary; otherwise compilation reports `iteration-input-unconnected`. Composed nodes inside
+bodies are still rejected.
+
+### Workflow References in bodies (#95, #97)
+
+With a resolver, a body node may reference another workflow. It compiles like a top-level
+reference: the body node carries `workflowRef: { workflow: "<id>@<version>", maxDepth? }` and the
+definition joins the top-level `workflows` closure, so the contract is v3. The runner calls the
+referenced workflow once per iteration. Diagnostics use nested paths such as
+`nodes.loop.composition.nodes.call.workflowRef`. The shared fixture is
+`fixtures/compiled-v3-reference-in-iteration.json`.
 
 ### Measurements (TECH-004, #96)
 
