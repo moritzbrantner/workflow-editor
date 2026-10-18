@@ -158,7 +158,7 @@ export function WorkflowEditorDocumentTabs({
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-1" data-slot="workflow-document-tabs">
       <div
-        role="tablist"
+        role="group"
         aria-label="Open workflows"
         className="flex min-w-0 flex-wrap items-center gap-1"
       >
@@ -176,8 +176,8 @@ export function WorkflowEditorDocumentTabs({
             >
               <button
                 type="button"
-                role="tab"
-                aria-selected={active}
+                aria-label={`Switch to ${name}`}
+                aria-current={active ? "page" : undefined}
                 className="max-w-48 truncate px-2 py-1 text-sm"
                 onClick={() => controller.actions.switchTab(tab.documentId)}
               >

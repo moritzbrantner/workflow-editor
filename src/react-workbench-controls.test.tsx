@@ -633,12 +633,12 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
       expect(screen.getByTestId("active-node-count").textContent).toBe("0 nodes"),
     );
     // The child opens in its own tab with a link back to the parent (#100).
-    expect(screen.getByRole("tab", { name: /Input Workflow/u }).getAttribute("aria-selected")).toBe(
-      "true",
-    );
-    expect(screen.getByRole("tab", { name: /Parent/u }).getAttribute("aria-selected")).toBe(
-      "false",
-    );
+    expect(
+      screen.getByRole("button", { name: "Switch to Input Workflow" }).getAttribute("aria-current"),
+    ).toBe("page");
+    expect(
+      screen.getByRole("button", { name: "Switch to Parent" }).getAttribute("aria-current"),
+    ).toBeNull();
     expect(handlePathChange).toHaveBeenLastCalledWith([
       { documentId: "parent" },
       expect.objectContaining({ documentId: expect.stringMatching(/^workflow-/) }),
@@ -699,7 +699,7 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Open parent workflow" })).not.toBeNull(),
     );
-    expect(screen.getAllByRole("tab")).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: /^Switch to / })).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "Self" }));
     const cappedOpenButtons = screen.queryAllByRole("button", { name: "Open workflow" });
     expect(cappedOpenButtons.every((button) => (button as HTMLButtonElement).disabled)).toBe(true);

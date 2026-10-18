@@ -1194,9 +1194,9 @@ test.describe("WorkflowWorkbench desktop", () => {
     await expect(page.getByTestId("active-document-name")).toHaveText("Input Workflow");
     await expect(page.getByTestId("document-path-json")).toContainText("demo-workflow");
 
-    await expect(page.getByRole("tab", { name: /Input Workflow/ })).toHaveAttribute(
-      "aria-selected",
-      "true",
+    await expect(page.getByRole("button", { name: "Switch to Input Workflow" })).toHaveAttribute(
+      "aria-current",
+      "page",
     );
     await page.getByRole("button", { name: "Open parent workflow" }).click();
     await expect(page.getByTestId("active-document-name")).toHaveText("Demo Workflow");
@@ -1204,16 +1204,16 @@ test.describe("WorkflowWorkbench desktop", () => {
     await expect(page.getByTestId("document-json")).toContainText('"workflowRef"');
 
     // Both documents stay open as tabs; switching keeps each document's draft (#100).
-    await page.getByRole("tab", { name: /Input Workflow/ }).click();
+    await page.getByRole("button", { name: "Switch to Input Workflow" }).click();
     await expect(page.getByTestId("active-document-name")).toHaveText("Input Workflow");
-    await page.getByRole("tab", { name: /Demo Workflow/ }).click();
+    await page.getByRole("button", { name: "Switch to Demo Workflow" }).click();
     await expect(page.getByTestId("node-count")).toHaveText("3");
 
     // Tabs survive a reload.
     await page.reload();
-    await expect(page.getByRole("tab", { name: /Input Workflow/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Switch to Input Workflow" })).toBeVisible();
     await page.getByRole("button", { name: "Close Input Workflow" }).click();
-    await expect(page.getByRole("tab")).toHaveCount(1);
+    await expect(page.getByRole("button", { name: /^Switch to / })).toHaveCount(1);
   });
 
   test("assigns an existing workflow reference and drills into it", async ({ page }, testInfo) => {
