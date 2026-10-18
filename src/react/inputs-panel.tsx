@@ -156,6 +156,12 @@ export function WorkflowInputsPanel({
         );
       })}
       {inputProfiles ? (
+        <p className="text-xs text-muted-foreground">
+          Profiles are saved as plain values with the library. Don't put secrets in them; pass a
+          host reference such as a secret name instead.
+        </p>
+      ) : null}
+      {inputProfiles ? (
         <div className="flex flex-wrap items-center gap-2">
           <Input
             aria-label="Profile name"
