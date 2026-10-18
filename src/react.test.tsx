@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { getWorkflowNodeSize } from "./react/workflow-node";
 import {
   selectionStateToSingleSelection,
@@ -1404,6 +1404,47 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     fireEvent.click(screen.getAllByLabelText("Persist result on completion")[0]!);
     fireEvent.click(screen.getAllByRole("button", { name: "Apply" })[0]!);
     expect(handleChange.mock.calls.at(-1)?.[0].nodes[0].persistence).toBeUndefined();
+  });
+
+  test("authors document triggers in the empty inspector and activates them through a host", async () => {
+    const handleChange = vi.fn();
+    const document = normalizeWorkflowEditorDocument({ nodes: [], edges: [] }).document;
+    const { rerender } = render(
+      <WorkflowWorkbench document={document} onDocumentChange={handleChange} />,
+    );
+    // With nothing selected, the info panel opens on document settings.
+    fireEvent.click(screen.getAllByRole("button", { name: "Expand info panel" })[0]!);
+    expect(screen.getAllByText(/Activation unavailable/u).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Add trigger" })[0]!);
+    fireEvent.change(screen.getAllByLabelText("Trigger 1 type")[0]!, { target: { value: "cron" } });
+    fireEvent.change(screen.getAllByLabelText("Trigger 1 schedule")[0]!, {
+      target: { value: "nope" },
+    });
+    expect(screen.getAllByText(/not a five-field cron expression/u).length).toBeGreaterThan(0);
+    expect(
+      (screen.getAllByRole("button", { name: "Apply triggers" })[0] as HTMLButtonElement).disabled,
+    ).toBe(true);
+    fireEvent.change(screen.getAllByLabelText("Trigger 1 schedule")[0]!, {
+      target: { value: "0 2 * * *" },
+    });
+    fireEvent.click(screen.getAllByRole("button", { name: "Apply triggers" })[0]!);
+    const next = handleChange.mock.calls.at(-1)?.[0];
+    expect(next.triggers).toEqual([{ id: "manual-1", type: "cron", cron: "0 2 * * *" }]);
+
+    const activate = vi.fn();
+    rerender(
+      <WorkflowWorkbench
+        document={next}
+        onDocumentChange={handleChange}
+        triggerActivation={{ activate, label: "Engine" }}
+      />,
+    );
+    await act(async () => {
+      fireEvent.click(screen.getAllByRole("button", { name: "Activate triggers" })[0]!);
+    });
+    expect(activate).toHaveBeenCalledWith([{ id: "manual-1", type: "cron", cron: "0 2 * * *" }]);
+    expect(screen.getAllByText("Triggers activated.").length).toBeGreaterThan(0);
   });
 
   test("edits JSON string and number source values and keeps null read-only", () => {

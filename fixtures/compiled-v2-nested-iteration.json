@@ -301,6 +301,11 @@
           "inputs": [
             {
               "id": "state",
+              "nodeId": "inner",
+              "portId": "state"
+            },
+            {
+              "id": "state",
               "nodeId": "newton-step",
               "portId": "estimate"
             },
@@ -308,6 +313,11 @@
               "id": "state",
               "nodeId": "within-tolerance",
               "portId": "previous"
+            },
+            {
+              "id": "target",
+              "nodeId": "inner",
+              "portId": "target"
             },
             {
               "id": "target",

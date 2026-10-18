@@ -31,7 +31,8 @@ export type WorkflowEditorIterationDiagnosticCode =
   | "iteration-state-type"
   | "iteration-stop-type"
   /** @deprecated Nested iterations compile since #97; no longer reported. */
-  | "nested-iteration-not-supported";
+  | "nested-iteration-not-supported"
+  | "iteration-input-unconnected";
 
 export type WorkflowEditorIterationDiagnostic = {
   code: WorkflowEditorIterationDiagnosticCode;
@@ -358,6 +359,28 @@ export function validateWorkflowEditorIterationNode<TNodeData>(
   }
 
   // Nested iterations are allowed (#97); each one validates its own bound and body when compiled.
+  // A nested iteration only runs when its required inputs are fed by a body edge or a boundary.
+  for (const bodyNode of body.nodes) {
+    if (!isWorkflowEditorIterationNode(bodyNode)) continue;
+    for (const port of bodyNode.inputs ?? []) {
+      if (port.optional || port.defaultValue !== undefined) continue;
+      const fed =
+        body.edges.some(
+          (edge) => edge.targetNodeId === bodyNode.id && edge.targetPortId === port.id,
+        ) ||
+        body.inputBoundaries.some(
+          (boundary) => boundary.nodeId === bodyNode.id && boundary.portId === port.id,
+        );
+      if (!fed) {
+        report(
+          "iteration-input-unconnected",
+          `Iteration ${node.id} body contains iteration ${bodyNode.id} whose input "${port.id}" is not connected; connect it to a body node or an iteration boundary.`,
+          `composition.nodes.${bodyNode.id}.inputs.${port.id}`,
+          port.id,
+        );
+      }
+    }
+  }
   return diagnostics;
 }
 

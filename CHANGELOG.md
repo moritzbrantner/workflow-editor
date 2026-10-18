@@ -13,6 +13,14 @@
 
   All edits use the workflow-core mutation helpers, so port ids, connections and undo stay authoritative. graph-editor is pinned to `f0e70f8`.
 
+- Document tabs (#100, Decision Atlas 5.14): open workflows are tabs, one per Library Entry. The tabs replace the document select and breadcrumb row (owner decision 2026-10-18, B).
+  - Opening a Workflow Reference opens or switches to the child's tab, which shows an "↑ Parent" link back to the opening document. There is no breadcrumb trail (owner decision 2026-10-18, A).
+  - Tabs keep each document's draft, history and selection, persist in `library.openDocumentIds` across reloads, and can be closed without losing the document.
+  - `chrome.documentPath: "breadcrumb"` keeps the legacy path row.
+- Workflow triggers (#91, Decision Atlas 5.11): documents declare manual, cron-schedule and webhook triggers (`document.triggers`), validated by `validateWorkflowEditorTriggers`.
+  - With nothing selected, the info panel opens on document settings with a **Triggers** panel (owner decision 2026-10-18).
+  - A host passes `triggerActivation` to register and activate the triggers; without one, Pages shows "Activation unavailable".
+  - `toWorkflowEditorEngineTriggerInputs` produces workflow-engine trigger registrations.
 - `applyWorkflowRunnerEventToSnapshot` / `createWorkflowExecutionSnapshotFromRunnerEvents` build the execution overlay snapshot from Workflow Runner lifecycle events (#20). The snapshot covers attempts, retries, durations, failures and waiting tasks. Outputs are summarized by port name only.
 - Nested bounded iterations (#97): an iteration body may contain another `control.iterate` node. It compiles into compiled v2 with its own bound and body checks. `nested-iteration-not-supported` is no longer reported.
 - Compile Workflow References (TECH-005, #95): with `resolveWorkflowReference` (for example `createWorkflowEditorLibraryReferenceResolver(library)`), documents that reference other Workflow Documents compile to **compiled v3**.
@@ -57,6 +65,9 @@
 
 ### Patch Changes
 
+- Nested iterations must feed their required inputs (#97):
+  - Compilation reports `iteration-input-unconnected` for an inner `control.iterate` whose `state` or invariant inputs have no body edge or boundary.
+  - The shared `compiled-v2-nested-iteration.json` fixture now wires the inner loop through the outer body's boundaries, so runners can execute it.
 - JSON string/number/boolean/null value editors render natively inside the node (#44), through graph-editor's composition seams: the body slot when expanded and the minimized header slot when minimized (owner decision 2026-10-18). The portal and offset positioning code is gone. Editing still never drags the node. graph-editor is pinned to `323bbba`.
 - The save badge no longer flips from "Save error" back to "Saved" when a save that was already in flight finishes after a rejected import (#87). The import error stays on the badge until it is dismissed or replaced, and dismissing it shows the last save outcome again.
 - Accessibility (#18): the compact document menu is now a labelled popover instead of an ARIA menu holding form controls, the workflow types panel has a heading, and the Pages example has a page heading. When a focused workbench control is removed, hidden or disabled without a document edit (for example on drill-in to a nested workflow), focus returns to the canvas instead of the page body.
