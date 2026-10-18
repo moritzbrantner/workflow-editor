@@ -1,0 +1,130 @@
+{
+  "format": "@moritzbrantner/workflow-editor/bundle",
+  "version": 1,
+  "exportedAt": "2026-10-18T00:00:00.000Z",
+  "rootDocumentId": "a",
+  "documents": [
+    {
+      "id": "a",
+      "name": "A",
+      "version": 1,
+      "updatedAt": "2026-10-18T00:00:00.000Z",
+      "document": {
+        "nodes": [
+          {
+            "id": "to-b",
+            "label": "to-b",
+            "x": 0,
+            "y": 0,
+            "workflowRef": {
+              "documentId": "b"
+            },
+            "inputs": [],
+            "outputs": []
+          },
+          {
+            "id": "to-c",
+            "label": "to-c",
+            "x": 0,
+            "y": 0,
+            "workflowRef": {
+              "documentId": "c"
+            },
+            "inputs": [],
+            "outputs": []
+          }
+        ],
+        "edges": []
+      }
+    },
+    {
+      "id": "b",
+      "name": "B",
+      "version": 1,
+      "updatedAt": "2026-10-18T00:00:00.000Z",
+      "document": {
+        "nodes": [
+          {
+            "id": "to-d",
+            "label": "to-d",
+            "x": 0,
+            "y": 0,
+            "workflowRef": {
+              "documentId": "d"
+            },
+            "inputs": [],
+            "outputs": []
+          }
+        ],
+        "edges": []
+      }
+    },
+    {
+      "id": "d",
+      "name": "D",
+      "version": 3,
+      "updatedAt": "2026-10-18T00:00:00.000Z",
+      "document": {
+        "nodes": [
+          {
+            "id": "leaf",
+            "label": "Leaf",
+            "x": 0,
+            "y": 0,
+            "inputs": [],
+            "outputs": []
+          }
+        ],
+        "edges": []
+      }
+    },
+    {
+      "id": "c",
+      "name": "C",
+      "version": 1,
+      "updatedAt": "2026-10-18T00:00:00.000Z",
+      "document": {
+        "nodes": [
+          {
+            "id": "to-d",
+            "label": "to-d",
+            "x": 0,
+            "y": 0,
+            "workflowRef": {
+              "documentId": "d"
+            },
+            "inputs": [],
+            "outputs": []
+          }
+        ],
+        "edges": []
+      }
+    }
+  ],
+  "references": [
+    {
+      "sourceDocumentId": "a",
+      "nodePath": ["to-b"],
+      "targetDocumentId": "b",
+      "targetVersion": 1
+    },
+    {
+      "sourceDocumentId": "b",
+      "nodePath": ["to-d"],
+      "targetDocumentId": "d",
+      "targetVersion": 3
+    },
+    {
+      "sourceDocumentId": "a",
+      "nodePath": ["to-c"],
+      "targetDocumentId": "c",
+      "targetVersion": 1
+    },
+    {
+      "sourceDocumentId": "c",
+      "nodePath": ["to-d"],
+      "targetDocumentId": "d",
+      "targetVersion": 3
+    }
+  ]
+}

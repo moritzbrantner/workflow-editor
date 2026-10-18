@@ -6,6 +6,13 @@ import {
   WorkflowEditorImportErrorAlert,
   WorkflowEditorStorageRecoveryAlert,
 } from "./editor/chrome";
+export {
+  WorkflowEditorBundleTransferButtons,
+  WorkflowEditorBundleTransferStatus,
+  type WorkflowEditorBundleActions,
+  type WorkflowEditorBundleError,
+  type WorkflowEditorBundleImportState,
+} from "./editor/bundle-transfer";
 import { NativeWorkflowTypes } from "./editor/native-types";
 import { workflowEditorPortTypeSource } from "./core-type-source";
 
@@ -77,6 +84,14 @@ import {
   type WorkflowWorkbenchController,
 } from "./react";
 import { formatShortcutLabel } from "./shortcut-label";
+import {
+  useWorkflowEditorBundleTransfer,
+  WorkflowEditorBundleTransferButtons,
+  WorkflowEditorBundleTransferStatus,
+  type WorkflowEditorBundleActions,
+  type WorkflowEditorBundleError,
+  type WorkflowEditorBundleImportState,
+} from "./editor/bundle-transfer";
 import {
   defaultWorkflowEditorNodeTemplates,
   createWorkflowEditorNodeTemplateRegistry,
@@ -221,6 +236,10 @@ export type WorkflowEditorController<
   documentProblems: WorkflowEditorDocumentDiagnostic[];
   /** Message of the most recent rejected import, cleared by the next import or dismissal. */
   importError: string | null;
+  /** A parsed workflow bundle whose import plan awaits confirmation. */
+  bundleImport: WorkflowEditorBundleImportState<TNodeData, TEdgeData> | null;
+  /** The most recent rejected bundle export or import. */
+  bundleError: WorkflowEditorBundleError | null;
   /** Set while a stored library could not be loaded; autosave is paused until resolved. */
   storageRecovery: WorkflowEditorStorageRecovery | null;
   library: WorkflowEditorLibrary<TNodeData, TEdgeData>;
@@ -236,30 +255,31 @@ export type WorkflowEditorController<
     createWorkflowReference: (node: WorkflowEditorNode<TNodeData>) => void;
     deleteDocument: () => void;
     dismissImportError: () => void;
-    duplicateDocument: () => void;
-    exportDocument: () => void;
-    importDocumentFromFile: (file: File) => Promise<void>;
-    openWorkflowReference: (node: WorkflowEditorNode<TNodeData>) => void;
-    redo: () => void;
-    renameDocument: () => void;
-    /** Explicitly removes the edges listed in `documentProblems`, as one undoable edit. */
-    repairDocument: () => void;
-    /** Downloads the unreadable stored library for manual recovery. */
-    downloadStoredLibrary: () => void;
-    /** Drops the unreadable stored library: the in-memory library is saved over it. */
-    discardStoredLibrary: () => void;
-    /** Opens the last-known-good backup and saves it over the unreadable library. */
-    restoreBackupLibrary: () => Promise<void>;
-    restoreVersion: () => void;
-    saveVersion: () => void;
-    selectDocument: (documentId: string) => void;
-    selectDocumentPathItem: (index: number) => void;
-    setNameDraft: (value: string) => void;
-    setSelectedVersionId: (versionId: string) => void;
-    setSelection: (selection: WorkflowEditorSelectionState) => void;
-    undo: () => void;
-    updateActiveDocument: (document: WorkflowEditorDocument<TNodeData, TEdgeData>) => void;
-  };
+  } & WorkflowEditorBundleActions & {
+      duplicateDocument: () => void;
+      exportDocument: () => void;
+      importDocumentFromFile: (file: File) => Promise<void>;
+      openWorkflowReference: (node: WorkflowEditorNode<TNodeData>) => void;
+      redo: () => void;
+      renameDocument: () => void;
+      /** Explicitly removes the edges listed in `documentProblems`, as one undoable edit. */
+      repairDocument: () => void;
+      /** Downloads the unreadable stored library for manual recovery. */
+      downloadStoredLibrary: () => void;
+      /** Drops the unreadable stored library: the in-memory library is saved over it. */
+      discardStoredLibrary: () => void;
+      /** Opens the last-known-good backup and saves it over the unreadable library. */
+      restoreBackupLibrary: () => Promise<void>;
+      restoreVersion: () => void;
+      saveVersion: () => void;
+      selectDocument: (documentId: string) => void;
+      selectDocumentPathItem: (index: number) => void;
+      setNameDraft: (value: string) => void;
+      setSelectedVersionId: (versionId: string) => void;
+      setSelection: (selection: WorkflowEditorSelectionState) => void;
+      undo: () => void;
+      updateActiveDocument: (document: WorkflowEditorDocument<TNodeData, TEdgeData>) => void;
+    };
 };
 
 export type WorkflowEditorChromeRenderer<
@@ -847,6 +867,27 @@ export function WorkflowEditor<
     setSaveState("dirty");
     setLibrary(nextLibrary);
   };
+  const bundleTransfer = useWorkflowEditorBundleTransfer({
+    library,
+    activeEntry,
+    readOnly,
+    onError,
+    onApply: (nextLibrary, plan) => {
+      setSelection(emptyWorkflowEditorSelection);
+      setDocumentPath([{ documentId: plan.rootDocumentId }]);
+      setHistoryByDocumentId((current) => {
+        const next = { ...current };
+        for (const item of plan.items) {
+          const entry = nextLibrary.documents.find((d) => d.id === item.targetDocumentId);
+          if (entry && item.action !== "reuse") {
+            next[entry.id] = resetWorkflowEditorHistory(entry.document);
+          }
+        }
+        return next;
+      });
+      updateLibrary(nextLibrary);
+    },
+  });
 
   const downloadStoredLibrary = () => {
     if (storageRecovery) {
@@ -1233,6 +1274,8 @@ export function WorkflowEditor<
     documentProblems,
     history,
     importError,
+    bundleImport: bundleTransfer.bundleImport,
+    bundleError: bundleTransfer.bundleError,
     storageRecovery,
     library,
     nameDraft,
@@ -1247,6 +1290,7 @@ export function WorkflowEditor<
       createWorkflowReference,
       deleteDocument,
       dismissImportError: () => setImportError(null),
+      ...bundleTransfer.actions,
       duplicateDocument,
       exportDocument,
       importDocumentFromFile,
@@ -1431,6 +1475,7 @@ export function WorkflowEditor<
                     >
                       Export JSON
                     </Button>
+                    <WorkflowEditorBundleTransferButtons controller={editorController} />
                   </div>
                 </div>
 
@@ -1497,6 +1542,7 @@ export function WorkflowEditor<
             </Badge>
           </div>
           <WorkflowEditorImportErrorAlert controller={editorController} />
+          <WorkflowEditorBundleTransferStatus controller={editorController} />
           <WorkflowEditorStorageRecoveryAlert controller={editorController} />
           <WorkflowEditorDocumentProblems controller={editorController} />
         </WorkbenchToolbar>
@@ -1664,8 +1710,10 @@ export function WorkflowEditor<
               >
                 Export JSON
               </Button>
+              <WorkflowEditorBundleTransferButtons controller={editorController} />
             </div>
             <WorkflowEditorImportErrorAlert controller={editorController} />
+            <WorkflowEditorBundleTransferStatus controller={editorController} />
             <WorkflowEditorStorageRecoveryAlert controller={editorController} />
             <WorkflowEditorDocumentProblems controller={editorController} />
           </WorkbenchToolbar>
@@ -1899,6 +1947,27 @@ export function useWorkflowEditorController<
     setSaveState("dirty");
     setLibrary(nextLibrary);
   };
+  const bundleTransfer = useWorkflowEditorBundleTransfer({
+    library,
+    activeEntry,
+    readOnly,
+    onError,
+    onApply: (nextLibrary, plan) => {
+      setSelection(emptyWorkflowEditorSelection);
+      setDocumentPath([{ documentId: plan.rootDocumentId }]);
+      setHistoryByDocumentId((current) => {
+        const next = { ...current };
+        for (const item of plan.items) {
+          const entry = nextLibrary.documents.find((d) => d.id === item.targetDocumentId);
+          if (entry && item.action !== "reuse") {
+            next[entry.id] = resetWorkflowEditorHistory(entry.document);
+          }
+        }
+        return next;
+      });
+      updateLibrary(nextLibrary);
+    },
+  });
 
   const downloadStoredLibrary = () => {
     if (storageRecovery) {
@@ -2316,6 +2385,8 @@ export function useWorkflowEditorController<
     documentProblems,
     history,
     importError,
+    bundleImport: bundleTransfer.bundleImport,
+    bundleError: bundleTransfer.bundleError,
     storageRecovery,
     library,
     nameDraft,
@@ -2330,6 +2401,7 @@ export function useWorkflowEditorController<
       createWorkflowReference,
       deleteDocument,
       dismissImportError: () => setImportError(null),
+      ...bundleTransfer.actions,
       duplicateDocument,
       exportDocument,
       importDocumentFromFile,
