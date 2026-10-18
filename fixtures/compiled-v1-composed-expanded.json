@@ -1,0 +1,134 @@
+{
+  "format": "@moritzbrantner/workflow/compiled",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "start",
+      "label": "Start",
+      "kind": "control.start",
+      "outputs": [
+        {
+          "id": "n",
+          "type": {
+            "kind": "typescript",
+            "source": "number"
+          }
+        }
+      ]
+    },
+    {
+      "id": "outer/inner/double",
+      "label": "double",
+      "kind": "math.double",
+      "inputs": [
+        {
+          "id": "in",
+          "type": {
+            "kind": "typescript",
+            "source": "number"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "id": "out",
+          "type": {
+            "kind": "typescript",
+            "source": "number"
+          }
+        }
+      ]
+    },
+    {
+      "id": "outer/inner/inc",
+      "label": "inc",
+      "kind": "math.increment",
+      "inputs": [
+        {
+          "id": "in",
+          "type": {
+            "kind": "typescript",
+            "source": "number"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "id": "out",
+          "type": {
+            "kind": "typescript",
+            "source": "number"
+          }
+        }
+      ]
+    },
+    {
+      "id": "outer/inc",
+      "label": "inc",
+      "kind": "math.increment",
+      "inputs": [
+        {
+          "id": "in",
+          "type": {
+            "kind": "typescript",
+            "source": "number"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "id": "out",
+          "type": {
+            "kind": "typescript",
+            "source": "number"
+          }
+        }
+      ]
+    },
+    {
+      "id": "end",
+      "label": "End",
+      "kind": "control.end",
+      "inputs": [
+        {
+          "id": "result",
+          "type": {
+            "kind": "typescript",
+            "source": "number"
+          }
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "drain",
+      "sourceNodeId": "outer/inc",
+      "sourcePortId": "out",
+      "targetNodeId": "end",
+      "targetPortId": "result"
+    },
+    {
+      "id": "feed",
+      "sourceNodeId": "start",
+      "sourcePortId": "n",
+      "targetNodeId": "outer/inner/double",
+      "targetPortId": "in"
+    },
+    {
+      "id": "outer/inner/step",
+      "sourceNodeId": "outer/inner/double",
+      "sourcePortId": "out",
+      "targetNodeId": "outer/inner/inc",
+      "targetPortId": "in"
+    },
+    {
+      "id": "outer/step",
+      "sourceNodeId": "outer/inner/inc",
+      "sourcePortId": "out",
+      "targetNodeId": "outer/inc",
+      "targetPortId": "in"
+    }
+  ],
+  "order": ["start", "outer/inner/double", "outer/inner/inc", "outer/inc", "end"]
+}

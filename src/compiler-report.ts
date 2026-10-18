@@ -1,3 +1,4 @@
+import { workflowEditorExpandedAuthoringPath } from "./compiler-compositions";
 import type {
   CompiledWorkflow,
   CompiledWorkflowEdge,
@@ -106,23 +107,21 @@ function addScope(
   const address = (id: string) => (parent ? `${parent}/${id}` : id);
   for (const node of scope.nodes) {
     sourceMap.nodes[address(node.id)] = {
-      path: `${pathPrefix}nodes.${node.id}`,
-      id: node.id,
+      ...workflowEditorExpandedAuthoringPath(node.id, "nodes", pathPrefix),
       ...(parent ? { parent } : {}),
     };
     if (isIterationNode(node)) {
       addScope(
         sourceMap,
         node.iteration.body,
-        `${pathPrefix}nodes.${node.id}.composition.`,
+        `${workflowEditorExpandedAuthoringPath(node.id, "nodes", pathPrefix).path}.composition.`,
         address(node.id),
       );
     }
   }
   for (const edge of scope.edges) {
     sourceMap.edges[address(edge.id)] = {
-      path: `${pathPrefix}edges.${edge.id}`,
-      id: edge.id,
+      ...workflowEditorExpandedAuthoringPath(edge.id, "edges", pathPrefix),
       ...(parent ? { parent } : {}),
     };
   }

@@ -1,4 +1,8 @@
 import { workflowEditorTypeDefinitionsSource } from "./core-type-source";
+import {
+  expandWorkflowEditorCompositions,
+  type WorkflowEditorCompositionMode,
+} from "./compiler-compositions";
 import { findWorkflowEditorPortMinViolations } from "./core-cardinality";
 import {
   analyzeWorkflowEditorPortTypes,
@@ -210,6 +214,11 @@ export type WorkflowEditorCompileOptions = WorkflowEditorTypeValidationOptions &
    * `nested-workflow-not-supported`.
    */
   resolveWorkflowReference?: WorkflowEditorWorkflowReferenceResolver;
+  /**
+   * How composed nodes compile (#19): `reject` (default) reports `composition-not-supported`,
+   * `opaque` keeps each composed node as one node, `expand` inlines its embedded subgraph.
+   */
+  compositions?: WorkflowEditorCompositionMode;
 };
 
 export type WorkflowEditorCompileDiagnosticCode =
@@ -359,7 +368,7 @@ function validateExecutableNode(
         }),
       );
     }
-  } else if (node.composition) {
+  } else if (node.composition && scope.compositions !== "opaque") {
     diagnostics.push({
       code: "composition-not-supported",
       message: `Workflow node ${node.id} contains an embedded composition; restore or flatten it before compilation.`,
@@ -428,15 +437,16 @@ export function compileWorkflowEditorDocument<
   document: WorkflowEditorDocument<TNodeData, TEdgeData>,
   options: WorkflowEditorCompileOptions = {},
 ): CompiledWorkflow<TNodeData> {
-  const { resolveWorkflowReference, ...typeOptions } = options;
+  const { resolveWorkflowReference, compositions = "reject", ...typeOptions } = options;
   if (resolveWorkflowReference && documentHasReferences(document)) {
     return compileWorkflowEditorReferenceClosure(
       document as unknown as WorkflowEditorDocument,
       typeOptions,
       resolveWorkflowReference,
+      compositions,
     ) as unknown as CompiledWorkflow<TNodeData>;
   }
-  return compileWorkflowEditorDocumentBase(document, typeOptions, false);
+  return compileWorkflowEditorDocumentBase(document, typeOptions, false, compositions);
 }
 
 /** Whether any node, including nodes inside iteration bodies, references another workflow. */
@@ -448,9 +458,7 @@ function documentHasReferences(document: {
     document.nodes.some(
       (node) =>
         !!node?.workflowRef?.documentId ||
-        (!!node?.composition &&
-          isWorkflowEditorIterationNode(node) &&
-          documentHasReferences(node.composition)),
+        (!!node?.composition && documentHasReferences(node.composition)),
     )
   );
 }
@@ -497,6 +505,7 @@ function compileWorkflowEditorDocumentBase<
   document: WorkflowEditorDocument<TNodeData, TEdgeData>,
   options: WorkflowEditorTypeValidationOptions,
   allowReferences: boolean,
+  compositions: WorkflowEditorCompositionMode = "reject",
 ): CompiledWorkflow<TNodeData> {
   let normalized: WorkflowEditorDocument<TNodeData, TEdgeData>;
   try {
@@ -531,7 +540,14 @@ function compileWorkflowEditorDocumentBase<
     pathPrefix: "",
     inBody: false,
     allowReferences,
+    compositions,
   };
+  if (compositions === "expand") {
+    normalized = resolveWorkflowEditorDocumentTypes(
+      expandWorkflowEditorCompositions(normalized),
+      options,
+    );
+  }
   const diagnostics = scopeDiagnostics(normalized as WorkflowEditorDocument, scope);
   if (diagnostics.length > 0) {
     throw new WorkflowEditorCompileError(diagnostics);
@@ -566,6 +582,7 @@ type CompileScope = {
   inBody: boolean;
   /** Workflow References, top-level or in iteration bodies, compile into the v3 closure. */
   allowReferences?: boolean;
+  compositions?: WorkflowEditorCompositionMode;
 };
 
 function scopeDiagnostics(
@@ -740,6 +757,11 @@ function compileIterationNode(
 }
 
 export {
+  expandWorkflowEditorCompositions,
+  type WorkflowEditorCompositionMode,
+} from "./compiler-compositions";
+
+export {
   createCompiledWorkflowReport,
   createCompiledWorkflowSourceMap,
   fingerprintCompiledWorkflow,
@@ -763,6 +785,7 @@ function compileWorkflowEditorReferenceClosure(
   root: WorkflowEditorDocument,
   options: WorkflowEditorTypeValidationOptions,
   resolve: WorkflowEditorWorkflowReferenceResolver,
+  compositions: WorkflowEditorCompositionMode = "reject",
 ): CompiledWorkflowV3 {
   const diagnostics: WorkflowEditorCompileDiagnostic[] = [];
   const workflows = new Map<string, CompiledWorkflowDefinition | null>();
@@ -775,7 +798,7 @@ function compileWorkflowEditorReferenceClosure(
   ): CompiledWorkflow | undefined => {
     let compiled: CompiledWorkflow;
     try {
-      compiled = compileWorkflowEditorDocumentBase(document, options, true);
+      compiled = compileWorkflowEditorDocumentBase(document, options, true, compositions);
     } catch (error) {
       if (error instanceof WorkflowEditorCompileError) {
         diagnostics.push(
@@ -790,7 +813,9 @@ function compileWorkflowEditorReferenceClosure(
     }
 
     const declarations = document.typeDeclarations;
-    for (const site of referenceSites(document.nodes, compiled.nodes, pathPrefix)) {
+    const sitesDocument =
+      compositions === "expand" ? expandWorkflowEditorCompositions(document) : document;
+    for (const site of referenceSites(sitesDocument.nodes, compiled.nodes, pathPrefix)) {
       const { node } = site;
       const reference = node.workflowRef!;
       const path = `${site.pathPrefix}nodes.${node.id}.workflowRef`;
