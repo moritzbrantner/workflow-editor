@@ -39,7 +39,7 @@ test("names the unsupported port type when a workflow import is rejected", async
   const nodeCountBefore = await nodes.count();
 
   // Open the document menu from the active document title.
-  await page.getByRole("button", { name: "Lead Intake Automation", exact: true }).click();
+  await page.getByRole("button", { name: "Sales Data Pipeline", exact: true }).click();
 
   await page.getByLabel("Import workflow JSON", { exact: true }).setInputFiles({
     name: "unsupported-legacy.json",

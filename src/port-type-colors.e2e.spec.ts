@@ -203,7 +203,7 @@ test("configures one color per port type across nodes, edges, minimized nodes an
   await page.goto(workbench);
 
   // Import a workflow with several nodes per type (some minimized) into the real workbench.
-  await page.getByRole("button", { name: "Lead Intake Automation", exact: true }).click();
+  await page.getByRole("button", { name: "Sales Data Pipeline", exact: true }).click();
   await page.getByLabel("Import workflow JSON", { exact: true }).setInputFiles({
     name: "port-colors.json",
     mimeType: "application/json",

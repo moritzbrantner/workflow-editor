@@ -55,9 +55,9 @@ async function waitForLibrary(page: Page) {
 const isMobile = (testInfo: TestInfo) => testInfo.project.name === "mobile-chrome";
 
 async function openDocumentMenu(page: Page) {
-  // The active document title opens the document menu (Lead Intake Automation is the default).
+  // The active document title opens the document menu (Sales Data Pipeline is the default).
   await page
-    .getByRole("button", { name: "Lead Intake Automation", exact: true })
+    .getByRole("button", { name: "Sales Data Pipeline", exact: true })
     .or(page.getByRole("button", { name: exampleName, exact: true }))
     .first()
     .click();

@@ -45,7 +45,7 @@ async function openSeededWorkbench(page: Page) {
 
 async function importWorkflowFile(page: Page, documentName: string, document: StoredDocument) {
   // Open the document menu from the active document title.
-  await page.getByRole("button", { name: "Lead Intake Automation", exact: true }).click();
+  await page.getByRole("button", { name: "Sales Data Pipeline", exact: true }).click();
   await page.getByLabel("Import workflow JSON", { exact: true }).setInputFiles({
     name: `${documentName}.json`,
     mimeType: "application/json",
@@ -69,7 +69,15 @@ function hasPorts(node: StoredNode, side: "inputs" | "outputs") {
 function documentWithProblemEdges(stored: StoredLibrary) {
   for (const entry of stored.documents) {
     const { nodes, edges } = entry.document;
-    const selfNode = nodes.find((node) => hasPorts(node, "inputs") && hasPorts(node, "outputs"));
+    // The self edge must target a free input, or it would also exceed that input's cardinality.
+    const selfNode = nodes.find(
+      (node) =>
+        hasPorts(node, "inputs") &&
+        hasPorts(node, "outputs") &&
+        !edges.some(
+          (edge) => edge.targetNodeId === node.id && edge.targetPortId === node.inputs![0]!.id,
+        ),
+    );
     const sourceNode = nodes.find((node) => hasPorts(node, "outputs"));
     // A sink cannot reach anything, so an edge into it can never close a cycle.
     const sinkNode = nodes.find(
