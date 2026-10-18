@@ -7,6 +7,10 @@ import {
   WorkflowEditorBundleTransferButtons,
   WorkflowEditorBundleTransferStatus,
 } from "./bundle-transfer";
+import {
+  WorkflowEditorCompareVersionsButton,
+  WorkflowEditorVersionComparison,
+} from "./version-compare";
 import type { WorkflowEditorController, WorkflowEditorSaveState } from "../editor";
 
 type ChromeController<
@@ -242,6 +246,9 @@ export function WorkflowEditorVersionControls<
       >
         Restore version
       </Button>
+      <WorkflowEditorCompareVersionsButton controller={controller} />
+      {/* Restore confirmation and comparison travel with the version controls in custom chrome. */}
+      <WorkflowEditorVersionComparison controller={controller} />
     </div>
   );
 }

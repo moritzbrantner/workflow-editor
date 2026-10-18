@@ -1091,8 +1091,45 @@ test.describe("WorkflowWorkbench desktop", () => {
     await expect(page.getByTestId("node-count")).toHaveText("4");
 
     await page.getByRole("button", { name: "Restore version" }).click();
+    // Nothing changes until the restore is confirmed.
+    await expect(page.getByTestId("node-count")).toHaveText("4");
+    await page.getByRole("button", { name: "Confirm restore" }).click();
     await expect(page.getByTestId("node-count")).toHaveText("3");
     await expect(page.getByTestId("document-json")).not.toContainText('"id":"decision"');
+
+    // The restore is one undoable edit.
+    await page.getByRole("button", { name: "Undo", exact: true }).click();
+    await expect(page.getByTestId("node-count")).toHaveText("4");
+    await page.getByRole("button", { name: "Redo", exact: true }).click();
+    await expect(page.getByTestId("node-count")).toHaveText("3");
+    await expect(page.getByTestId("document-json")).not.toContainText('"id":"decision"');
+  });
+
+  test("compares a saved version with the draft and restores it from the comparison", async ({
+    page,
+  }, testInfo) => {
+    await gotoWorkflowEditor(page, testInfo);
+    await page.getByRole("button", { name: "Save version" }).click();
+    await page
+      .getByRole("button", { name: /Decision/ })
+      .first()
+      .click();
+    await expect(page.getByTestId("node-count")).toHaveText("4");
+
+    await page.getByRole("button", { name: "Compare", exact: true }).click();
+    const comparison = page.getByRole("region", { name: "Version comparison" });
+    await expect(comparison.getByTestId("version-comparison-summary")).toHaveText(
+      "1 added · 0 removed · 0 changed · 0 moved",
+    );
+    await page.getByRole("button", { name: "Highlight changes on canvas" }).click();
+    await expect(page.getByTestId("selection-json")).toContainText('"id":"decision"');
+
+    await comparison.getByRole("button", { name: "Restore compared version" }).click();
+    await page.getByRole("button", { name: "Confirm restore" }).click();
+    await expect(page.getByTestId("node-count")).toHaveText("3");
+    await expect(comparison.getByText("No differences.")).toBeVisible();
+    await page.getByRole("button", { name: "Close comparison" }).click();
+    await expect(comparison).toHaveCount(0);
   });
 
   test("undoes and redoes document edits", async ({ page }, testInfo) => {
