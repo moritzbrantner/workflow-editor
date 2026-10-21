@@ -190,6 +190,31 @@ This is the repository-owned, feature-oriented source of **owner-approved produc
   Status: owner-approved 2026-10-17 ([#17](https://github.com/moritzbrantner/workflow-editor/issues/17)).  
   Recovery is implemented locally in Workflow Editor persistence (no editor-core E-03 dependency). Loading a stored library distinguishes loaded, empty, recoverable-error and unsupported-future-version outcomes and keeps the raw payload; a migration hook is added only when a real schema version 2 exists. When the saved library cannot be loaded, the editor opens with its defaults in memory and a banner ("Saved library could not be loaded") offering "Download saved data", "Restore backup" when a last-known-good copy exists, and "Discard and start fresh"; stored data is never overwritten until the user chooses. Before each save replaces a valid stored library, its previous value is kept as one last-known-good backup. This is approved intent, not implementation evidence.
 
+- **5.20 Keep a minimized value node's inline editor.**  
+  Status: owner-approved 2026-10-18 ([#44](https://github.com/moritzbrantner/workflow-editor/issues/44)), choice B.  
+  A minimized JSON value node (string, number, boolean, null) keeps its frequent value editor inline in the compact node, rendered through graph-editor's node body slot ([graph-editor#64](https://github.com/moritzbrantner/graph-editor/issues/64)) rather than workflow-local overlays. This is approved intent, not implementation evidence.
+
+- **5.21 A referenced workflow's interface is its start outputs and end inputs.**  
+  Status: owner-approved 2026-10-18 ([#95](https://github.com/moritzbrantner/workflow-editor/issues/95)), choice A.  
+  The ports of a Workflow Reference are the referenced document's `control.start` outputs (reference inputs) and `control.end` inputs (reference outputs). They are matched by port id and port type; a missing port or a type mismatch is a compile diagnostic, not a silent repair. This is approved intent, not implementation evidence.
+
+- **5.22 The outermost workflow call counts as depth 1.**  
+  Status: owner-approved 2026-10-18 ([#95](https://github.com/moritzbrantner/workflow-editor/issues/95)).  
+  For a recursive Workflow Reference's `maxDepth` bound, the outermost workflow call counts as depth 1; each nested re-entry adds one. Editor diagnostics, the compiled contract and the runner use the same counting. This is approved intent, not implementation evidence.
+
+- **5.23 Edit workflow triggers in a "Triggers" panel of the document settings.**  
+  Status: owner-approved 2026-10-18 ([#91](https://github.com/moritzbrantner/workflow-editor/issues/91)), choice A. Refines 5.11.  
+  Trigger configuration (manual, schedule, event) lives in a "Triggers" panel in the inspector's document settings, shown when nothing is selected on the canvas. This is approved intent, not implementation evidence.
+
+- **5.24 Document tabs replace the document select and breadcrumb row.**  
+  Status: owner-approved 2026-10-18 ([#100](https://github.com/moritzbrantner/workflow-editor/issues/100)), choice B, with follow-up choice A. Refines 5.14.  
+  The tab strip replaces the former document select and breadcrumb row. Opening a nested Workflow Reference opens the referenced document in its own tab with an "↑ Parent" link back to the referencing document; there is no breadcrumb trail. This is approved intent, not implementation evidence.
+
+- **5.25 Edit an iteration body in its own tab.**  
+  Status: owner-approved 2026-10-18 ([#94](https://github.com/moritzbrantner/workflow-editor/issues/94)), choice A. Follows 5.24.  
+  Opening a `control.iterate` node's body opens a tab titled "<workflow> › <iteration> body" with an "↑ Parent" link. The body is saved inside the parent Workflow Document, not as a separate Library Entry. The iteration boundaries (state, `next`, `converged`) are edited in that tab's document settings in the inspector when nothing is selected. This is approved intent, not implementation evidence.
+
+
 ## 6. Document validation
 
 - **6.1 Configure document validation through one per-rule policy and surface problems instead of silently repairing.**  
