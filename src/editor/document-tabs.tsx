@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
+import { ArrowUpIcon } from "lucide-react";
+
 import { Button } from "@moritzbrantner/ui";
 
 import { findWorkflowEditorIterationBodyNode } from "../core-iteration-body";
@@ -287,10 +289,12 @@ export function WorkflowEditorDocumentTabs({
           type="button"
           size="sm"
           variant="ghost"
-          aria-label="Open parent workflow"
           onClick={controller.actions.openParentDocument}
         >
-          ↑ {workflowEditorDocumentPathTitle(controller.library, parentPath) || "Parent"}
+          {/* Named by its visible text (axe label-content-name-mismatch): "Open parent workflow: <title>". */}
+          <ArrowUpIcon aria-hidden="true" />
+          <span className="sr-only">Open parent workflow: </span>
+          {workflowEditorDocumentPathTitle(controller.library, parentPath) || "Parent"}
         </Button>
       ) : null}
       {showOpenSelect ? (

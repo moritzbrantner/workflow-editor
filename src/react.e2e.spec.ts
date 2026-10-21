@@ -1189,7 +1189,7 @@ test.describe("WorkflowWorkbench desktop", () => {
       "aria-current",
       "page",
     );
-    await page.getByRole("button", { name: "Open parent workflow" }).click();
+    await page.getByRole("button", { name: /^Open parent workflow/ }).click();
     await expect(page.getByTestId("active-document-name")).toHaveText("Demo Workflow");
     await expect(page.getByTestId("node-count")).toHaveText("3");
     await expect(page.getByTestId("document-json")).toContainText('"workflowRef"');

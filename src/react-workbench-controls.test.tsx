@@ -683,7 +683,7 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
       expect.objectContaining({ documentId: expect.stringMatching(/^workflow-/) }),
     ]);
 
-    fireEvent.click(screen.getByRole("button", { name: "Open parent workflow" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Open parent workflow/ }));
     await waitFor(() =>
       expect(screen.getByTestId("active-node-count").textContent).toBe("3 nodes"),
     );
@@ -736,7 +736,7 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     );
     // A self-reference stays in the document's one tab, with a parent link one level up.
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Open parent workflow" })).not.toBeNull(),
+      expect(screen.getByRole("button", { name: /^Open parent workflow/ })).not.toBeNull(),
     );
     expect(screen.getAllByRole("button", { name: /^Switch to / })).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "Self" }));

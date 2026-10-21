@@ -104,9 +104,9 @@ test("builds an iteration body from scratch in its own tab, then reloads and com
     "aria-current",
     "page",
   );
-  await expect(page.getByRole("button", { name: "Open parent workflow" })).toContainText(
-    `↑ ${exampleName}`,
-  );
+  await expect(
+    page.getByRole("button", { name: `Open parent workflow: ${exampleName}` }),
+  ).toBeVisible();
 
   // Start from scratch: remove the shipped body nodes.
   await deleteNode(page, "Newton step");

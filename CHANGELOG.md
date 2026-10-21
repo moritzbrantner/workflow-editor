@@ -4,6 +4,10 @@
 
 ### Minor Changes
 
+- Accessibility (axe-core 4.14, `label-content-name-mismatch`; owner decision 2026-10-21): button names now contain their visible text.
+  - The parent link is named "Open parent workflow: <title>", and its arrow is an icon.
+  - graph-editor is pinned to `a0c6939`, where port and node buttons keep their chips and package lines beside the button.
+  - `@axe-core/playwright` is now 4.14.0.
 - Edit an iteration body in its own tab (#94, Decision Atlas 5.25).
   - **Open body** (inspector and node menu) on a `control.iterate` node opens the tab "<workflow> › <iteration> body" with an **↑ Parent** link. Body edits use the normal canvas gestures and are saved inside the parent document, with one undo history.
   - With nothing selected, the body tab's document settings show **Iteration boundaries**: which body inputs the state and invariant inputs feed, the **Next state** and **Converged** outputs, and the iteration diagnostics.
