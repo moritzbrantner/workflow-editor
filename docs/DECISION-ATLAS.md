@@ -214,7 +214,6 @@ This is the repository-owned, feature-oriented source of **owner-approved produc
   Status: owner-approved 2026-10-18 ([#94](https://github.com/moritzbrantner/workflow-editor/issues/94)), choice A. Follows 5.24.  
   Opening a `control.iterate` node's body opens a tab titled "<workflow> › <iteration> body" with an "↑ Parent" link. The body is saved inside the parent Workflow Document, not as a separate Library Entry. The iteration boundaries (state, `next`, `converged`) are edited in that tab's document settings in the inspector when nothing is selected. This is approved intent, not implementation evidence.
 
-
 ## 6. Document validation
 
 - **6.1 Configure document validation through one per-rule policy and surface problems instead of silently repairing.**  
