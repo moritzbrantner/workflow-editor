@@ -762,6 +762,9 @@ export function findWorkflowEditorEdge<TNodeData = Record<string, unknown>, TEdg
 // @public (undocumented)
 export function findWorkflowEditorGroup<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(document: WorkflowEditorDocument<TNodeData, TEdgeData>, groupId: string): _moritzbrantner_graph_editor_core.GraphEditorGroup<Record<string, unknown>> | undefined;
 
+// @public
+export function findWorkflowEditorIterationBodyNode<TNodeData, TEdgeData>(document: WorkflowEditorDocument<TNodeData, TEdgeData>, path: WorkflowEditorIterationBodyPath): WorkflowEditorNode<TNodeData> | undefined;
+
 // @public (undocumented)
 export function findWorkflowEditorNode<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(document: WorkflowEditorDocument<TNodeData, TEdgeData>, nodeId: string): WorkflowEditorNode<TNodeData> | undefined;
 
@@ -805,6 +808,9 @@ export function getWorkflowEditorGroupBounds<TNodeData = Record<string, unknown>
 
 // @public (undocumented)
 export function getWorkflowEditorInputDeclarations(document: WorkflowEditorDocument<unknown, unknown>): WorkflowEditorInputDeclaration[];
+
+// @public
+export function getWorkflowEditorIterationBodyDocument<TNodeData, TEdgeData>(document: WorkflowEditorDocument<TNodeData, TEdgeData>, path: WorkflowEditorIterationBodyPath): WorkflowEditorDocument<TNodeData, TEdgeData> | undefined;
 
 // @public (undocumented)
 export function getWorkflowEditorJsonPrimitiveSourceName<TData>(node: WorkflowEditorNode<TData>): string | undefined;
@@ -1076,6 +1082,9 @@ export function restoreWorkflowEditorVersion<TNodeData = Record<string, unknown>
 export function saveWorkflowEditorLibrary<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(storage: WorkflowEditorStorageAdapter<TNodeData, TEdgeData>, library: WorkflowEditorLibrary<TNodeData, TEdgeData>): Promise<void>;
 
 // @public
+export function setWorkflowEditorIterationBodyDocument<TNodeData, TEdgeData>(document: WorkflowEditorDocument<TNodeData, TEdgeData>, path: WorkflowEditorIterationBodyPath, body: Pick<WorkflowEditorDocument<TNodeData, TEdgeData>, "nodes" | "edges" | "typeDeclarations">): WorkflowEditorDocument<TNodeData, TEdgeData>;
+
+// @public
 export function stringifyWorkflowEditorBundle(bundle: WorkflowEditorBundle<unknown, unknown>): string;
 
 // @public
@@ -1123,6 +1132,9 @@ export function updateWorkflowEditorGroup<TNodeData = Record<string, unknown>, T
 
 // @public (undocumented)
 export function updateWorkflowEditorIterationBound<TNodeData, TEdgeData>(document: WorkflowEditorDocument<TNodeData, TEdgeData>, nodeId: string, maxIterations: number | null): WorkflowEditorDocument<TNodeData, TEdgeData>;
+
+// @public
+export function updateWorkflowEditorIterationBoundaries<TNodeData, TEdgeData>(document: WorkflowEditorDocument<TNodeData, TEdgeData>, path: WorkflowEditorIterationBodyPath, boundaries: Partial<WorkflowEditorIterationBoundaries>): WorkflowEditorDocument<TNodeData, TEdgeData>;
 
 // @public (undocumented)
 export function updateWorkflowEditorIterationStateType<TNodeData, TEdgeData>(document: WorkflowEditorDocument<TNodeData, TEdgeData>, nodeId: string, type: WorkflowEditorPortType): WorkflowEditorDocument<TNodeData, TEdgeData>;
@@ -1209,9 +1221,11 @@ export function useWorkflowEditorController<TNodeData extends Record<string, unk
         setSelectedVersionId: react.Dispatch<react.SetStateAction<string>>;
         setSelection: react.Dispatch<react.SetStateAction<_moritzbrantner_graph_editor_core.GraphEditorSelectionState>>;
         undo: () => void;
-        updateActiveDocument: (document: WorkflowEditorDocument<TNodeData, TEdgeData>) => void;
-        switchTab: (documentId: string) => void;
-        closeTab: (documentId: string) => void;
+        updateActiveDocument: (document: WorkflowEditorDocument<TNodeData, TEdgeData>, options?: {
+            root?: boolean;
+        }) => void;
+        switchTab: (tabId: string) => void;
+        closeTab: (tabId: string) => void;
         openDocument: (documentId: string) => void;
         openParentDocument: () => void;
         openComparison: (versionId?: string) => void;
@@ -2038,6 +2052,7 @@ export function WorkflowEditorDocumentPath<TNodeData extends Record<string, unkn
 // @public (undocumented)
 export type WorkflowEditorDocumentPathItem = {
     documentId: string;
+    nodeId?: string;
 };
 
 // @public (undocumented)
@@ -2312,8 +2327,14 @@ export type WorkflowEditorInspectorFieldOption = {
     value: string;
 };
 
+// @public
+export type WorkflowEditorIterationBodyPath = readonly string[];
+
 // @public (undocumented)
 export function workflowEditorIterationBound<TNodeData>(node: WorkflowEditorNode<TNodeData>): unknown;
+
+// @public (undocumented)
+export type WorkflowEditorIterationBoundaries = Pick<WorkflowEditorNodeComposition, "inputBoundaries" | "outputBoundaries">;
 
 // @public (undocumented)
 export type WorkflowEditorIterationConfig = {
@@ -3367,6 +3388,8 @@ export type WorkflowWorkbenchInspectorContext<TNodeData extends Record<string, u
     selectedNode?: WorkflowEditorNode<TNodeData>;
     openSelectedNodeWorkflow?: () => void;
     createSelectedNodeWorkflow?: () => void;
+    openSelectedIterationBody?: () => void;
+    iterationBody?: WorkflowWorkbenchIterationBody;
     updateDocument?: (document: WorkflowEditorDocument<TNodeData, TEdgeData>) => void;
     updateSelectedNode: (patch: Partial<WorkflowEditorNode<TNodeData>>) => void;
     updateSelectedEdge: (patch: Partial<WorkflowEditorEdge<TEdgeData>>) => void;
@@ -3394,6 +3417,13 @@ export type WorkflowWorkbenchInspectorFieldRendererProps = {
 export type WorkflowWorkbenchInspectorFieldRenderers = {
     kinds?: Partial<Record<WorkflowEditorInspectorFieldKind, WorkflowWorkbenchInspectorFieldRenderer>>;
     fields?: Record<string, WorkflowWorkbenchInspectorFieldRenderer>;
+};
+
+// @public
+export type WorkflowWorkbenchIterationBody = {
+    node: WorkflowEditorNode<Record<string, unknown>>;
+    diagnostics: readonly WorkflowEditorIterationDiagnostic[];
+    onBoundariesChange?: (boundaries: Partial<WorkflowEditorIterationBoundaries>) => void;
 };
 
 // @public (undocumented)
@@ -3466,6 +3496,8 @@ export type WorkflowWorkbenchProps<TNodeData extends Record<string, unknown> = R
     onSelectionStateChange?: (selection: WorkflowEditorSelectionState) => void;
     onViewportChange?: (viewport: WorkflowEditorViewport) => void;
     onOpenWorkflowReference?: (node: WorkflowEditorNode<TNodeData>) => void;
+    onOpenIterationBody?: (node: WorkflowEditorNode<TNodeData>) => void;
+    iterationBody?: WorkflowWorkbenchIterationBody;
     onCreateWorkflowReference?: (node: WorkflowEditorNode<TNodeData>) => void;
     execution?: WorkflowExecutionSnapshot | null;
     formatExecutionLabel?: (snapshot: WorkflowExecutionNodeSnapshot, node: WorkflowEditorNode<TNodeData>) => string;
@@ -3497,23 +3529,23 @@ export function writeWorkflowEditorFieldPath<T extends Record<string, unknown>>(
 
 // Warnings were encountered during analysis:
 //
-// dist/core-execution-Dq4srmPS.d.ts:5:5 - (ae-forgotten-export) The symbol "WorkflowEditorNodeTemplateDiagnosticCode" needs to be exported by the entry point index.d.ts
-// dist/editor.d.ts:182:5 - (ae-forgotten-export) The symbol "ChromeController" needs to be exported by the entry point index.d.ts
-// dist/editor.d.ts:300:5 - (ae-forgotten-export) The symbol "WorkflowEditorBundleActions" needs to be exported by the entry point index.d.ts
-// dist/editor.d.ts:300:5 - (ae-forgotten-export) The symbol "WorkflowEditorComparisonActions" needs to be exported by the entry point index.d.ts
-// dist/editor.d.ts:300:5 - (ae-forgotten-export) The symbol "WorkflowEditorDocumentTabActions" needs to be exported by the entry point index.d.ts
-// dist/editor.d.ts:423:5 - (ae-forgotten-export) The symbol "WorkflowEditorBundleImportState" needs to be exported by the entry point index.d.ts
-// dist/editor.d.ts:424:5 - (ae-forgotten-export) The symbol "WorkflowEditorBundleError" needs to be exported by the entry point index.d.ts
-// dist/editor.d.ts:425:5 - (ae-forgotten-export) The symbol "WorkflowEditorDocumentTab" needs to be exported by the entry point index.d.ts
-// dist/editor.d.ts:426:5 - (ae-forgotten-export) The symbol "WorkflowEditorComparisonState" needs to be exported by the entry point index.d.ts
-// dist/editor.d.ts:427:5 - (ae-forgotten-export) The symbol "WorkflowEditorPendingRestore" needs to be exported by the entry point index.d.ts
-// dist/editor.d.ts:428:5 - (ae-forgotten-export) The symbol "WorkflowEditorStorageRecovery" needs to be exported by the entry point index.d.ts
-// dist/editor.d.ts:463:9 - (ae-forgotten-export) The symbol "WorkflowEditorComparisonSide" needs to be exported by the entry point index.d.ts
-// dist/react.d.ts:178:5 - (ae-forgotten-export) The symbol "WorkflowWorkbenchTriggerActivation" needs to be exported by the entry point index.d.ts
-// dist/react.d.ts:180:5 - (ae-forgotten-export) The symbol "WorkflowWorkbenchInputProfiles" needs to be exported by the entry point index.d.ts
-// dist/react.d.ts:204:9 - (ae-forgotten-export) The symbol "WorkflowWorkbenchPaletteCategoryGroup" needs to be exported by the entry point index.d.ts
-// dist/react.d.ts:211:9 - (ae-forgotten-export) The symbol "WorkflowWorkbenchOverlayPosition" needs to be exported by the entry point index.d.ts
-// dist/react.d.ts:286:5 - (ae-forgotten-export) The symbol "WorkflowWorkbenchHumanTasks" needs to be exported by the entry point index.d.ts
+// dist/core-execution-Brz2QwXG.d.ts:29:5 - (ae-forgotten-export) The symbol "WorkflowEditorNodeTemplateDiagnosticCode" needs to be exported by the entry point index.d.ts
+// dist/editor.d.ts:189:5 - (ae-forgotten-export) The symbol "ChromeController" needs to be exported by the entry point index.d.ts
+// dist/editor.d.ts:312:5 - (ae-forgotten-export) The symbol "WorkflowEditorBundleActions" needs to be exported by the entry point index.d.ts
+// dist/editor.d.ts:312:5 - (ae-forgotten-export) The symbol "WorkflowEditorComparisonActions" needs to be exported by the entry point index.d.ts
+// dist/editor.d.ts:312:5 - (ae-forgotten-export) The symbol "WorkflowEditorDocumentTabActions" needs to be exported by the entry point index.d.ts
+// dist/editor.d.ts:435:5 - (ae-forgotten-export) The symbol "WorkflowEditorBundleImportState" needs to be exported by the entry point index.d.ts
+// dist/editor.d.ts:436:5 - (ae-forgotten-export) The symbol "WorkflowEditorBundleError" needs to be exported by the entry point index.d.ts
+// dist/editor.d.ts:437:5 - (ae-forgotten-export) The symbol "WorkflowEditorDocumentTab" needs to be exported by the entry point index.d.ts
+// dist/editor.d.ts:438:5 - (ae-forgotten-export) The symbol "WorkflowEditorComparisonState" needs to be exported by the entry point index.d.ts
+// dist/editor.d.ts:439:5 - (ae-forgotten-export) The symbol "WorkflowEditorPendingRestore" needs to be exported by the entry point index.d.ts
+// dist/editor.d.ts:440:5 - (ae-forgotten-export) The symbol "WorkflowEditorStorageRecovery" needs to be exported by the entry point index.d.ts
+// dist/editor.d.ts:477:9 - (ae-forgotten-export) The symbol "WorkflowEditorComparisonSide" needs to be exported by the entry point index.d.ts
+// dist/react.d.ts:193:5 - (ae-forgotten-export) The symbol "WorkflowWorkbenchTriggerActivation" needs to be exported by the entry point index.d.ts
+// dist/react.d.ts:195:5 - (ae-forgotten-export) The symbol "WorkflowWorkbenchInputProfiles" needs to be exported by the entry point index.d.ts
+// dist/react.d.ts:219:9 - (ae-forgotten-export) The symbol "WorkflowWorkbenchPaletteCategoryGroup" needs to be exported by the entry point index.d.ts
+// dist/react.d.ts:226:9 - (ae-forgotten-export) The symbol "WorkflowWorkbenchOverlayPosition" needs to be exported by the entry point index.d.ts
+// dist/react.d.ts:301:5 - (ae-forgotten-export) The symbol "WorkflowWorkbenchHumanTasks" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

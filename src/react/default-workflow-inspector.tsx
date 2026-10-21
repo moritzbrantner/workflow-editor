@@ -43,6 +43,7 @@ import {
 } from "./inspector-panel";
 import { WorkflowTriggersPanel } from "./triggers-panel";
 import { WorkflowInputsPanel } from "./inputs-panel";
+import { WorkflowIterationBoundariesPanel } from "./iteration-boundaries-panel";
 import { WorkflowPortPayloadEditor, withWorkflowEditorPortPayload } from "./port-payload-editor";
 import {
   applyInspectorFieldDrafts,
@@ -525,6 +526,18 @@ export function DefaultWorkflowInspector<
             </Button>
           </div>
         ) : null}
+        {context.openSelectedIterationBody ? (
+          <div className="flex flex-wrap gap-2 px-4 pb-4">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={context.openSelectedIterationBody}
+            >
+              Open body
+            </Button>
+          </div>
+        ) : null}
         {context.documentReferences ? (
           <div className="flex flex-wrap gap-2 px-4 pb-4">
             {referencedInterface ? (
@@ -597,6 +610,24 @@ export function DefaultWorkflowInspector<
           });
         }}
       />
+    );
+  }
+
+  if (context.iterationBody) {
+    const body = context.iterationBody;
+    return (
+      <div className="grid">
+        <div className="p-4 pb-0 text-sm text-muted-foreground">
+          Select a body node or edge to inspect its configuration.
+        </div>
+        <WorkflowIterationBoundariesPanel
+          node={body.node}
+          document={context.document as WorkflowEditorDocument<unknown, unknown>}
+          diagnostics={body.diagnostics}
+          readOnly={context.readOnly}
+          {...(body.onBoundariesChange ? { onChange: body.onBoundariesChange } : {})}
+        />
+      </div>
     );
   }
 

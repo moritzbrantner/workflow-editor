@@ -127,6 +127,8 @@ import {
   type WorkflowEditorDocument,
   type WorkflowEditorEdge,
   type WorkflowEditorGroup,
+  type WorkflowEditorIterationBoundaries,
+  type WorkflowEditorIterationDiagnostic,
   type WorkflowEditorNode,
   type WorkflowEditorSelection,
   type WorkflowEditorSelectionState,
@@ -256,6 +258,18 @@ export type WorkflowWorkbenchExecutionContext<
   snapshot?: WorkflowExecutionNodeSnapshot;
 };
 
+/**
+ * The canvas shows an iteration body (#94, Decision Atlas 5.25). Its boundaries are edited in the
+ * document settings, shown when nothing is selected.
+ */
+export type WorkflowWorkbenchIterationBody = {
+  /** The iteration node whose body is shown, as stored in the parent document. */
+  node: WorkflowEditorNode<Record<string, unknown>>;
+  /** Iteration diagnostics for the node, shown while its body is edited. */
+  diagnostics: readonly WorkflowEditorIterationDiagnostic[];
+  onBoundariesChange?: (boundaries: Partial<WorkflowEditorIterationBoundaries>) => void;
+};
+
 export type WorkflowWorkbenchInspectorContext<
   TNodeData extends Record<string, unknown> = Record<string, unknown>,
   TEdgeData extends Record<string, unknown> = Record<string, unknown>,
@@ -272,6 +286,10 @@ export type WorkflowWorkbenchInspectorContext<
   selectedNode?: WorkflowEditorNode<TNodeData>;
   openSelectedNodeWorkflow?: () => void;
   createSelectedNodeWorkflow?: () => void;
+  /** Opens the selected iteration node's body in its own view (#94). */
+  openSelectedIterationBody?: () => void;
+  /** Set when the canvas shows an iteration body rather than a whole document (#94). */
+  iterationBody?: WorkflowWorkbenchIterationBody;
   updateDocument?: (document: WorkflowEditorDocument<TNodeData, TEdgeData>) => void;
   updateSelectedNode: (patch: Partial<WorkflowEditorNode<TNodeData>>) => void;
   updateSelectedEdge: (patch: Partial<WorkflowEditorEdge<TEdgeData>>) => void;
@@ -458,6 +476,10 @@ export type WorkflowWorkbenchProps<
   onSelectionStateChange?: (selection: WorkflowEditorSelectionState) => void;
   onViewportChange?: (viewport: WorkflowEditorViewport) => void;
   onOpenWorkflowReference?: (node: WorkflowEditorNode<TNodeData>) => void;
+  /** Opens an iteration node's body in its own view (#94). */
+  onOpenIterationBody?: (node: WorkflowEditorNode<TNodeData>) => void;
+  /** Set when `document` is an iteration body; its boundaries appear in document settings. */
+  iterationBody?: WorkflowWorkbenchIterationBody;
   onCreateWorkflowReference?: (node: WorkflowEditorNode<TNodeData>) => void;
   /**
    * Host-supplied run state shown over the canvas. It is a controlled, transient input: it never
@@ -646,6 +668,8 @@ export function WorkflowWorkbench<
   onViewportChange,
   onOpenWorkflowReference,
   onCreateWorkflowReference,
+  onOpenIterationBody,
+  iterationBody,
   execution,
   formatExecutionLabel,
   renderExecutionDetails,
@@ -1377,6 +1401,10 @@ export function WorkflowWorkbench<
       documentReferences && onCreateWorkflowReference ? createSelectedNodeWorkflow : undefined,
     openSelectedNodeWorkflow:
       documentReferences && onOpenWorkflowReference ? openSelectedNodeWorkflow : undefined,
+    ...(selectedNode && onOpenIterationBody && isWorkflowEditorIterationNode(selectedNode)
+      ? { openSelectedIterationBody: () => onOpenIterationBody(selectedNode) }
+      : {}),
+    ...(iterationBody ? { iterationBody } : {}),
     selectedEdge,
     selectedNode,
     updateDocument,
@@ -3125,6 +3153,21 @@ export function WorkflowWorkbench<
                             ]
                           : [];
                       })(),
+                      // An iteration body opens in its own view (#94).
+                      ...(() => {
+                        const workflowNode = documentContext.nodeById.get(node.id);
+                        return workflowNode &&
+                          onOpenIterationBody &&
+                          isWorkflowEditorIterationNode(workflowNode)
+                          ? [
+                              {
+                                id: "open-iteration-body",
+                                label: "Open body",
+                                onSelect: () => onOpenIterationBody(workflowNode),
+                              },
+                            ]
+                          : [];
+                      })(),
                       ...(readOnly
                         ? []
                         : [
@@ -3641,6 +3684,8 @@ export function useWorkflowWorkbenchController<
   onViewportChange,
   onOpenWorkflowReference,
   onCreateWorkflowReference,
+  onOpenIterationBody,
+  iterationBody,
   renderNodeTemplate,
   renderInspector,
   renderToolbarActions,
@@ -4286,6 +4331,10 @@ export function useWorkflowWorkbenchController<
     createSelectedNodeWorkflow: selectedNode
       ? () => selectedNode && onCreateWorkflowReference?.(selectedNode)
       : undefined,
+    ...(selectedNode && onOpenIterationBody && isWorkflowEditorIterationNode(selectedNode)
+      ? { openSelectedIterationBody: () => onOpenIterationBody(selectedNode) }
+      : {}),
+    ...(iterationBody ? { iterationBody } : {}),
     updateDocument,
     updateSelectedEdge,
     updateSelectedNode,

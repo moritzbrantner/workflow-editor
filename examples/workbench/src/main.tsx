@@ -346,6 +346,26 @@ const {
   ...newtonIteration
 } = newtonSquareRootIteration("template", 0, 0);
 
+const {
+  id: _emptyIterationId,
+  x: _emptyIterationX,
+  y: _emptyIterationY,
+  ...emptyIteration
+} = createWorkflowEditorIterationNode<ExampleNodeData>({
+  id: "template",
+  label: "Bounded iteration",
+  x: 0,
+  y: 0,
+  stateType: { kind: "typescript", source: "number" },
+  maxIterations: 10,
+  invariantInputs: [{ id: "target", label: "Target", type: numberType }],
+  body: { nodes: [], edges: [], inputBoundaries: [], outputBoundaries: [] },
+});
+
+const [newtonStepNode, withinToleranceNode] = newtonSquareRootBody().nodes.map(
+  ({ id: _id, x: _x, y: _y, ...node }) => node,
+);
+
 const iterationTemplates: WorkflowEditorNodeTemplate<ExampleNodeData>[] = [
   {
     ...newtonIteration,
@@ -353,6 +373,23 @@ const iterationTemplates: WorkflowEditorNodeTemplate<ExampleNodeData>[] = [
     label: "Bounded iteration (Newton step)",
     description: "Refines a square root at most 10 times; a runner executes it.",
     category: "Control flow",
+  },
+  {
+    ...emptyIteration,
+    id: "template-bounded-iteration",
+    label: "Bounded iteration (empty body)",
+    description: "Repeats a body you build at most 10 times; open it with Open body.",
+    category: "Control flow",
+  },
+  {
+    ...newtonStepNode!,
+    id: "template-newton-step",
+    category: "Math",
+  },
+  {
+    ...withinToleranceNode!,
+    id: "template-within-tolerance",
+    category: "Math",
   },
 ];
 
@@ -1217,14 +1254,20 @@ function App() {
           <button
             type="button"
             className="min-h-8 cursor-pointer rounded-[0.4rem] border border-[#aeb9c6] bg-white px-[0.62rem] py-[0.3rem] text-[0.82rem] font-[600] text-[#17202a] hover:bg-[#eef2f6]"
-            onClick={() =>
+            onClick={() => {
+              const library =
+                libraryRef.current ?? (initialLibrary as unknown as WorkflowEditorLibrary);
+              // An iteration body view (#94) compiles the whole document that stores it.
+              const active = libraryRef.current?.documents.find(
+                (entry) => entry.id === library.activeDocumentId,
+              );
               setCompilation(
                 compileExample(
-                  context.document,
-                  libraryRef.current ?? (initialLibrary as unknown as WorkflowEditorLibrary),
+                  (active?.document as ExampleDocument | undefined) ?? context.document,
+                  library,
                 ),
-              )
-            }
+              );
+            }}
           >
             Compile workflow
           </button>
