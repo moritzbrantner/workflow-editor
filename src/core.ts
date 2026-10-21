@@ -258,6 +258,10 @@ export {
   type WorkflowEditorSharedTemplateIdentity,
 } from "./core-linked-templates";
 export {
+  extractWorkflowEditorTypeDeclarations,
+  mergeWorkflowEditorTypeDeclarations,
+} from "./core-template-declarations";
+export {
   getWorkflowEditorInputDeclarations,
   resolveWorkflowEditorInputValues,
   validateWorkflowEditorInputValues,

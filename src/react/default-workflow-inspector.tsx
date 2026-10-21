@@ -43,6 +43,7 @@ import {
 } from "./inspector-panel";
 import { WorkflowTriggersPanel } from "./triggers-panel";
 import { WorkflowInputsPanel } from "./inputs-panel";
+import { WorkflowSharedTemplatePanel } from "./shared-template-panel";
 import { WorkflowIterationBoundariesPanel } from "./iteration-boundaries-panel";
 import { WorkflowPortPayloadEditor, withWorkflowEditorPortPayload } from "./port-payload-editor";
 import {
@@ -578,6 +579,17 @@ export function DefaultWorkflowInspector<
               </Button>
             )}
           </div>
+        ) : null}
+        {context.sharedTemplates && node.composition && !isWorkflowEditorIterationNode(node) ? (
+          <WorkflowSharedTemplatePanel
+            key={`${node.id}:${node.templateRef?.revision ?? "local"}`}
+            document={context.document}
+            node={node}
+            templates={context.sharedTemplates.templates}
+            sharedTemplates={context.sharedTemplates}
+            readOnly={context.readOnly}
+            updateDocument={context.updateDocument}
+          />
         ) : null}
       </div>
     );

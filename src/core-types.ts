@@ -337,6 +337,11 @@ export type WorkflowEditorNodeTemplate<TData = Record<string, unknown>> = Omit<
    * created from it are linked instances (`templateRef`).
    */
   shared?: { templateId: string; revision: number };
+  /**
+   * TypeScript declarations a shared revision's port types need, copied from the document it was
+   * published from (#65). Documents that link the template add the ones they lack.
+   */
+  typeDeclarations?: string;
   /** Typed inspector fields for the data of nodes created from this template (matched by kind). */
   inspectorFields?: WorkflowEditorInspectorFieldDefinition[];
 };

@@ -36,3 +36,33 @@ composition:
 catalog before compiling, and fails on missing definitions. Linked instances are composed nodes,
 so they also need a `compositions` mode (`opaque` or `expand`). Library saves and document files
 keep `templateRef`; importing into an editor without the template reports it as missing.
+
+## Type declarations
+
+A revision carries the TypeScript declarations its port types need (owner answer A, 2026-10-21).
+`createWorkflowEditorSharedTemplateRevision(node, catalog, { templateId, typeDeclarations })` copies
+them, with their dependencies, from the source document's declarations into the template's
+`typeDeclarations`. Resolving or upgrading a linked node adds the declarations the document does
+not declare yet to its `typeDeclarations`; a name the document already declares keeps its own
+declaration.
+
+## In the workbench
+
+- **Publish:** select a composed node. In the inspector's **Shared template** section, publish it
+  as a new shared template (named by **Shared template name**) or as a new revision of an existing
+  one. The section warns when the ports differ from the latest revision, because linked instances
+  then stay on their current revision until upgraded. The published node becomes a linked instance.
+- **Insert:** the palette lists the newest revision of each shared template. A node inserted from
+  it is linked.
+- **Linked instance:** the section shows "Linked to <template> · revision N" and the linked
+  instances across the library.
+  - When an incompatible newer revision exists, it explains which connections an upgrade removes
+    and offers **Upgrade to revision M**.
+  - **Detach to local copy** makes the node an ordinary composed node.
+- **Editing a definition:** detach a copy, restore and edit its nodes, compose them again, and
+  publish the result as a new revision. Recomposing the same nodes keeps the same ports, so that
+  revision is compatible.
+- **Hosts:** `WorkflowEditor` publishes through `onNodeTemplatesChange` (appending the revision)
+  and refuses edits to published shared revisions. `WorkflowWorkbench` takes
+  `sharedTemplates: { onPublish, listInstances? }`. The Pages example keeps published revisions in
+  local storage.

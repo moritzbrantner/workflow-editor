@@ -1,3 +1,4 @@
+import { isWorkflowEditorPaletteTemplate } from "../core-linked-templates";
 import type { WorkflowEditorNodeTemplate } from "../core";
 
 export type WorkflowWorkbenchPaletteItem<TData = Record<string, unknown>> =
@@ -93,12 +94,21 @@ export function filterWorkflowWorkbenchPaletteTemplates<TData>(
   searchValue: string,
 ) {
   const query = searchValue.trim().toLowerCase();
+  // Shared templates (#65) show only their newest revision; older revisions stay resolvable.
+  const visible = templates.some((template) => (template as { shared?: unknown }).shared)
+    ? templates.filter((template) =>
+        isWorkflowEditorPaletteTemplate(
+          template as unknown as WorkflowEditorNodeTemplate<unknown>,
+          templates as unknown as readonly WorkflowEditorNodeTemplate<unknown>[],
+        ),
+      )
+    : templates;
 
   if (!query) {
-    return templates;
+    return visible;
   }
 
-  return templates.filter((template) =>
+  return visible.filter((template) =>
     getWorkflowWorkbenchPaletteTemplateSearchText(template).includes(query),
   );
 }

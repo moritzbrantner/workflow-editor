@@ -293,3 +293,83 @@ describe("linked shared templates (#65)", () => {
     });
   });
 });
+
+describe("type declarations travel with shared templates (owner answer A, 2026-10-21)", () => {
+  const sourceDeclarations = [
+    "interface Address { city: string }",
+    "interface SalesRecord { id: string; address: Address }",
+    "type Unrelated = number;",
+  ].join("\n");
+  const recordNode: WorkflowEditorNode = {
+    id: "batch",
+    label: "Sales Batch",
+    kind: "composed",
+    x: 0,
+    y: 0,
+    inputs: [{ id: "in", label: "In", type: ts("SalesRecord[]") }],
+    outputs: [{ id: "out", label: "Out", type: ts("SalesRecord") }],
+    composition: {
+      nodes: [
+        {
+          id: "pick",
+          label: "Pick",
+          kind: "data.pick",
+          x: 0,
+          y: 0,
+          inputs: [{ id: "in", label: "In", type: ts("SalesRecord[]") }],
+          outputs: [{ id: "out", label: "Out", type: ts("SalesRecord") }],
+        },
+      ],
+      edges: [],
+      inputBoundaries: [{ wrapperPortId: "in", nodeId: "pick", portId: "in" }],
+      outputBoundaries: [{ wrapperPortId: "out", nodeId: "pick", portId: "out" }],
+    },
+  };
+
+  it("copies only the declarations the ports need, with their dependencies", () => {
+    const template = createWorkflowEditorSharedTemplateRevision(recordNode, [], {
+      templateId: "sales-batch",
+      typeDeclarations: sourceDeclarations,
+    });
+    expect(template.typeDeclarations).toBe(
+      "interface Address { city: string }\ninterface SalesRecord { id: string; address: Address }",
+    );
+  });
+
+  it("adds the declarations to a linking document so it compiles there", () => {
+    const template = createWorkflowEditorSharedTemplateRevision(recordNode, [], {
+      templateId: "sales-batch",
+      typeDeclarations: sourceDeclarations,
+    });
+    const consumer: WorkflowEditorDocument = {
+      nodes: [{ ...recordNode, templateRef: { templateId: "sales-batch", revision: 1 } }],
+      edges: [],
+      typeDeclarations: "type Local = string;",
+    };
+    const resolved = resolveWorkflowEditorLinkedNodes(consumer, [template]).document;
+    expect(resolved.typeDeclarations).toBe(`type Local = string;\n${template.typeDeclarations}`);
+    // Idempotent: resolving again adds nothing.
+    expect(resolveWorkflowEditorLinkedNodes(resolved, [template]).document).toBe(resolved);
+
+    const compiled = compileWorkflowEditorDocument(consumer, {
+      nodeTemplates: [template as WorkflowEditorNodeTemplate<unknown>],
+      compositions: "expand",
+    });
+    expect(compiled.nodes.length).toBeGreaterThan(0);
+  });
+
+  it("keeps a consumer's own declaration of the same name", () => {
+    const template = createWorkflowEditorSharedTemplateRevision(recordNode, [], {
+      templateId: "sales-batch",
+      typeDeclarations: sourceDeclarations,
+    });
+    const consumer: WorkflowEditorDocument = {
+      nodes: [{ ...recordNode, templateRef: { templateId: "sales-batch", revision: 1 } }],
+      edges: [],
+      typeDeclarations: "interface SalesRecord { id: string; address: Address }",
+    };
+    expect(resolveWorkflowEditorLinkedNodes(consumer, [template]).document.typeDeclarations).toBe(
+      "interface SalesRecord { id: string; address: Address }\ninterface Address { city: string }",
+    );
+  });
+});

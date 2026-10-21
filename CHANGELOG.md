@@ -10,6 +10,14 @@
   - `WorkflowEditorDocumentPathItem` gains `nodeId` for a body view. Document tabs have an `id` and a `title`; `switchTab`/`closeTab` take the tab id (a document's id for a document tab).
   - New headless helpers: `getWorkflowEditorIterationBodyDocument`, `setWorkflowEditorIterationBodyDocument`, `updateWorkflowEditorIterationBoundaries` and `findWorkflowEditorIterationBodyNode`. `WorkflowWorkbench` takes `onOpenIterationBody` and `iterationBody`.
   - Pages adds an empty bounded iteration template and the Newton step and Within tolerance nodes. **Compile workflow** in a body tab compiles the whole document.
+- Linked shared templates in the workbench (#65).
+  - A composed node's inspector has a **Shared template** section. A local composed node can be published as a new shared template or as a new revision of one; the section warns when the ports differ from the latest revision.
+  - For a linked instance, the section shows its source and resolved revision and the linked instances across documents. It offers **Upgrade to revision N**, which explains the connections that will be removed, and **Detach to local copy**.
+  - Linked nodes re-resolve from the catalog as it changes. The palette lists only the newest revision.
+  - `WorkflowEditor` publishes through `onNodeTemplatesChange` and refuses to edit published shared revisions. `WorkflowWorkbench` takes `sharedTemplates` (`onPublish`, `listInstances`).
+  - The Pages example stores published revisions in local storage.
+  - Shared templates carry their TypeScript declarations (owner answer A, 2026-10-21). Publishing copies the declarations the ports need, with their dependencies, into the revision as `typeDeclarations`. A document that links it adds the ones it does not declare itself, so the instance type-checks and compiles there. New helpers: `extractWorkflowEditorTypeDeclarations` and `mergeWorkflowEditorTypeDeclarations`.
+  - Pages **Compile workflow** resolves linked nodes through the catalog and inlines composed nodes (`compositions: "expand"`).
 - Linked shared templates, headless model (#65, TECH-001), documented in `docs/linked-templates.md`.
   - Published revisions are immutable catalog templates with `shared: { templateId, revision }`.
   - Linked nodes carry `templateRef` and resolve through the catalog: compatible revisions propagate, incompatible ones wait for an explicit `upgradeWorkflowEditorLinkedNode` (planned with `planWorkflowEditorLinkedTemplateUpgrade`), and `detachWorkflowEditorLinkedNode` makes a local copy.

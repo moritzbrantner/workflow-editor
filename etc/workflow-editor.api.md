@@ -195,6 +195,7 @@ export function createWorkflowEditorSharedTemplateRevision<TData>(node: Workflow
     templateId: string;
     label?: string;
     category?: string;
+    typeDeclarations?: string;
 }): WorkflowEditorNodeTemplate<TData>;
 
 // @public (undocumented)
@@ -756,6 +757,9 @@ export function duplicateWorkflowEditorSelection<TNodeData = Record<string, unkn
 // @public (undocumented)
 export function encodeWorkflowEditorSharePayload(payload: unknown): Promise<string>;
 
+// @public
+export function extractWorkflowEditorTypeDeclarations(declarations: string | undefined, typeSources: readonly string[]): string;
+
 // @public (undocumented)
 export function findWorkflowEditorEdge<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(document: WorkflowEditorDocument<TNodeData, TEdgeData>, edgeId: string): WorkflowEditorEdge<TEdgeData> | undefined;
 
@@ -949,6 +953,9 @@ export function listWorkflowEditorSharedTemplateRevisions<TData>(templates: read
 //
 // @public (undocumented)
 export function loadWorkflowEditorLibrary<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(storage: WorkflowEditorStorageAdapter<TNodeData, TEdgeData>): Promise<WorkflowEditorLibraryLoadResult<TNodeData, TEdgeData>>;
+
+// @public
+export function mergeWorkflowEditorTypeDeclarations(documentDeclarations: string | undefined, templateDeclarations: string | undefined): string | undefined;
 
 // @public (undocumented)
 export function moveWorkflowEditorGroup<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(document: WorkflowEditorDocument<TNodeData, TEdgeData>, groupId: string, delta: {
@@ -2687,6 +2694,7 @@ export type WorkflowEditorNodeTemplate<TData = Record<string, unknown>> = Omit<G
         templateId: string;
         revision: number;
     };
+    typeDeclarations?: string;
     inspectorFields?: WorkflowEditorInspectorFieldDefinition[];
 };
 
@@ -3396,6 +3404,9 @@ export type WorkflowWorkbenchInspectorContext<TNodeData extends Record<string, u
     updateSelectedNodeWorkflowReference: (documentId: string | null) => void;
     triggerActivation?: WorkflowWorkbenchTriggerActivation;
     inputProfiles?: WorkflowWorkbenchInputProfiles;
+    sharedTemplates?: WorkflowWorkbenchSharedTemplates & {
+        templates: readonly WorkflowEditorNodeTemplate<TNodeData>[];
+    };
     typeDefinitions?: readonly WorkflowEditorTypeDefinition[];
     inspectorFields?: (node: WorkflowEditorNode<TNodeData>) => readonly WorkflowEditorInspectorFieldDefinition[];
     inspectorFieldRenderers?: WorkflowWorkbenchInspectorFieldRenderers;
@@ -3478,6 +3489,7 @@ export type WorkflowWorkbenchProps<TNodeData extends Record<string, unknown> = R
     triggerActivation?: WorkflowWorkbenchTriggerActivation;
     inputProfiles?: WorkflowWorkbenchInputProfiles;
     humanTasks?: WorkflowWorkbenchHumanTasks;
+    sharedTemplates?: WorkflowWorkbenchSharedTemplates;
     inspectorFieldRenderers?: WorkflowWorkbenchInspectorFieldRenderers;
     typeDefinitions?: readonly WorkflowEditorTypeDefinition[];
     documentReferences?: WorkflowEditorDocumentReferenceOption[];
@@ -3529,7 +3541,7 @@ export function writeWorkflowEditorFieldPath<T extends Record<string, unknown>>(
 
 // Warnings were encountered during analysis:
 //
-// dist/core-execution-Brz2QwXG.d.ts:29:5 - (ae-forgotten-export) The symbol "WorkflowEditorNodeTemplateDiagnosticCode" needs to be exported by the entry point index.d.ts
+// dist/core-execution-C9sBF-gC.d.ts:29:5 - (ae-forgotten-export) The symbol "WorkflowEditorNodeTemplateDiagnosticCode" needs to be exported by the entry point index.d.ts
 // dist/editor.d.ts:189:5 - (ae-forgotten-export) The symbol "ChromeController" needs to be exported by the entry point index.d.ts
 // dist/editor.d.ts:312:5 - (ae-forgotten-export) The symbol "WorkflowEditorBundleActions" needs to be exported by the entry point index.d.ts
 // dist/editor.d.ts:312:5 - (ae-forgotten-export) The symbol "WorkflowEditorComparisonActions" needs to be exported by the entry point index.d.ts
@@ -3541,11 +3553,12 @@ export function writeWorkflowEditorFieldPath<T extends Record<string, unknown>>(
 // dist/editor.d.ts:439:5 - (ae-forgotten-export) The symbol "WorkflowEditorPendingRestore" needs to be exported by the entry point index.d.ts
 // dist/editor.d.ts:440:5 - (ae-forgotten-export) The symbol "WorkflowEditorStorageRecovery" needs to be exported by the entry point index.d.ts
 // dist/editor.d.ts:477:9 - (ae-forgotten-export) The symbol "WorkflowEditorComparisonSide" needs to be exported by the entry point index.d.ts
-// dist/react.d.ts:193:5 - (ae-forgotten-export) The symbol "WorkflowWorkbenchTriggerActivation" needs to be exported by the entry point index.d.ts
-// dist/react.d.ts:195:5 - (ae-forgotten-export) The symbol "WorkflowWorkbenchInputProfiles" needs to be exported by the entry point index.d.ts
-// dist/react.d.ts:219:9 - (ae-forgotten-export) The symbol "WorkflowWorkbenchPaletteCategoryGroup" needs to be exported by the entry point index.d.ts
-// dist/react.d.ts:226:9 - (ae-forgotten-export) The symbol "WorkflowWorkbenchOverlayPosition" needs to be exported by the entry point index.d.ts
-// dist/react.d.ts:301:5 - (ae-forgotten-export) The symbol "WorkflowWorkbenchHumanTasks" needs to be exported by the entry point index.d.ts
+// dist/react.d.ts:212:5 - (ae-forgotten-export) The symbol "WorkflowWorkbenchTriggerActivation" needs to be exported by the entry point index.d.ts
+// dist/react.d.ts:214:5 - (ae-forgotten-export) The symbol "WorkflowWorkbenchInputProfiles" needs to be exported by the entry point index.d.ts
+// dist/react.d.ts:216:5 - (ae-forgotten-export) The symbol "WorkflowWorkbenchSharedTemplates" needs to be exported by the entry point index.d.ts
+// dist/react.d.ts:242:9 - (ae-forgotten-export) The symbol "WorkflowWorkbenchPaletteCategoryGroup" needs to be exported by the entry point index.d.ts
+// dist/react.d.ts:249:9 - (ae-forgotten-export) The symbol "WorkflowWorkbenchOverlayPosition" needs to be exported by the entry point index.d.ts
+// dist/react.d.ts:324:5 - (ae-forgotten-export) The symbol "WorkflowWorkbenchHumanTasks" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

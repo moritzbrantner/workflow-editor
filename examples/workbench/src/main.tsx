@@ -39,6 +39,22 @@ type ExampleDocument = WorkflowEditorDocument<ExampleNodeData>;
 type ExampleLibrary = WorkflowEditorLibrary<ExampleNodeData>;
 
 const storageKey = "moritzbrantner.workflow-editor.examples.v1";
+/** Published shared template revisions (#65): this static host's part of the node catalog. */
+const sharedTemplatesStorageKey = "moritzbrantner.workflow-editor.examples.shared-templates.v1";
+
+function loadSharedTemplates(): WorkflowEditorNodeTemplate<ExampleNodeData>[] {
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(sharedTemplatesStorageKey) ?? "[]");
+    return Array.isArray(stored)
+      ? stored.filter(
+          (template): template is WorkflowEditorNodeTemplate<ExampleNodeData> =>
+            typeof template?.id === "string" && typeof template?.shared?.templateId === "string",
+        )
+      : [];
+  } catch {
+    return [];
+  }
+}
 const settingsStorageKey = `${storageKey}.settings.v1`;
 
 function loadWorkbenchSettings(): WorkflowEditorSettings {
@@ -1212,6 +1228,8 @@ function App() {
   const [resetToken, setResetToken] = useState(0);
   const [compilation, setCompilation] = useState<CompilationResult | null>(null);
   const [editorSettings, setEditorSettings] = useState(loadWorkbenchSettings);
+  const [sharedTemplates, setSharedTemplates] = useState(loadSharedTemplates);
+  const catalog = useMemo(() => [...nodeTemplates, ...sharedTemplates], [sharedTemplates]);
   const initialLibrary = useMemo(createExamplesLibrary, [resetToken]);
   // The latest library, so "Compile workflow" can resolve Workflow References (#95).
   const libraryRef = useRef<WorkflowEditorLibrary | null>(null);
@@ -1227,6 +1245,8 @@ function App() {
   const resetExamples = () => {
     window.localStorage.removeItem(storageKey);
     window.localStorage.removeItem(settingsStorageKey);
+    window.localStorage.removeItem(sharedTemplatesStorageKey);
+    setSharedTemplates([]);
     setEditorSettings({ editor: defaultWorkflowEditorBuiltInSettings });
     setResetToken((current) => current + 1);
   };
@@ -1244,7 +1264,19 @@ function App() {
         settings={editorSettings}
         onSettingsChange={setEditorSettings}
         className="grid h-full min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] gap-[0.35rem] [&_[data-slot='workbench-layout']]:min-h-0 [&_[data-slot='workbench-layout']>div]:min-h-0"
-        nodeTemplates={nodeTemplates}
+        nodeTemplates={catalog}
+        onNodeTemplatesChange={(templates) => {
+          // Only published shared revisions are host-writable here; built-in templates stay fixed.
+          const next = templates.filter(
+            (template) => template.shared,
+          ) as WorkflowEditorNodeTemplate<ExampleNodeData>[];
+          setSharedTemplates(next);
+          try {
+            window.localStorage.setItem(sharedTemplatesStorageKey, JSON.stringify(next));
+          } catch {
+            // Shared templates stay usable for this session without local storage.
+          }
+        }}
         typeDefinitions={typeDefinitions}
         compactControls
         showDocumentPath={false}
@@ -1265,6 +1297,7 @@ function App() {
                 compileExample(
                   (active?.document as ExampleDocument | undefined) ?? context.document,
                   library,
+                  catalog,
                 ),
               );
             }}
@@ -1314,11 +1347,15 @@ type CompilationResult =
 function compileExample(
   document: ExampleDocument,
   library: WorkflowEditorLibrary,
+  catalog: readonly WorkflowEditorNodeTemplate<ExampleNodeData>[],
 ): CompilationResult {
   try {
     const compiled = compileWorkflowEditorDocument(document as WorkflowEditorDocument, {
       typeDefinitions,
       resolveWorkflowReference: createWorkflowEditorLibraryReferenceResolver(library),
+      // Linked shared templates (#65) resolve through the catalog; composed nodes are inlined.
+      nodeTemplates: catalog as readonly WorkflowEditorNodeTemplate<unknown>[],
+      compositions: "expand",
     });
     const iterations = compiled.nodes.flatMap((node) => ("iteration" in node ? [node] : []));
     const loops = iterations.map(
@@ -1373,8 +1410,8 @@ function CompilationPanel({ result, onClose }: { result: CompilationResult; onCl
         </pre>
       ) : (
         <ul role="alert" className="grid list-disc gap-1 pl-5 text-[#b42318]">
-          {result.problems.map((problem) => (
-            <li key={problem} className="[overflow-wrap:anywhere]">
+          {result.problems.map((problem, index) => (
+            <li key={`${index}:${problem}`} className="[overflow-wrap:anywhere]">
               {problem}
             </li>
           ))}
