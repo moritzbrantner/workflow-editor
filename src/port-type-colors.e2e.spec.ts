@@ -135,6 +135,11 @@ function port(page: Page, nodeId: string, direction: "input" | "output"): Locato
     .first();
 }
 
+/** The port button together with its type chips. */
+function portFrame(page: Page, nodeId: string, direction: "input" | "output"): Locator {
+  return port(page, nodeId, direction).locator("xpath=..");
+}
+
 /** The color a user sees for a port: its dot fill, or the port marker fill when the dot is clear. */
 async function visiblePortColor(locator: Locator) {
   return locator.evaluate((element) => {
@@ -256,8 +261,9 @@ test("configures one color per port type across nodes, edges, minimized nodes an
   await setTypeColor(page, "number", red.hex);
   await pressButton(page, "Close types");
   await expectTypeColor(page, numberPorts, ["n"], red.rgb);
-  await expect(port(page, "customer-a", "output")).toContainText(/customer/i);
-  await expect(port(page, "number-spare", "input")).toContainText(/number/i);
+  // The type chip sits next to the port button (graph-editor#73), inside the port frame.
+  await expect(portFrame(page, "customer-a", "output")).toContainText(/customer/i);
+  await expect(portFrame(page, "number-spare", "input")).toContainText(/number/i);
   await expect(port(page, "customer-b", "output")).toHaveAttribute("title", /customer/i);
   await expect(port(page, "sink-b", "input")).toHaveAttribute("title", /customer/i);
 

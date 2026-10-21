@@ -62,13 +62,13 @@
     "react-dom": "^19.0.0"
   },
   "dependencies": {
-    "@moritzbrantner/graph-editor": "git+https://github.com/moritzbrantner/graph-editor.git#8cd5e3c9e68f9d210faa0f9d94756dca67c56470",
+    "@moritzbrantner/graph-editor": "git+https://github.com/moritzbrantner/graph-editor.git#a0c6939b76804c1241aaa1f3238ffa614a8dbef3",
     "@moritzbrantner/ui": "^1.1.0",
     "lucide-react": "^1.17.0",
     "typescript": "6.0.3"
   },
   "devDependencies": {
-    "@axe-core/playwright": "4.11.3",
+    "@axe-core/playwright": "4.14.0",
     "@microsoft/api-extractor": "7.59.4",
     "@playwright/test": "1.64.1",
     "@storybook/addon-docs": "10.6.2",
