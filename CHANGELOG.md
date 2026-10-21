@@ -4,6 +4,12 @@
 
 ### Minor Changes
 
+- Edit an iteration body in its own tab (#94, Decision Atlas 5.25).
+  - **Open body** (inspector and node menu) on a `control.iterate` node opens the tab "<workflow> › <iteration> body" with an **↑ Parent** link. Body edits use the normal canvas gestures and are saved inside the parent document, with one undo history.
+  - With nothing selected, the body tab's document settings show **Iteration boundaries**: which body inputs the state and invariant inputs feed, the **Next state** and **Converged** outputs, and the iteration diagnostics.
+  - `WorkflowEditorDocumentPathItem` gains `nodeId` for a body view. Document tabs have an `id` and a `title`; `switchTab`/`closeTab` take the tab id (a document's id for a document tab).
+  - New headless helpers: `getWorkflowEditorIterationBodyDocument`, `setWorkflowEditorIterationBodyDocument`, `updateWorkflowEditorIterationBoundaries` and `findWorkflowEditorIterationBodyNode`. `WorkflowWorkbench` takes `onOpenIterationBody` and `iterationBody`.
+  - Pages adds an empty bounded iteration template and the Newton step and Within tolerance nodes. **Compile workflow** in a body tab compiles the whole document.
 - Linked shared templates, headless model (#65, TECH-001), documented in `docs/linked-templates.md`.
   - Published revisions are immutable catalog templates with `shared: { templateId, revision }`.
   - Linked nodes carry `templateRef` and resolve through the catalog: compatible revisions propagate, incompatible ones wait for an explicit `upgradeWorkflowEditorLinkedNode` (planned with `planWorkflowEditorLinkedTemplateUpgrade`), and `detachWorkflowEditorLinkedNode` makes a local copy.

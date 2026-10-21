@@ -29,6 +29,7 @@ export {
 import {
   useWorkflowEditorDocumentTabs,
   WorkflowEditorDocumentTabs,
+  workflowEditorIterationBodyPath,
   type WorkflowEditorDocumentTab,
   type WorkflowEditorDocumentTabActions,
 } from "./editor/document-tabs";
@@ -120,11 +121,18 @@ import {
 import {
   defaultWorkflowEditorNodeTemplates,
   createWorkflowEditorNodeTemplateRegistry,
+  findWorkflowEditorIterationBodyNode,
+  getWorkflowEditorIterationBodyDocument,
+  isWorkflowEditorIterationNode,
   normalizeWorkflowEditorSelection,
   repairWorkflowEditorDocument,
   resolveWorkflowEditorDocumentTypes,
+  setWorkflowEditorIterationBodyDocument,
+  updateWorkflowEditorIterationBoundaries,
   updateWorkflowEditorNodeWorkflowReference,
   validateWorkflowEditorDocument,
+  validateWorkflowEditorIterationNode,
+  type WorkflowEditorIterationBoundaries,
   workflowEditorValidationPolicies,
   type WorkflowEditorDocument,
   type WorkflowEditorInputProfile,
@@ -152,6 +160,11 @@ export {
 
 export type WorkflowEditorDocumentPathItem = {
   documentId: string;
+  /**
+   * Set on an iteration body view (#94): the iteration node, in the view before this item, whose
+   * body is shown. The body is stored inside the `documentId` document.
+   */
+  nodeId?: string;
 };
 
 /** A stored library that could not be loaded; it stays untouched until the user decides. */
@@ -797,8 +810,27 @@ export function WorkflowEditor<
   const [nameDraft, setNameDraft] = useState(activeEntry?.name ?? "Untitled Workflow");
   const [selectedVersionId, setSelectedVersionId] = useState(activeEntry?.versions[0]?.id ?? "");
   const importInputRef = useRef<HTMLInputElement | null>(null);
-  const activeDocument =
-    activeEntry?.document ?? createBlankWorkflowEditorDocument<TNodeData, TEdgeData>();
+  const rootDocument = useMemo(
+    () => activeEntry?.document ?? createBlankWorkflowEditorDocument<TNodeData, TEdgeData>(),
+    [activeEntry?.document],
+  );
+  // An iteration body view (#94) edits the body stored inside the active document.
+  const iterationBodyPath = workflowEditorIterationBodyPath(documentPath);
+  const iterationBodyKey = iterationBodyPath.join("/");
+  const iterationBodyNode = iterationBodyPath.length
+    ? findWorkflowEditorIterationBodyNode(rootDocument, iterationBodyPath)
+    : undefined;
+  const activeDocument = useMemo(
+    () =>
+      (iterationBodyKey
+        ? getWorkflowEditorIterationBodyDocument(rootDocument, iterationBodyKey.split("/"))
+        : undefined) ?? rootDocument,
+    [rootDocument, iterationBodyKey],
+  );
+  const toRootDocument = (document: WorkflowEditorDocument<TNodeData, TEdgeData>) =>
+    iterationBodyNode
+      ? setWorkflowEditorIterationBodyDocument(rootDocument, iterationBodyPath, document)
+      : document;
   const history =
     (activeEntry ? historyByDocumentId[activeEntry.id] : undefined) ??
     createWorkflowEditorHistory(activeDocument);
@@ -812,7 +844,8 @@ export function WorkflowEditor<
   const documentReferenceOptions = enableNestedWorkflows
     ? listWorkflowEditorDocumentReferenceOptions(library)
     : undefined;
-  const canOpenNestedWorkflow = documentPath.length < Math.max(1, maxNestedWorkflowDepth);
+  const canOpenNestedWorkflow =
+    documentPath.filter((item) => !item.nodeId).length < Math.max(1, maxNestedWorkflowDepth);
 
   useEffect(() => {
     let canceled = false;
@@ -1023,27 +1056,39 @@ export function WorkflowEditor<
     }
   };
 
-  const updateDocument = (document: WorkflowEditorDocument<TNodeData, TEdgeData>) => {
+  /** Commits the active view; `root` commits a whole document even in an iteration body view. */
+  const updateDocument = (
+    document: WorkflowEditorDocument<TNodeData, TEdgeData>,
+    options: { root?: boolean } = {},
+  ) => {
     if (!activeEntry || readOnly) {
       return;
     }
 
-    const nextHistory = commitWorkflowEditorHistory(history, document);
+    const nextRoot = options.root ? document : toRootDocument(document);
+    const nextHistory = commitWorkflowEditorHistory(history, nextRoot);
     setHistoryByDocumentId((current) => ({ ...current, [activeEntry.id]: nextHistory }));
-    setSelection((current) => normalizeWorkflowEditorSelection(nextHistory.present, current));
+    setSelection((current) =>
+      normalizeWorkflowEditorSelection(
+        iterationBodyNode && !options.root ? document : nextHistory.present,
+        current,
+      ),
+    );
     updateActiveEntry((entry) => ({
       ...entry,
       updatedAt: new Date().toISOString(),
       document: nextHistory.present,
     }));
   };
+  const commitRootDocument = (document: WorkflowEditorDocument<TNodeData, TEdgeData>) =>
+    updateDocument(document, { root: true });
   const versionComparison = useWorkflowEditorVersionComparison({
     activeEntry,
-    activeDocument,
+    activeDocument: rootDocument,
     selectedVersionId,
     readOnly,
     setSelection,
-    commitDocument: updateDocument,
+    commitDocument: commitRootDocument,
   });
 
   const selectDocument = (documentId: string) => {
@@ -1238,10 +1283,10 @@ export function WorkflowEditor<
     const childEntry = createWorkflowEditorEntry<TNodeData, TEdgeData>({
       name: `${node.label} Workflow`,
     });
-    const nextParentDocument = updateWorkflowEditorNodeWorkflowReference(
-      activeEntry.document,
-      node.id,
-      { documentId: childEntry.id },
+    const nextParentDocument = toRootDocument(
+      updateWorkflowEditorNodeWorkflowReference(activeDocument, node.id, {
+        documentId: childEntry.id,
+      }),
     );
     const nextParentHistory = commitWorkflowEditorHistory(history, nextParentDocument);
     const nextParentEntry = {
@@ -1264,6 +1309,47 @@ export function WorkflowEditor<
     }));
     updateLibrary(nextLibrary);
   };
+
+  const openIterationBody = (node: WorkflowEditorNode<TNodeData>) => {
+    if (!activeEntry || !isWorkflowEditorIterationNode(node)) {
+      return;
+    }
+    setSelection(emptyWorkflowEditorSelection);
+    setDocumentPath([...documentPath, { documentId: activeEntry.id, nodeId: node.id }]);
+  };
+  const iterationBody = iterationBodyNode
+    ? {
+        node: iterationBodyNode as WorkflowEditorNode<Record<string, unknown>>,
+        diagnostics: validateWorkflowEditorIterationNode(iterationBodyNode, {
+          ...(typeDefinitions ? { typeDefinitions } : {}),
+          ...(rootDocument.typeDeclarations !== undefined
+            ? { typeDeclarations: rootDocument.typeDeclarations }
+            : {}),
+        }),
+        ...(readOnly
+          ? {}
+          : {
+              onBoundariesChange: (boundaries: Partial<WorkflowEditorIterationBoundaries>) =>
+                commitRootDocument(
+                  updateWorkflowEditorIterationBoundaries(
+                    rootDocument,
+                    iterationBodyPath,
+                    boundaries,
+                  ),
+                ),
+            }),
+      }
+    : undefined;
+  // A body whose iteration node was removed (for example by undo) falls back to its document.
+  useEffect(() => {
+    if (iterationBodyKey && !iterationBodyNode) {
+      setDocumentPath((current) => {
+        const next = [...current];
+        while (next.length > 1 && next.at(-1)?.nodeId) next.pop();
+        return next;
+      });
+    }
+  }, [iterationBodyKey, iterationBodyNode]);
 
   const activateDocumentPath = (path: WorkflowEditorDocumentPathItem[]) => {
     const entry = workflowEditorEntryForPath(library, path);
@@ -1340,6 +1426,8 @@ export function WorkflowEditor<
     documentReferences: documentReferenceOptions,
     onOpenWorkflowReference: canOpenNestedWorkflow ? openWorkflowReference : undefined,
     onCreateWorkflowReference: canOpenNestedWorkflow ? createWorkflowReference : undefined,
+    onOpenIterationBody: openIterationBody,
+    ...(iterationBody ? { iterationBody } : {}),
     onDocumentChange: updateDocument,
     onSelectionChange,
     onSelectionStateChange: setSelection,
@@ -1629,7 +1717,7 @@ export function WorkflowEditor<
                 </div>
               </PopoverContent>
             </Popover>
-            {documentTabs.tabs.length > 1 ? (
+            {documentTabs.tabs.length > 1 || documentPath.length > 1 ? (
               <WorkflowEditorDocumentTabs controller={editorController} showOpenSelect={false} />
             ) : null}
           </div>
@@ -1878,6 +1966,8 @@ export function WorkflowEditor<
           layout={layout}
           onOpenWorkflowReference={canOpenNestedWorkflow ? openWorkflowReference : undefined}
           onCreateWorkflowReference={canOpenNestedWorkflow ? createWorkflowReference : undefined}
+          onOpenIterationBody={openIterationBody}
+          iterationBody={iterationBody}
           execution={execution}
           inspectorFieldRenderers={inspectorFieldRenderers}
           triggerActivation={triggerActivation}
@@ -2053,8 +2143,27 @@ export function useWorkflowEditorController<
   const activeEntry = workflowEditorEntryForPath(library, documentPath);
   const [nameDraft, setNameDraft] = useState(activeEntry?.name ?? "Untitled Workflow");
   const [selectedVersionId, setSelectedVersionId] = useState(activeEntry?.versions[0]?.id ?? "");
-  const activeDocument =
-    activeEntry?.document ?? createBlankWorkflowEditorDocument<TNodeData, TEdgeData>();
+  const rootDocument = useMemo(
+    () => activeEntry?.document ?? createBlankWorkflowEditorDocument<TNodeData, TEdgeData>(),
+    [activeEntry?.document],
+  );
+  // An iteration body view (#94) edits the body stored inside the active document.
+  const iterationBodyPath = workflowEditorIterationBodyPath(documentPath);
+  const iterationBodyKey = iterationBodyPath.join("/");
+  const iterationBodyNode = iterationBodyPath.length
+    ? findWorkflowEditorIterationBodyNode(rootDocument, iterationBodyPath)
+    : undefined;
+  const activeDocument = useMemo(
+    () =>
+      (iterationBodyKey
+        ? getWorkflowEditorIterationBodyDocument(rootDocument, iterationBodyKey.split("/"))
+        : undefined) ?? rootDocument,
+    [rootDocument, iterationBodyKey],
+  );
+  const toRootDocument = (document: WorkflowEditorDocument<TNodeData, TEdgeData>) =>
+    iterationBodyNode
+      ? setWorkflowEditorIterationBodyDocument(rootDocument, iterationBodyPath, document)
+      : document;
   const history =
     (activeEntry ? historyByDocumentId[activeEntry.id] : undefined) ??
     createWorkflowEditorHistory(activeDocument);
@@ -2068,7 +2177,8 @@ export function useWorkflowEditorController<
   const documentReferenceOptions = enableNestedWorkflows
     ? listWorkflowEditorDocumentReferenceOptions(library)
     : undefined;
-  const canOpenNestedWorkflow = documentPath.length < Math.max(1, maxNestedWorkflowDepth);
+  const canOpenNestedWorkflow =
+    documentPath.filter((item) => !item.nodeId).length < Math.max(1, maxNestedWorkflowDepth);
   const normalizedSelection = normalizeWorkflowEditorSelection(activeDocument, selection);
   const selectedNodeId =
     normalizedSelection.primary?.type === "node"
@@ -2257,26 +2367,38 @@ export function useWorkflowEditorController<
       }));
     }
   };
-  const updateActiveDocument = (document: WorkflowEditorDocument<TNodeData, TEdgeData>) => {
+  /** Commits the active view; `root` commits a whole document even in an iteration body view. */
+  const updateActiveDocument = (
+    document: WorkflowEditorDocument<TNodeData, TEdgeData>,
+    options: { root?: boolean } = {},
+  ) => {
     if (!activeEntry || readOnly) {
       return;
     }
-    const nextHistory = commitWorkflowEditorHistory(history, document);
+    const nextRoot = options.root ? document : toRootDocument(document);
+    const nextHistory = commitWorkflowEditorHistory(history, nextRoot);
     setHistoryByDocumentId((current) => ({ ...current, [activeEntry.id]: nextHistory }));
-    setSelection((current) => normalizeWorkflowEditorSelection(nextHistory.present, current));
+    setSelection((current) =>
+      normalizeWorkflowEditorSelection(
+        iterationBodyNode && !options.root ? document : nextHistory.present,
+        current,
+      ),
+    );
     updateActiveEntry((entry) => ({
       ...entry,
       updatedAt: new Date().toISOString(),
       document: nextHistory.present,
     }));
   };
+  const commitRootDocument = (document: WorkflowEditorDocument<TNodeData, TEdgeData>) =>
+    updateActiveDocument(document, { root: true });
   const versionComparison = useWorkflowEditorVersionComparison({
     activeEntry,
-    activeDocument,
+    activeDocument: rootDocument,
     selectedVersionId,
     readOnly,
     setSelection,
-    commitDocument: updateActiveDocument,
+    commitDocument: commitRootDocument,
   });
   const selectDocument = (documentId: string) => {
     const entry = library.documents.find((candidate) => candidate.id === documentId);
@@ -2440,10 +2562,10 @@ export function useWorkflowEditorController<
     const childEntry = createWorkflowEditorEntry<TNodeData, TEdgeData>({
       name: `${node.label} Workflow`,
     });
-    const nextParentDocument = updateWorkflowEditorNodeWorkflowReference(
-      activeEntry.document,
-      node.id,
-      { documentId: childEntry.id },
+    const nextParentDocument = toRootDocument(
+      updateWorkflowEditorNodeWorkflowReference(activeDocument, node.id, {
+        documentId: childEntry.id,
+      }),
     );
     const nextParentHistory = commitWorkflowEditorHistory(history, nextParentDocument);
     const nextParentEntry = {
@@ -2465,6 +2587,47 @@ export function useWorkflowEditorController<
     }));
     updateLibrary(nextLibrary);
   };
+  const openIterationBody = (node: WorkflowEditorNode<TNodeData>) => {
+    if (!activeEntry || !isWorkflowEditorIterationNode(node)) {
+      return;
+    }
+    setSelection(emptyWorkflowEditorSelection);
+    setDocumentPath([...documentPath, { documentId: activeEntry.id, nodeId: node.id }]);
+  };
+  const iterationBody = iterationBodyNode
+    ? {
+        node: iterationBodyNode as WorkflowEditorNode<Record<string, unknown>>,
+        diagnostics: validateWorkflowEditorIterationNode(iterationBodyNode, {
+          ...(typeDefinitions ? { typeDefinitions } : {}),
+          ...(rootDocument.typeDeclarations !== undefined
+            ? { typeDeclarations: rootDocument.typeDeclarations }
+            : {}),
+        }),
+        ...(readOnly
+          ? {}
+          : {
+              onBoundariesChange: (boundaries: Partial<WorkflowEditorIterationBoundaries>) =>
+                commitRootDocument(
+                  updateWorkflowEditorIterationBoundaries(
+                    rootDocument,
+                    iterationBodyPath,
+                    boundaries,
+                  ),
+                ),
+            }),
+      }
+    : undefined;
+  // A body whose iteration node was removed (for example by undo) falls back to its document.
+  useEffect(() => {
+    if (iterationBodyKey && !iterationBodyNode) {
+      setDocumentPath((current) => {
+        const next = [...current];
+        while (next.length > 1 && next.at(-1)?.nodeId) next.pop();
+        return next;
+      });
+    }
+  }, [iterationBodyKey, iterationBodyNode]);
+
   const activateDocumentPath = (path: WorkflowEditorDocumentPathItem[]) => {
     const entry = workflowEditorEntryForPath(library, path);
     if (!entry) {
@@ -2509,6 +2672,8 @@ export function useWorkflowEditorController<
     documentReferences: documentReferenceOptions,
     onOpenWorkflowReference: canOpenNestedWorkflow ? openWorkflowReference : undefined,
     onCreateWorkflowReference: canOpenNestedWorkflow ? createWorkflowReference : undefined,
+    onOpenIterationBody: openIterationBody,
+    ...(iterationBody ? { iterationBody } : {}),
     onDocumentChange: updateActiveDocument,
     onSelectionChange,
     onSelectionStateChange: setSelection,

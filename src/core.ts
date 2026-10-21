@@ -199,6 +199,14 @@ export {
   type WorkflowEditorIterationDiagnosticCode,
 } from "./core-iteration";
 export {
+  findWorkflowEditorIterationBodyNode,
+  getWorkflowEditorIterationBodyDocument,
+  setWorkflowEditorIterationBodyDocument,
+  updateWorkflowEditorIterationBoundaries,
+  type WorkflowEditorIterationBodyPath,
+  type WorkflowEditorIterationBoundaries,
+} from "./core-iteration-body";
+export {
   findWorkflowEditorPortPayloadMismatch,
   formatWorkflowEditorPortPayload,
   isWorkflowEditorPortPayloadLike,
