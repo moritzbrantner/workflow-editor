@@ -36,6 +36,8 @@ export {
   validateWorkflowEditorTriggers,
   areWorkflowEditorTemplateRevisionsCompatible,
   createWorkflowEditorSharedTemplateRevision,
+  extractWorkflowEditorTypeDeclarations,
+  mergeWorkflowEditorTypeDeclarations,
   detachWorkflowEditorLinkedNode,
   isWorkflowEditorPaletteTemplate,
   latestWorkflowEditorSharedTemplates,

@@ -72,6 +72,12 @@ test("publishes, links, propagates, pins, upgrades and detaches shared templates
   await expect(panel(page).getByRole("list", { name: "Linked instances" })).toContainText(
     "Sales Data Pipeline",
   );
+  // The template brought its TypeScript declarations (SalesRecord), so this document compiles.
+  await page.getByRole("button", { name: "Compile workflow", exact: true }).click();
+  await expect(page.getByRole("region", { name: "Compiled contract" })).toContainText(
+    /not executed/i,
+  );
+  await page.getByRole("button", { name: "Close compiled contract" }).click();
 
   // Compatible revision: detach the original, restore, rename an inner node, recompose, publish.
   await openDocument(page, "Product Image Generation", "data-pipeline", "Sales Data Pipeline");

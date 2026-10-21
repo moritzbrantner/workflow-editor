@@ -91,6 +91,8 @@ export function WorkflowSharedTemplatePanel<TNodeData extends Record<string, unk
     const template = createWorkflowEditorSharedTemplateRevision(node, templates, {
       templateId,
       ...(label ? { label } : {}),
+      // The declarations the ports need travel with the revision (#65, owner answer A).
+      ...(document.typeDeclarations ? { typeDeclarations: document.typeDeclarations } : {}),
     });
     sharedTemplates.onPublish(template as WorkflowEditorNodeTemplate<Record<string, unknown>>);
     // A newly named template also names the published node.

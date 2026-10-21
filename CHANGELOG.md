@@ -10,6 +10,7 @@
   - Linked nodes re-resolve from the catalog as it changes. The palette lists only the newest revision.
   - `WorkflowEditor` publishes through `onNodeTemplatesChange` and refuses to edit published shared revisions. `WorkflowWorkbench` takes `sharedTemplates` (`onPublish`, `listInstances`).
   - The Pages example stores published revisions in local storage.
+  - Shared templates carry their TypeScript declarations (owner answer A, 2026-10-21). Publishing copies the declarations the ports need, with their dependencies, into the revision as `typeDeclarations`. A document that links it adds the ones it does not declare itself, so the instance type-checks and compiles there. New helpers: `extractWorkflowEditorTypeDeclarations` and `mergeWorkflowEditorTypeDeclarations`.
   - Pages **Compile workflow** resolves linked nodes through the catalog and inlines composed nodes (`compositions: "expand"`).
 - Linked shared templates, headless model (#65, TECH-001), documented in `docs/linked-templates.md`.
   - Published revisions are immutable catalog templates with `shared: { templateId, revision }`.

@@ -195,6 +195,7 @@ export function createWorkflowEditorSharedTemplateRevision<TData>(node: Workflow
     templateId: string;
     label?: string;
     category?: string;
+    typeDeclarations?: string;
 }): WorkflowEditorNodeTemplate<TData>;
 
 // @public (undocumented)
@@ -756,6 +757,9 @@ export function duplicateWorkflowEditorSelection<TNodeData = Record<string, unkn
 // @public (undocumented)
 export function encodeWorkflowEditorSharePayload(payload: unknown): Promise<string>;
 
+// @public
+export function extractWorkflowEditorTypeDeclarations(declarations: string | undefined, typeSources: readonly string[]): string;
+
 // @public (undocumented)
 export function findWorkflowEditorEdge<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(document: WorkflowEditorDocument<TNodeData, TEdgeData>, edgeId: string): WorkflowEditorEdge<TEdgeData> | undefined;
 
@@ -943,6 +947,9 @@ export function listWorkflowEditorSharedTemplateRevisions<TData>(templates: read
 //
 // @public (undocumented)
 export function loadWorkflowEditorLibrary<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(storage: WorkflowEditorStorageAdapter<TNodeData, TEdgeData>): Promise<WorkflowEditorLibraryLoadResult<TNodeData, TEdgeData>>;
+
+// @public
+export function mergeWorkflowEditorTypeDeclarations(documentDeclarations: string | undefined, templateDeclarations: string | undefined): string | undefined;
 
 // @public (undocumented)
 export function moveWorkflowEditorGroup<TNodeData = Record<string, unknown>, TEdgeData = Record<string, unknown>>(document: WorkflowEditorDocument<TNodeData, TEdgeData>, groupId: string, delta: {
@@ -2666,6 +2673,7 @@ export type WorkflowEditorNodeTemplate<TData = Record<string, unknown>> = Omit<G
         templateId: string;
         revision: number;
     };
+    typeDeclarations?: string;
     inspectorFields?: WorkflowEditorInspectorFieldDefinition[];
 };
 
@@ -3501,7 +3509,7 @@ export function writeWorkflowEditorFieldPath<T extends Record<string, unknown>>(
 
 // Warnings were encountered during analysis:
 //
-// dist/core-execution-Dq4srmPS.d.ts:5:5 - (ae-forgotten-export) The symbol "WorkflowEditorNodeTemplateDiagnosticCode" needs to be exported by the entry point index.d.ts
+// dist/core-execution-BSELa3VB.d.ts:5:5 - (ae-forgotten-export) The symbol "WorkflowEditorNodeTemplateDiagnosticCode" needs to be exported by the entry point index.d.ts
 // dist/editor.d.ts:182:5 - (ae-forgotten-export) The symbol "ChromeController" needs to be exported by the entry point index.d.ts
 // dist/editor.d.ts:300:5 - (ae-forgotten-export) The symbol "WorkflowEditorBundleActions" needs to be exported by the entry point index.d.ts
 // dist/editor.d.ts:300:5 - (ae-forgotten-export) The symbol "WorkflowEditorComparisonActions" needs to be exported by the entry point index.d.ts

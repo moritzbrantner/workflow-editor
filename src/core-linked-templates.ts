@@ -1,3 +1,8 @@
+import {
+  extractWorkflowEditorTypeDeclarations,
+  mergeWorkflowEditorTypeDeclarations,
+  workflowEditorTemplateTypeSources,
+} from "./core-template-declarations";
 import { workflowEditorPortTypeSource } from "./core-type-source";
 import type {
   WorkflowEditorDocument,
@@ -159,6 +164,7 @@ export function resolveWorkflowEditorLinkedNodes<TNodeData, TEdgeData>(
 } {
   const diagnostics: WorkflowEditorLinkedTemplateDiagnostic[] = [];
   let changed = false;
+  let typeDeclarations = document.typeDeclarations;
   const nodes = document.nodes.map((node) => {
     const ref = node.templateRef;
     if (!ref) return node;
@@ -177,12 +183,27 @@ export function resolveWorkflowEditorLinkedNodes<TNodeData, TEdgeData>(
       });
       return node;
     }
+    typeDeclarations = mergeWorkflowEditorTypeDeclarations(
+      typeDeclarations,
+      resolution.template.typeDeclarations,
+    );
     const next = linkedNodeFromTemplate(node, resolution.template);
     if (JSON.stringify(next) === JSON.stringify(node)) return node;
     changed = true;
     return next;
   });
-  return { document: changed ? { ...document, nodes } : document, diagnostics };
+  const declarationsChanged = typeDeclarations !== document.typeDeclarations;
+  return {
+    document:
+      changed || declarationsChanged
+        ? {
+            ...document,
+            nodes: changed ? nodes : document.nodes,
+            ...(declarationsChanged ? { typeDeclarations } : {}),
+          }
+        : document,
+    diagnostics,
+  };
 }
 
 export type WorkflowEditorLinkedTemplateUpgradePlan = {
@@ -244,8 +265,13 @@ export function upgradeWorkflowEditorLinkedNode<TNodeData, TEdgeData>(
     node.templateRef.templateId,
   ).find((template) => template.shared!.revision === revision)!;
   const removed = new Set(plan.removedEdgeIds);
+  const typeDeclarations = mergeWorkflowEditorTypeDeclarations(
+    document.typeDeclarations,
+    target.typeDeclarations,
+  );
   return {
     ...document,
+    ...(typeDeclarations !== document.typeDeclarations ? { typeDeclarations } : {}),
     nodes: document.nodes.map((candidate) =>
       candidate.id === nodeId ? linkedNodeFromTemplate(candidate, target) : candidate,
     ),
@@ -278,7 +304,13 @@ export function detachWorkflowEditorLinkedNode<TNodeData, TEdgeData>(
 export function createWorkflowEditorSharedTemplateRevision<TData>(
   node: WorkflowEditorNode<TData>,
   templates: readonly WorkflowEditorNodeTemplate<TData>[],
-  options: { templateId: string; label?: string; category?: string },
+  options: {
+    templateId: string;
+    label?: string;
+    category?: string;
+    /** The source document's declarations; the ones the ports need are copied into the revision. */
+    typeDeclarations?: string;
+  },
 ): WorkflowEditorNodeTemplate<TData> {
   if (!node.composition) {
     throw new Error(`Node ${node.id} has no composition to publish.`);
@@ -286,6 +318,12 @@ export function createWorkflowEditorSharedTemplateRevision<TData>(
   const revisions = listWorkflowEditorSharedTemplateRevisions(templates, options.templateId);
   const revision = (revisions.at(-1)?.shared?.revision ?? 0) + 1;
   const label = options.label?.trim() || revisions.at(-1)?.label || node.label;
+  const typeDeclarations = extractWorkflowEditorTypeDeclarations(
+    options.typeDeclarations,
+    workflowEditorTemplateTypeSources(
+      node as Parameters<typeof workflowEditorTemplateTypeSources>[0],
+    ),
+  );
   return {
     id: workflowEditorSharedTemplateId(options.templateId, revision),
     label,
@@ -296,6 +334,7 @@ export function createWorkflowEditorSharedTemplateRevision<TData>(
     outputs: node.outputs?.map((port) => ({ ...port })),
     composition: structuredClone(node.composition),
     shared: { templateId: options.templateId, revision },
+    ...(typeDeclarations ? { typeDeclarations } : {}),
   };
 }
 

@@ -37,6 +37,15 @@ catalog before compiling, and fails on missing definitions. Linked instances are
 so they also need a `compositions` mode (`opaque` or `expand`). Library saves and document files
 keep `templateRef`; importing into an editor without the template reports it as missing.
 
+## Type declarations
+
+A revision carries the TypeScript declarations its port types need (owner answer A, 2026-10-21).
+`createWorkflowEditorSharedTemplateRevision(node, catalog, { templateId, typeDeclarations })` copies
+them, with their dependencies, from the source document's declarations into the template's
+`typeDeclarations`. Resolving or upgrading a linked node adds the declarations the document does
+not declare yet to its `typeDeclarations`; a name the document already declares keeps its own
+declaration.
+
 ## In the workbench
 
 - **Publish:** select a composed node. In the inspector's **Shared template** section, publish it
