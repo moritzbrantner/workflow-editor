@@ -9,6 +9,12 @@ const rootDir = path.resolve(fileURLToPath(new URL("../", import.meta.url)));
 const rootDependencies = JSON.parse(
   await readFile(path.join(rootDir, "package.json"), "utf8"),
 ).dependencies;
+// Bun skips `prepare` for transitive git deps, so pin editor-core directly when this package does.
+const editorCoreDependency = rootDependencies["@moenarch/editor-core"];
+const trustedDependencies = [
+  "@moritzbrantner/graph-editor",
+  ...(editorCoreDependency ? ["@moenarch/editor-core"] : []),
+];
 const tempDir = await mkdtemp(path.join(tmpdir(), "workflow-editor-consumer-"));
 const keepTemp = process.env.WORKFLOW_EDITOR_KEEP_SMOKE_TEMP === "1";
 const consumerDir = path.join(tempDir, "consumer");
@@ -37,6 +43,7 @@ try {
         dependencies: {
           "@tailwindcss/vite": "^4.3.0",
           "@vitejs/plugin-react": "latest",
+          ...(editorCoreDependency ? { "@moenarch/editor-core": editorCoreDependency } : {}),
           "@moritzbrantner/graph-editor": rootDependencies["@moritzbrantner/graph-editor"],
           "@moritzbrantner/ui": rootDependencies["@moritzbrantner/ui"],
           "@moritzbrantner/workflow-editor": `file:${tarballPath}`,
@@ -48,7 +55,7 @@ try {
           vite: "^8.0.14",
         },
         devDependencies: {},
-        trustedDependencies: ["@moritzbrantner/graph-editor"],
+        trustedDependencies,
       },
       null,
       2,
