@@ -2,7 +2,7 @@
 
 ## Setup
 
-Use Bun `1.3.14`.
+Use the latest stable Bun.
 
 ```sh
 bun install --frozen-lockfile
