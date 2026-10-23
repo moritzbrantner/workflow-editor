@@ -62,6 +62,7 @@
     "react-dom": "^19.0.0"
   },
   "dependencies": {
+    "@moenarch/editor-core": "git+https://github.com/moritzbrantner/editor-core.git#e208e2057fef2cf2b89be917188d4c51d9622acc",
     "@moritzbrantner/graph-editor": "git+https://github.com/moritzbrantner/graph-editor.git#e3d89b9a24739087d385c12b9b85cd721df6cac7",
     "@moritzbrantner/ui": "^1.1.0",
     "lucide-react": "^1.17.0",
@@ -137,6 +138,7 @@
     "verify": "bun run verify:registry"
   },
   "trustedDependencies": [
+    "@moenarch/editor-core",
     "@moritzbrantner/graph-editor"
   ]
 }

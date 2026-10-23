@@ -5,6 +5,7 @@
     "": {
       "name": "@moritzbrantner/workflow-editor",
       "dependencies": {
+        "@moenarch/editor-core": "git+https://github.com/moritzbrantner/editor-core.git#e208e2057fef2cf2b89be917188d4c51d9622acc",
         "@moritzbrantner/graph-editor": "git+https://github.com/moritzbrantner/graph-editor.git#e3d89b9a24739087d385c12b9b85cd721df6cac7",
         "@moritzbrantner/ui": "^1.1.0",
         "lucide-react": "^1.17.0",
@@ -41,6 +42,7 @@
     },
   },
   "trustedDependencies": [
+    "@moenarch/editor-core",
     "@moritzbrantner/graph-editor",
   ],
   "packages": {
@@ -1357,6 +1359,8 @@
     "@jridgewell/trace-mapping/@jridgewell/sourcemap-codec": ["@jridgewell/sourcemap-codec@1.5.5", "", {}, "sha512-cYQ9310grqxueWbl+WuIUIaiUaDcj7WOq5fVhEljNVgRfOUhY9fy2zTvfoqWsnebh8Sl70VScFbICvJnLKB0Og=="],
 
     "@microsoft/api-extractor/typescript": ["typescript@5.9.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw=="],
+
+    "@moritzbrantner/graph-editor/@moenarch/editor-core": ["@moenarch/editor-core@github:moritzbrantner/editor-core#e208e20", { "peerDependencies": { "react": "^19.0.0" }, "optionalPeers": ["react"] }, "moritzbrantner-editor-core-e208e20", "sha512-dFoxTg7xzIquA4RwJdGzIKMyYv5EQcP5+5++PufSK/FyNHl5KEZj6Pe/+u7Q2oxAvotflVEwvlh//nflpeOoMA=="],
 
     "@moritzbrantner/graph-editor/lucide-react": ["lucide-react@1.59.0", "", { "peerDependencies": { "@types/react": "*", "react": "^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0" }, "optionalPeers": ["@types/react"] }, "sha512-5qgMyyCPU6OvnKpLS2t693+ZtiqA8oaSweWoUows0BLFKFf6V75m4+CptpmohZHpD5IuOVIBXHBBiv2vpLJmtw=="],
 
