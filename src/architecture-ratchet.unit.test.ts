@@ -24,6 +24,10 @@ const forbidden: Array<[RegExp, string]> = [
   [/!important/, "!important override of graph-editor styles"],
   [/useWorkflowWorkbenchNodeElementMap/, "node element map for portal-positioned content"],
   [/get\w*Node\w*Offset\(\s*node,\s*target/, "content offset measured from a node element"],
+  // #43: edge color and node stacking come from graph-editor (graph-editor#85), not generated CSS.
+  [/<style\b/, "generated stylesheet patching graph-editor's canvas DOM"],
+  [/\]:!/, "Tailwind important override of graph-editor styles"],
+  [/data-compact=\\?["']true\\?["']\]/, "class patch for compact nodes"],
 ];
 
 describe("workflow node composition ratchet (#48)", () => {

@@ -3074,14 +3074,8 @@ export function WorkflowWorkbench<
             onDragOver={handleTemplateDragOver}
             onDrop={handleTemplateDrop}
           >
-            <WorkflowWorkbenchNodeLayerStyles
-              nodes={document.nodes}
-              edges={uiEdges}
-              portTypeColors={portTypeColors}
-              primaryNodeId={primarySelectedNodeId}
-            />
             <WorkflowBuilder
-              className="flex h-full min-h-0 min-w-0 flex-col [&>[data-slot='workflow-builder-surface']]:flex-1 [&>[data-slot='workflow-builder-surface']]:basis-0 [&_[data-slot='workflow-node'][data-compact='true']_[data-slot='workflow-node-port']]:!z-0"
+              className="flex h-full min-h-0 min-w-0 flex-col [&>[data-slot='workflow-builder-surface']]:flex-1 [&>[data-slot='workflow-builder-surface']]:basis-0"
               nodes={uiNodes}
               edges={uiEdges}
               groups={document.groups}
@@ -4732,100 +4726,6 @@ function getWorkflowEditorWheelDelta(event: WheelEvent) {
     x: event.deltaX * multiplier,
     y: event.deltaY * multiplier,
   };
-}
-
-function WorkflowWorkbenchNodeLayerStyles<TNodeData extends Record<string, unknown>>({
-  nodes,
-  edges,
-  portTypeColors,
-  primaryNodeId,
-}: {
-  nodes: Array<WorkflowEditorNode<TNodeData>>;
-  edges: ReturnType<typeof toUiWorkflowBuilderEdges>;
-  portTypeColors?: Readonly<Record<string, string>>;
-  primaryNodeId?: string;
-}) {
-  const styles = [
-    ...edges.flatMap((edge) => {
-      const color = (edge as { color?: unknown }).color;
-      if (typeof color !== "string" || !isSafeWorkflowEditorCssValue(color)) {
-        return [];
-      }
-      // Graph-editor's stroke-border class otherwise wins over its SVG stroke attribute.
-      const selector = `[data-slot="workflow-builder-edges"] [data-slot="workflow-builder-edge-hit"][aria-label="Connection ${cssAttributeValue(edge.id)}"] + [data-slot="workflow-builder-edge"]:not([data-status="error"]):not([data-status="success"]):not([data-status="running"])`;
-      return [`${selector} { stroke: ${color}; }`];
-    }),
-    ...nodes.map((node, index) => {
-      const selector = `[data-slot="workflow-builder-node"][data-node-id="${cssAttributeValue(node.id)}"]`;
-      const layer = getWorkflowEditorNodeLayerIndex(index, node.id, primaryNodeId);
-      const rules = [`${selector} { z-index: ${layer}; }`];
-      const uiNode = toUiWorkflowBuilderNodes([node], undefined, { portTypeColors })[0]!;
-
-      rules.push(...getWorkflowEditorPortColorRules(selector, uiNode));
-
-      return rules.join("\n");
-    }),
-  ].join("\n");
-
-  return styles ? <style data-slot="workflow-workbench-layer-styles">{styles}</style> : null;
-}
-
-function getWorkflowEditorPortColorRules(
-  selector: string,
-  node: ReturnType<typeof toUiWorkflowBuilderNodes>[number],
-) {
-  const rules: string[] = [];
-
-  for (const direction of ["input", "output"] as const) {
-    const ports = direction === "input" ? (node.inputs ?? []) : (node.outputs ?? []);
-    const minimizedColor = readUiWorkflowNodePortColor(ports[0]);
-
-    if (minimizedColor) {
-      rules.push(
-        `${selector} [data-slot="workflow-node-minimized-port"][data-port-direction="${direction}"] { color: ${minimizedColor}; border-color: ${minimizedColor}; }`,
-      );
-    }
-
-    for (const port of ports) {
-      const color = readUiWorkflowNodePortColor(port);
-
-      if (!color) {
-        continue;
-      }
-
-      const portSelector = `${selector} [data-slot="workflow-node-port"][data-port-direction="${direction}"][data-port-id="${cssAttributeValue(port.id)}"]`;
-      rules.push(
-        `${portSelector} { border-color: color-mix(in oklch, ${color} 58%, var(--border)); background-color: color-mix(in oklch, ${color} ${direction === "input" ? "9%" : "6%"}, transparent); }`,
-        `${portSelector} [data-slot="workflow-node-port-dot"] { color: ${color}; }`,
-      );
-    }
-  }
-
-  return rules;
-}
-
-function readUiWorkflowNodePortColor(
-  port:
-    | NonNullable<ReturnType<typeof toUiWorkflowBuilderNodes>[number]["inputs"]>[number]
-    | undefined,
-) {
-  const color =
-    (port as { color?: unknown } | undefined)?.color ??
-    (port?.metadata as { workflowEditorPortColor?: unknown } | undefined)?.workflowEditorPortColor;
-
-  return typeof color === "string" && isSafeWorkflowEditorCssValue(color) ? color : undefined;
-}
-
-function isSafeWorkflowEditorCssValue(value: string) {
-  return value.length <= 120 && !/[;{}\n\r<>]/.test(value);
-}
-
-function cssAttributeValue(value: string) {
-  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-}
-
-function getWorkflowEditorNodeLayerIndex(index: number, nodeId: string, primaryNodeId?: string) {
-  return nodeId === primaryNodeId ? 10000 : index * 2 + 1;
 }
 
 function WorkflowNodeRenameControl<TNodeData extends Record<string, unknown>>({
