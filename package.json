@@ -62,8 +62,8 @@
     "react-dom": "^19.0.0"
   },
   "dependencies": {
-    "@moenarch/editor-core": "git+https://github.com/moritzbrantner/editor-core.git#e208e2057fef2cf2b89be917188d4c51d9622acc",
-    "@moritzbrantner/graph-editor": "git+https://github.com/moritzbrantner/graph-editor.git#e3d89b9a24739087d385c12b9b85cd721df6cac7",
+    "@moenarch/editor-core": "git+https://github.com/moritzbrantner/editor-core.git#3a24d4db70bec76935e2579f2c04d6089fb68a19",
+    "@moritzbrantner/graph-editor": "git+https://github.com/moritzbrantner/graph-editor.git#d9011f25a3f745b6fed17318422b8e8d27329cb7",
     "@moritzbrantner/ui": "^1.1.0",
     "lucide-react": "^1.17.0",
     "typescript": "6.0.3"
