@@ -334,6 +334,8 @@ export {
 } from "./core-execution";
 export {
   applyWorkflowRunnerEventToSnapshot,
+  createWorkflowExecutionSnapshotFromLiveRun,
+  type WorkflowEngineLiveRunStatus,
   createWorkflowExecutionSnapshotFromRunnerEvents,
   type WorkflowRunnerLifecycleEvent,
 } from "./core-execution-events";

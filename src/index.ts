@@ -55,6 +55,8 @@ export {
   resolveWorkflowEditorInputValues,
   validateWorkflowEditorInputValues,
   applyWorkflowRunnerEventToSnapshot,
+  createWorkflowExecutionSnapshotFromLiveRun,
+  type WorkflowEngineLiveRunStatus,
   createWorkflowExecutionSnapshotFromRunnerEvents,
   compileWorkflowEditorHumanTask,
   isWorkflowEditorHumanTaskNode,

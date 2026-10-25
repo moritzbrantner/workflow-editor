@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   applyWorkflowRunnerEventToSnapshot,
+  createWorkflowExecutionSnapshotFromLiveRun,
   createWorkflowExecutionSnapshotFromRunnerEvents,
   getWorkflowExecutionNodePresentation,
   type WorkflowRunnerLifecycleEvent,
@@ -96,5 +97,46 @@ describe("runner events → execution snapshot", () => {
     expect(
       createWorkflowExecutionSnapshotFromRunnerEvents(events, { mode: "historical" })?.mode,
     ).toBe("historical");
+  });
+});
+
+describe("engine live runs (#20, Engine #24)", () => {
+  it("maps live node states into an overlay snapshot", () => {
+    const snapshot = createWorkflowExecutionSnapshotFromLiveRun({
+      runId: "run-7",
+      status: "running",
+      nodes: {
+        fetch: { state: "succeeded", updatedAt: "2026-10-18T10:00:01.000Z" },
+        parse: { state: "retrying", attempt: 2, updatedAt: "2026-10-18T10:00:02.000Z" },
+        approve: { state: "suspended" },
+      },
+    });
+    expect(snapshot).toEqual({
+      runId: "run-7",
+      state: "running",
+      mode: "live",
+      nodes: {
+        fetch: { state: "succeeded", endedAt: "2026-10-18T10:00:01.000Z" },
+        parse: { state: "running", attempt: 2, startedAt: "2026-10-18T10:00:02.000Z" },
+        approve: { state: "waiting" },
+      },
+    });
+    expect(getWorkflowExecutionNodePresentation(snapshot.nodes.parse!).label).toBe(
+      "Running · attempt 2",
+    );
+    expect(getWorkflowExecutionNodePresentation(snapshot.nodes.approve!)).toMatchObject({
+      label: "Waiting",
+      tone: "warning",
+    });
+  });
+
+  it("treats the final notification as finished history", () => {
+    expect(
+      createWorkflowExecutionSnapshotFromLiveRun({
+        runId: "run-7",
+        status: "succeeded",
+        nodes: {},
+      }),
+    ).toMatchObject({ state: "succeeded", mode: "historical" });
   });
 });

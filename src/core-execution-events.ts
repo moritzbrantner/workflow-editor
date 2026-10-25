@@ -1,4 +1,8 @@
-import type { WorkflowExecutionNodeSnapshot, WorkflowExecutionSnapshot } from "./core-execution";
+import type {
+  WorkflowExecutionNodeSnapshot,
+  WorkflowExecutionNodeState,
+  WorkflowExecutionSnapshot,
+} from "./core-execution";
 
 /**
  * Builds the overlay's `WorkflowExecutionSnapshot` from Workflow Runner lifecycle events
@@ -165,4 +169,67 @@ export function createWorkflowExecutionSnapshotFromRunnerEvents(
     snapshot = applyWorkflowRunnerEventToSnapshot(snapshot, event);
   }
   return snapshot && options.mode ? { ...snapshot, mode: options.mode } : snapshot;
+}
+
+/**
+ * Live status of a run that Workflow Engine is dispatching (Engine #24, `getLiveRun` /
+ * `observeRun`), structurally compatible with the engine's `WorkflowLiveRunStatus`.
+ */
+export type WorkflowEngineLiveRunStatus = {
+  runId: string;
+  /** `running` while dispatched; the persisted terminal status in the final notification. */
+  status: string;
+  nodes: Readonly<
+    Record<
+      string,
+      {
+        state: "running" | "retrying" | "succeeded" | "failed" | "skipped" | "suspended" | string;
+        attempt?: number;
+        updatedAt?: string;
+      }
+    >
+  >;
+};
+
+const liveNodeStates: Record<string, WorkflowExecutionNodeState> = {
+  running: "running",
+  retrying: "running",
+  succeeded: "succeeded",
+  failed: "failed",
+  skipped: "skipped",
+  suspended: "waiting",
+};
+
+/**
+ * Turns an engine live-run notification into an execution snapshot for the overlay (#20). A
+ * retrying node shows as running with its attempt; a suspended node (a pending human task) shows
+ * as waiting. Live state carries no payloads, so the snapshot has no output summaries.
+ */
+export function createWorkflowExecutionSnapshotFromLiveRun(
+  status: WorkflowEngineLiveRunStatus,
+): WorkflowExecutionSnapshot {
+  const nodes = Object.fromEntries(
+    Object.entries(status.nodes).map(([nodeId, node]) => [
+      nodeId,
+      {
+        state: liveNodeStates[node.state] ?? node.state,
+        ...(node.attempt !== undefined ? { attempt: node.attempt } : {}),
+        ...(node.state === "succeeded" || node.state === "failed" || node.state === "skipped"
+          ? node.updatedAt
+            ? { endedAt: node.updatedAt }
+            : {}
+          : node.updatedAt
+            ? { startedAt: node.updatedAt }
+            : {}),
+      } satisfies WorkflowExecutionNodeSnapshot,
+    ]),
+  );
+  const runState =
+    status.status === "running" ? "running" : (liveNodeStates[status.status] ?? status.status);
+  return {
+    runId: status.runId,
+    state: runState,
+    mode: status.status === "running" || status.status === "waiting" ? "live" : "historical",
+    nodes,
+  };
 }

@@ -206,6 +206,9 @@ export function createWorkflowEditorVersion<TNodeData = Record<string, unknown>,
 }): WorkflowEditorLibraryEntry<TNodeData, TEdgeData>;
 
 // @public
+export function createWorkflowExecutionSnapshotFromLiveRun(status: WorkflowEngineLiveRunStatus): WorkflowExecutionSnapshot;
+
+// @public
 export function createWorkflowExecutionSnapshotFromRunnerEvents(events: ReadonlyArray<WorkflowRunnerLifecycleEvent | {
     type: string;
     runId?: string;
@@ -3135,6 +3138,17 @@ export type WorkflowEditorWorkflowReference = {
     maxDepth?: number;
 };
 
+// @public
+export type WorkflowEngineLiveRunStatus = {
+    runId: string;
+    status: string;
+    nodes: Readonly<Record<string, {
+        state: "running" | "retrying" | "succeeded" | "failed" | "skipped" | "suspended" | string;
+        attempt?: number;
+        updatedAt?: string;
+    }>>;
+};
+
 // @public (undocumented)
 export type WorkflowExecutionEdgeSnapshot = {
     state: WorkflowExecutionEdgeState;
@@ -3159,7 +3173,7 @@ export type WorkflowExecutionNodeSnapshot = {
 };
 
 // @public
-export type WorkflowExecutionNodeState = "queued" | "running" | "succeeded" | "failed" | "skipped" | "cancelled" | "unknown" | (string & {});
+export type WorkflowExecutionNodeState = "queued" | "running" | "waiting" | "succeeded" | "failed" | "skipped" | "cancelled" | "unknown" | (string & {});
 
 // @public
 export type WorkflowExecutionPresentation = {
@@ -3541,7 +3555,7 @@ export function writeWorkflowEditorFieldPath<T extends Record<string, unknown>>(
 
 // Warnings were encountered during analysis:
 //
-// dist/core-execution-C9sBF-gC.d.ts:29:5 - (ae-forgotten-export) The symbol "WorkflowEditorNodeTemplateDiagnosticCode" needs to be exported by the entry point index.d.ts
+// dist/core-execution-C7-BRp2I.d.ts:29:5 - (ae-forgotten-export) The symbol "WorkflowEditorNodeTemplateDiagnosticCode" needs to be exported by the entry point index.d.ts
 // dist/editor.d.ts:189:5 - (ae-forgotten-export) The symbol "ChromeController" needs to be exported by the entry point index.d.ts
 // dist/editor.d.ts:312:5 - (ae-forgotten-export) The symbol "WorkflowEditorBundleActions" needs to be exported by the entry point index.d.ts
 // dist/editor.d.ts:312:5 - (ae-forgotten-export) The symbol "WorkflowEditorComparisonActions" needs to be exported by the entry point index.d.ts
