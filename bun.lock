@@ -5,8 +5,8 @@
     "": {
       "name": "@moritzbrantner/workflow-editor",
       "dependencies": {
-        "@moenarch/editor-core": "git+https://github.com/moritzbrantner/editor-core.git#e208e2057fef2cf2b89be917188d4c51d9622acc",
-        "@moritzbrantner/graph-editor": "git+https://github.com/moritzbrantner/graph-editor.git#e3d89b9a24739087d385c12b9b85cd721df6cac7",
+        "@moenarch/editor-core": "git+https://github.com/moritzbrantner/editor-core.git#3a24d4db70bec76935e2579f2c04d6089fb68a19",
+        "@moritzbrantner/graph-editor": "git+https://github.com/moritzbrantner/graph-editor.git#d9011f25a3f745b6fed17318422b8e8d27329cb7",
         "@moritzbrantner/ui": "^1.1.0",
         "lucide-react": "^1.17.0",
         "typescript": "6.0.3",
@@ -198,9 +198,9 @@
 
     "@microsoft/tsdoc-config": ["@microsoft/tsdoc-config@0.18.3", "", { "dependencies": { "@microsoft/tsdoc": "0.17.1", "ajv": "~8.18.0", "jju": "~1.4.0", "resolve": "~1.22.2" } }, "sha512-0I0rGXo1eJziw3EEErkDS9p/0RzBcyOiV+zbSDqOZTeURmhtut+WIvpih0LM5g+ZpZ9SyFxDfkhAcl/r8e2zGw=="],
 
-    "@moenarch/editor-core": ["@moenarch/editor-core@github:moritzbrantner/editor-core#e208e20", { "peerDependencies": { "react": "^19.0.0" }, "optionalPeers": ["react"] }, "moritzbrantner-editor-core-e208e20", "sha512-dFoxTg7xzIquA4RwJdGzIKMyYv5EQcP5+5++PufSK/FyNHl5KEZj6Pe/+u7Q2oxAvotflVEwvlh//nflpeOoMA=="],
+    "@moenarch/editor-core": ["@moenarch/editor-core@github:moritzbrantner/editor-core#3a24d4d", { "peerDependencies": { "react": "^19.0.0" }, "optionalPeers": ["react"] }, "moritzbrantner-editor-core-3a24d4d", "sha512-U++cW4quFJFC5e7TNQu2I+TrDS2NhiRwUVDgsRWfME574G/7kXbKV4kuwQtb7EHgzAbBPJ3uoxLwVopUrernmQ=="],
 
-    "@moritzbrantner/graph-editor": ["@moritzbrantner/graph-editor@github:moritzbrantner/graph-editor#e3d89b9", { "dependencies": { "@dagrejs/dagre": "^3.0.0", "@moenarch/editor-core": "git+https://github.com/moritzbrantner/editor-core.git#e208e2057fef2cf2b89be917188d4c51d9622acc", "@moritzbrantner/ui": "^1.1.0", "lucide-react": "^1.21.0" }, "peerDependencies": { "react": "^19.0.0", "react-dom": "^19.0.0" } }, "moritzbrantner-graph-editor-e3d89b9", "sha512-J0+WRBMZkSuRTPcKJmqVNCkx3wEEC9Xqqzqxpu0rLCUfr9Og2wyAI57OasdsN/jhYpKpgRS+EP3dreWNR2LBdg=="],
+    "@moritzbrantner/graph-editor": ["@moritzbrantner/graph-editor@github:moritzbrantner/graph-editor#d9011f2", { "dependencies": { "@dagrejs/dagre": "^3.0.0", "@moenarch/editor-core": "git+https://github.com/moritzbrantner/editor-core.git#3a24d4db70bec76935e2579f2c04d6089fb68a19", "@moritzbrantner/ui": "^1.1.0", "lucide-react": "^1.21.0" }, "peerDependencies": { "react": "^19.0.0", "react-dom": "^19.0.0" } }, "moritzbrantner-graph-editor-d9011f2", "sha512-8bKek3a7a6pA5M+yolC5rEPJyL7qnFBE8h3d/rp3CjuPEmaTRoU5GyJwPa2heOmVe6TS7np0cESdtYaSX6nV+A=="],
 
     "@moritzbrantner/ui": ["@moritzbrantner/ui@1.1.0", "", { "dependencies": { "@base-ui/react": "^1.3.0", "@tanstack/react-table": "^8.21.3", "class-variance-authority": "^0.7.1", "clsx": "^2.1.1", "cmdk": "^1.1.1", "date-fns": "^4.1.0", "embla-carousel-react": "^8.6.0", "input-otp": "^1.4.2", "lucide-react": "^1.7.0", "radix-ui": "^1.4.3", "react-day-picker": "^9.14.0", "react-resizable-panels": "^4.9.0", "sonner": "^2.0.7", "tailwind-merge": "^3.4.0", "tailwindcss": "^4.1.14", "tw-animate-css": "^1.4.0", "vaul": "^1.1.2" }, "peerDependencies": { "react": "^19.0.0", "react-dom": "^19.0.0" } }, "sha512-y0SoUpQks5Fg77PiyFyis+bgw2+HaOL07ALFqLVwsay1ZSEmwSX+jbdjwgjMNfsVCvKL8tooHsZXDx1u1q214Q=="],
 
