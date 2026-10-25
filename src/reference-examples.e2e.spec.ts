@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 
 import { expect, test, type Page } from "@playwright/test";
 
-// Pages smoke for the reference examples (#22, Decision Atlas 5.1/5.2/5.4): first open lands in the
+// Pages smoke for the reference applications (#22, Decision Atlas 5.1/5.2/5.4): first open lands in the
 // editable data pipeline; each example loads, rejects its intentionally invalid connection, takes
 // an edit, compiles without executing, exports and survives a reload.
 
@@ -21,6 +21,24 @@ const examples = [
     name: "Product Image Generation",
     node: "Resize for web",
     invalid: { source: "Start Style prompt Value", target: "Resize for web Image" },
+  },
+  {
+    id: "agent-workflow",
+    name: "Support Agent with Review",
+    node: "Draft reply",
+    invalid: { source: "Start Support request Request", target: "Final reply Reply" },
+  },
+  {
+    id: "backend-orchestration",
+    name: "Order Fulfillment Orchestration",
+    node: "Confirm order",
+    invalid: { source: "Start Charge payment Failure", target: "Confirm order Receipt" },
+  },
+  {
+    id: "lead-intake",
+    name: "Lead Intake Automation",
+    node: "Score lead",
+    invalid: { source: "Start Route by fit Nurture", target: "Create deal Qualified lead" },
   },
 ] as const;
 

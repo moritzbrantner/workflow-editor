@@ -27,10 +27,21 @@ import {
 } from "@moritzbrantner/workflow-editor";
 
 import {
+  agentWorkflowDocument,
+  agentWorkflowExampleId,
+  backendOrchestrationDocument,
+  backendOrchestrationExampleId,
+  crmTypeDefinitions,
   dataPipelineDocument,
   dataPipelineExampleId,
+  enrichLeadDocument,
+  enrichLeadExampleId,
+  leadIntakeDocument,
+  leadIntakeExampleId,
+  leadType,
   mediaPipelineDocument,
   mediaPipelineExampleId,
+  qualifiedLeadType,
 } from "./reference-examples";
 import "./styles.css";
 
@@ -85,36 +96,10 @@ const numberType = { kind: "number" } satisfies WorkflowEditorPortType;
 const booleanType = { kind: "boolean" } satisfies WorkflowEditorPortType;
 const anyType = { kind: "any" } satisfies WorkflowEditorPortType;
 const objectType = { kind: "object" } satisfies WorkflowEditorPortType;
-const leadType = { kind: "ref", name: "Lead" } satisfies WorkflowEditorPortType;
-const qualifiedLeadType = { kind: "ref", name: "QualifiedLead" } satisfies WorkflowEditorPortType;
 const incidentType = { kind: "ref", name: "Incident" } satisfies WorkflowEditorPortType;
 
 const typeDefinitions: readonly WorkflowEditorTypeDefinition[] = [
-  {
-    name: "Lead",
-    type: {
-      kind: "object",
-      properties: {
-        email: { type: stringType },
-        company: { type: stringType },
-        source: { type: stringType, optional: true },
-        score: { type: numberType, optional: true },
-      },
-    },
-  },
-  {
-    name: "QualifiedLead",
-    extends: ["Lead"],
-    type: {
-      kind: "object",
-      properties: {
-        email: { type: stringType },
-        company: { type: stringType },
-        score: { type: numberType },
-        owner: { type: stringType },
-      },
-    },
-  },
+  ...crmTypeDefinitions,
   {
     name: "Incident",
     type: {
@@ -440,6 +425,26 @@ function createExamplesLibrary(): ExampleLibrary {
       document: mediaPipelineDocument(),
     }),
     createWorkflowEditorEntry({
+      id: agentWorkflowExampleId,
+      name: "Support Agent with Review",
+      description:
+        "Plan → tool call with retry and fallback → draft → human review → final reply; compiled, not executed, in Pages.",
+      tags: ["agent", "ai", "approval", "example"],
+      createdAt: seededAt,
+      updatedAt: seededAt,
+      document: agentWorkflowDocument(),
+    }),
+    createWorkflowEditorEntry({
+      id: backendOrchestrationExampleId,
+      name: "Order Fulfillment Orchestration",
+      description:
+        "HTTP order → parallel payment, inventory and label tasks → confirm, or cancel on payment failure; compiled, not executed, in Pages.",
+      tags: ["backend", "http", "orchestration", "example"],
+      createdAt: seededAt,
+      updatedAt: seededAt,
+      document: backendOrchestrationDocument(),
+    }),
+    createWorkflowEditorEntry({
       id: "typescript-ports",
       name: "TypeScript ports",
       createdAt: seededAt,
@@ -476,16 +481,17 @@ function createExamplesLibrary(): ExampleLibrary {
       document: binaryAudioPortsDocument(),
     }),
     createWorkflowEditorEntry({
-      id: "lead-intake",
+      id: leadIntakeExampleId,
       name: "Lead Intake Automation",
-      description: "Branching, typed ports, and nested workflow references.",
-      tags: ["crm", "branching", "nested"],
+      description:
+        "Lead intake → nested enrichment → scoring → conditional assignment and owner notification.",
+      tags: ["crm", "branching", "nested", "example"],
       createdAt: seededAt,
       updatedAt: seededAt,
       document: leadIntakeDocument(),
     }),
     createWorkflowEditorEntry({
-      id: "enrich-lead",
+      id: enrichLeadExampleId,
       name: "Enrich Lead",
       description: "Nested document referenced from the lead intake workflow.",
       tags: ["nested", "integration"],
@@ -710,208 +716,6 @@ function typescriptPortsDocument(): ExampleDocument {
       template("control.merge", "merge", "Possible customer", 340, 390),
     ],
     edges: [],
-  }).document;
-}
-
-function leadIntakeDocument(): ExampleDocument {
-  return normalizeWorkflowEditorDocument({
-    viewport: { x: 35, y: 25, zoom: 0.82 },
-    nodes: [
-      {
-        id: "lead-source",
-        label: "Website form",
-        description: "New trial signups from the website.",
-        kind: "crm.lead.source",
-        category: "CRM",
-        x: 0,
-        y: 40,
-        tone: "info",
-        outputs: [{ id: "lead", label: "Lead", type: leadType }],
-      },
-      {
-        id: "dedupe",
-        label: "Deduplicate",
-        description: "Merge repeat contacts before enrichment.",
-        kind: "crm.lead.dedupe",
-        category: "CRM",
-        x: 280,
-        y: 40,
-        inputs: [{ id: "lead", label: "Lead", type: leadType }],
-        outputs: [{ id: "lead", label: "Lead", type: leadType }],
-      },
-      {
-        id: "enrich",
-        label: "Enrich lead",
-        description: "Opens the nested Enrich Lead workflow.",
-        kind: "workflow.reference",
-        category: "Nested workflow",
-        x: 560,
-        y: 40,
-        workflowRef: { documentId: "enrich-lead" },
-        inputs: [{ id: "lead", label: "Lead", type: leadType }],
-        outputs: [{ id: "lead", label: "Lead", type: leadType }],
-      },
-      {
-        id: "score",
-        label: "Score lead",
-        kind: "crm.lead.score",
-        category: "CRM",
-        x: 840,
-        y: -80,
-        inputs: [{ id: "lead", label: "Lead", type: leadType }],
-        outputs: [{ id: "score", label: "Score", type: numberType }],
-      },
-      {
-        id: "qualification",
-        label: "Qualification rule",
-        kind: "crm.lead.qualify",
-        category: "CRM",
-        x: 1120,
-        y: -80,
-        inputs: [{ id: "score", label: "Score", type: numberType }],
-        outputs: [{ id: "qualified", label: "Qualified", type: booleanType }],
-      },
-      {
-        id: "route",
-        label: "Route by fit",
-        kind: "control.if",
-        category: "Control flow",
-        x: 1120,
-        y: 140,
-        inputs: [
-          { id: "value", label: "Lead", type: leadType },
-          { id: "condition", label: "Qualified", type: booleanType },
-        ],
-        outputs: [
-          { id: "true", label: "Sales", type: qualifiedLeadType },
-          { id: "false", label: "Nurture", type: leadType },
-        ],
-      },
-      {
-        id: "create-deal",
-        label: "Create deal",
-        kind: "crm.deal.create",
-        category: "CRM",
-        x: 1420,
-        y: 20,
-        tone: "success",
-        inputs: [{ id: "lead", label: "Qualified lead", type: qualifiedLeadType }],
-      },
-      {
-        id: "nurture",
-        label: "Nurture sequence",
-        kind: "messaging.sequence",
-        category: "Messaging",
-        x: 1420,
-        y: 260,
-        inputs: [{ id: "lead", label: "Lead", type: leadType }],
-      },
-      {
-        id: "routed-leads",
-        label: "Routed leads",
-        description: "Collects every routed lead into one list (up to 3 sources).",
-        kind: "control.merge",
-        category: "Control flow",
-        x: 1420,
-        y: 480,
-        inputs: [
-          {
-            id: "items",
-            label: "Items",
-            type: { kind: "array", element: leadType },
-            cardinality: { min: 1, max: 3 },
-          },
-        ],
-        outputs: [
-          {
-            id: "out",
-            label: "Out",
-            type: { kind: "array", element: leadType },
-            metadata: { workflowTypeInference: "items" },
-          },
-        ],
-      },
-    ],
-    edges: [
-      edge("lead-source", "lead", "dedupe", "lead"),
-      edge("dedupe", "lead", "enrich", "lead"),
-      edge("enrich", "lead", "score", "lead"),
-      edge("score", "score", "qualification", "score"),
-      edge("enrich", "lead", "route", "value"),
-      edge("qualification", "qualified", "route", "condition"),
-      edge("route", "true", "create-deal", "lead"),
-      edge("route", "false", "nurture", "lead"),
-      edge("route", "true", "routed-leads", "items"),
-      edge("route", "false", "routed-leads", "items"),
-    ],
-  }).document;
-}
-
-function enrichLeadDocument(): ExampleDocument {
-  return normalizeWorkflowEditorDocument({
-    viewport: { x: 80, y: 40, zoom: 0.9 },
-    nodes: [
-      {
-        id: "incoming-lead",
-        label: "Incoming lead",
-        kind: "control.start",
-        category: "Control flow",
-        x: 0,
-        y: 80,
-        outputs: [{ id: "lead", label: "Lead", type: leadType }],
-      },
-      {
-        id: "company-lookup",
-        label: "Company lookup",
-        kind: "integration.api.request",
-        category: "Integration",
-        x: 300,
-        y: 0,
-        inputs: [{ id: "lead", label: "Lead", type: leadType }],
-        outputs: [{ id: "company", label: "Company", type: objectType }],
-      },
-      {
-        id: "email-verification",
-        label: "Email verification",
-        kind: "integration.api.request",
-        category: "Integration",
-        x: 300,
-        y: 180,
-        inputs: [{ id: "lead", label: "Lead", type: leadType }],
-        outputs: [{ id: "verified", label: "Verified", type: booleanType }],
-      },
-      {
-        id: "merge-profile",
-        label: "Merge profile",
-        kind: "json.object",
-        category: "JSON",
-        x: 650,
-        y: 70,
-        inputs: [
-          { id: "lead", label: "Lead", type: leadType },
-          { id: "company", label: "Company", type: objectType },
-          { id: "verified", label: "Verified", type: booleanType },
-        ],
-        outputs: [{ id: "lead", label: "Enriched lead", type: leadType }],
-      },
-      {
-        id: "return-lead",
-        label: "Return enriched lead",
-        kind: "control.end",
-        category: "Control flow",
-        x: 980,
-        y: 80,
-        inputs: [{ id: "lead", label: "Lead", type: leadType }],
-      },
-    ],
-    edges: [
-      edge("incoming-lead", "lead", "company-lookup", "lead"),
-      edge("incoming-lead", "lead", "email-verification", "lead"),
-      edge("incoming-lead", "lead", "merge-profile", "lead"),
-      edge("company-lookup", "company", "merge-profile", "company"),
-      edge("email-verification", "verified", "merge-profile", "verified"),
-      edge("merge-profile", "lead", "return-lead", "lead"),
-    ],
   }).document;
 }
 
