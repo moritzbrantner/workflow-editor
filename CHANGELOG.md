@@ -4,6 +4,7 @@
 
 ### Minor Changes
 
+- Pages reference applications (#22). The workbench adds **Support Agent with Review** (plan → tool call with retry and fallback → draft → human review → final reply) and **Order Fulfillment Orchestration** (HTTP order → parallel payment, inventory and label tasks → confirm, or cancel on a failed charge). **Lead Intake Automation** becomes the documented CRM reference and notifies the account owner. Every reference example has categorized nodes, an intentionally invalid connection, unit tests and a Pages smoke test. Storybook's **Reference examples/Order Fulfillment run** shows a recorded runner event stream as an execution overlay; Pages executes nothing and shows no run.
 - Accessibility (axe-core 4.14, `label-content-name-mismatch`; owner decision 2026-10-21): button names now contain their visible text.
   - The parent link is named "Open parent workflow: <title>", and its arrow is an icon.
   - graph-editor is pinned to `a0c6939`, where port and node buttons keep their chips and package lines beside the button.
