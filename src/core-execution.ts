@@ -9,6 +9,7 @@
 export type WorkflowExecutionNodeState =
   | "queued"
   | "running"
+  | "waiting"
   | "succeeded"
   | "failed"
   | "skipped"

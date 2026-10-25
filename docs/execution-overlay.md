@@ -19,7 +19,7 @@ const execution: WorkflowExecutionSnapshot = {
 - **Snapshot fields.**
   - A run has `runId`, an optional run `state` and a `mode` (`live` or `historical`).
   - Each node entry has a `state`, plus optional `nodeRunId`, `attemptId`, `attempt`, `progress` (0–1), `startedAt`/`endedAt`, `durationMs`, `outputSummary` and `errorSummary`.
-  - Node states are `queued`, `running`, `succeeded`, `failed`, `skipped`, `cancelled` and `unknown`. Any other string is shown as a custom state.
+  - Node states are `queued`, `running`, `waiting`, `succeeded`, `failed`, `skipped`, `cancelled` and `unknown`. Any other string is shown as a custom state.
   - Edge states are `idle`, `active`, `transferred` and `blocked`. They are independent of edge metadata.
 - **Precedence.** While a snapshot is shown, a node's runtime state replaces its design-time `status`, `tone` and header label. Nodes without an entry keep their design-time presentation. Passing `null` clears the overlay.
 - **Isolation.** The overlay is layered over the derived canvas nodes only. Updating a node's state never rebuilds or re-normalizes the document. Edits made while the overlay is shown, such as moving a node, keep the design-time `status`, `tone` and `eyebrow`. The snapshot never enters history, saved versions, serialization or dirty tracking.
