@@ -113,6 +113,7 @@
 
 ### Patch Changes
 
+- Mobile Pages workbench (#35): tapping the canvas closes the open Nodes, Actions or Info sheet again. A Playwright mobile check now covers the one-row document bar, the canvas height, one sheet at a time, the arrange/group/delete/nested-workflow actions, and panning behind closed sheets.
 - Nested iterations must feed their required inputs (#97):
   - Compilation reports `iteration-input-unconnected` for an inner `control.iterate` whose `state` or invariant inputs have no body edge or boundary.
   - The shared `compiled-v2-nested-iteration.json` fixture now wires the inner loop through the outer body's boundaries, so runners can execute it.

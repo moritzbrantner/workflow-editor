@@ -93,40 +93,29 @@ function syncDock(layout: HTMLElement) {
   }
 }
 
-function installCanvasDismiss(layout: HTMLElement) {
-  if (layout.dataset.mobileDismissInstalled === "true") {
+const sheetSurfaceSelector =
+  "[data-mobile-workbench-dock], [data-slot='workflow-palette-overlay'], [data-slot='workflow-inspector-overlay'], [data-slot='workbench-toolbar']";
+
+// Listen on window in the capture phase: the editor canvas stops pointer events in React
+// capture handlers at the root container, before a listener on the layout would run.
+function dismissSheetOnCanvasPointerDown(event: PointerEvent) {
+  if (!(event.target instanceof Element) || event.target.closest(sheetSurfaceSelector)) {
     return;
   }
 
-  layout.dataset.mobileDismissInstalled = "true";
-  layout.addEventListener(
-    "pointerdown",
-    (event) => {
-      const sheet = (layout.dataset.mobileSheet ?? "none") as MobileSheet;
-      if (sheet === "none" || !(event.target instanceof Element)) {
-        return;
-      }
+  const layout = event.target.closest<HTMLElement>('[data-mobile-workbench="true"]');
+  if (!layout || (layout.dataset.mobileSheet ?? "none") === "none") {
+    return;
+  }
 
-      if (
-        event.target.closest(
-          "[data-mobile-workbench-dock], [data-slot='workflow-palette-overlay'], [data-slot='workflow-inspector-overlay'], [data-slot='workbench-toolbar']",
-        )
-      ) {
-        return;
-      }
-
-      layout.dataset.mobileSheet = "none";
-      syncDock(layout);
-    },
-    true,
-  );
+  layout.dataset.mobileSheet = "none";
+  syncDock(layout);
 }
 
 function installMobileWorkbench(layout: HTMLElement) {
   layout.dataset.mobileWorkbench = "true";
   layout.dataset.mobileSheet ??= "none";
   installDock(layout);
-  installCanvasDismiss(layout);
   syncDock(layout);
 }
 
@@ -161,5 +150,6 @@ observer.observe(document.documentElement, {
   subtree: true,
 });
 
+window.addEventListener("pointerdown", dismissSheetOnCanvasPointerDown, true);
 mobileViewport.addEventListener("change", queueReconcile);
 reconcileMobileWorkbench();
