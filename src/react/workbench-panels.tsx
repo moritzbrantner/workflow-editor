@@ -12,7 +12,7 @@ import {
   type WorkflowEditorNode,
 } from "../core";
 import { layoutWorkflowEditorDocument } from "../core-layout";
-import type { WorkflowWorkbenchController } from "../react";
+import type { WorkflowWorkbenchController } from "./workbench-types";
 
 export function WorkflowEditorCurrentNodesPanel<
   TNodeData extends Record<string, unknown> = Record<string, unknown>,

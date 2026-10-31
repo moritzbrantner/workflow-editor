@@ -671,6 +671,10 @@ test.describe("WorkflowWorkbench desktop", () => {
       pointerType: "mouse",
     });
 
+    // The document reaches the fixture's JSON through the editor's library update, a few renders later.
+    await expect
+      .poll(async () => (await readDocument(page)).nodes.find((node) => node.id === "input")!.x)
+      .not.toBe(beforeInput.x);
     const afterMove = await readDocument(page);
     const afterInput = afterMove.nodes.find((node) => node.id === "input")!;
     const afterTransform = afterMove.nodes.find((node) => node.id === "transform")!;
