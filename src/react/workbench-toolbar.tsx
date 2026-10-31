@@ -1,6 +1,6 @@
 import { Badge, Button } from "@moritzbrantner/ui";
 
-import type { WorkflowWorkbenchController } from "../react";
+import type { WorkflowWorkbenchController } from "./workbench-types";
 
 export function WorkflowWorkbenchToolbar<
   TNodeData extends Record<string, unknown> = Record<string, unknown>,

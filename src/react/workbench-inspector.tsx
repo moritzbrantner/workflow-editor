@@ -1,4 +1,4 @@
-import type { WorkflowWorkbenchController } from "../react";
+import type { WorkflowWorkbenchController } from "./workbench-types";
 import { DefaultWorkflowInspector } from "./default-workflow-inspector";
 
 export function WorkflowWorkbenchInspector<

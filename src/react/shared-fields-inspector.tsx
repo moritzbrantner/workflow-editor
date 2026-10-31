@@ -6,7 +6,7 @@ import {
   workflowEditorMixedFieldValue,
   type WorkflowEditorNode,
 } from "../core";
-import type { WorkflowWorkbenchInspectorContext } from "../react";
+import type { WorkflowWorkbenchInspectorContext } from "./workbench-types";
 import { InspectorPanel, type InspectorFieldValue } from "./inspector-panel";
 import {
   applyInspectorFieldDrafts,

@@ -3567,12 +3567,12 @@ export function writeWorkflowEditorFieldPath<T extends Record<string, unknown>>(
 // dist/editor.d.ts:439:5 - (ae-forgotten-export) The symbol "WorkflowEditorPendingRestore" needs to be exported by the entry point index.d.ts
 // dist/editor.d.ts:440:5 - (ae-forgotten-export) The symbol "WorkflowEditorStorageRecovery" needs to be exported by the entry point index.d.ts
 // dist/editor.d.ts:477:9 - (ae-forgotten-export) The symbol "WorkflowEditorComparisonSide" needs to be exported by the entry point index.d.ts
-// dist/react.d.ts:212:5 - (ae-forgotten-export) The symbol "WorkflowWorkbenchTriggerActivation" needs to be exported by the entry point index.d.ts
-// dist/react.d.ts:214:5 - (ae-forgotten-export) The symbol "WorkflowWorkbenchInputProfiles" needs to be exported by the entry point index.d.ts
-// dist/react.d.ts:216:5 - (ae-forgotten-export) The symbol "WorkflowWorkbenchSharedTemplates" needs to be exported by the entry point index.d.ts
-// dist/react.d.ts:242:9 - (ae-forgotten-export) The symbol "WorkflowWorkbenchPaletteCategoryGroup" needs to be exported by the entry point index.d.ts
-// dist/react.d.ts:249:9 - (ae-forgotten-export) The symbol "WorkflowWorkbenchOverlayPosition" needs to be exported by the entry point index.d.ts
-// dist/react.d.ts:324:5 - (ae-forgotten-export) The symbol "WorkflowWorkbenchHumanTasks" needs to be exported by the entry point index.d.ts
+// dist/workbench-types-BMzopS3H.d.ts:167:5 - (ae-forgotten-export) The symbol "WorkflowWorkbenchTriggerActivation" needs to be exported by the entry point index.d.ts
+// dist/workbench-types-BMzopS3H.d.ts:169:5 - (ae-forgotten-export) The symbol "WorkflowWorkbenchInputProfiles" needs to be exported by the entry point index.d.ts
+// dist/workbench-types-BMzopS3H.d.ts:171:5 - (ae-forgotten-export) The symbol "WorkflowWorkbenchSharedTemplates" needs to be exported by the entry point index.d.ts
+// dist/workbench-types-BMzopS3H.d.ts:197:9 - (ae-forgotten-export) The symbol "WorkflowWorkbenchPaletteCategoryGroup" needs to be exported by the entry point index.d.ts
+// dist/workbench-types-BMzopS3H.d.ts:204:9 - (ae-forgotten-export) The symbol "WorkflowWorkbenchOverlayPosition" needs to be exported by the entry point index.d.ts
+// dist/workbench-types-BMzopS3H.d.ts:279:5 - (ae-forgotten-export) The symbol "WorkflowWorkbenchHumanTasks" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

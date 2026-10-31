@@ -1,7 +1,7 @@
 import { Badge, Button } from "@moritzbrantner/ui";
 import { SearchField } from "@moritzbrantner/ui/data";
 
-import type { WorkflowWorkbenchController } from "../react";
+import type { WorkflowWorkbenchController } from "./workbench-types";
 import { WorkflowWorkbenchInvalidPaletteTemplate } from "./invalid-palette-template";
 import type { WorkflowWorkbenchPaletteCategoryGroup } from "./palette-model";
 
