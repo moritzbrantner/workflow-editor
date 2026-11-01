@@ -1,0 +1,5 @@
+[install]
+# The global store links packages through realpaths from which TypeScript cannot reach this
+# project's @types/react, so radix-ui/ui declarations collapse to `any` and the declaration
+# build fails (seen in the git-install `prepare` build). Keep a project-local dependency graph.
+globalStore = false
