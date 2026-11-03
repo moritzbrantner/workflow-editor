@@ -81,6 +81,7 @@
     "@types/react-dom": "19.3.0",
     "@vitest/coverage-v8": "4.1.12",
     "jsdom": "26.1.0",
+    "mobile-analysis": "git+https://github.com/moritzbrantner/mobile-analysis.git#fb2c1c6e8f422f4ac2c4ba7c2fac1ae00473896d",
     "oxfmt": "0.75.0",
     "oxlint": "1.90.0",
     "react": "19.3.1",
@@ -90,7 +91,8 @@
     "tsd": "0.33.0",
     "tsup": "8.5.1",
     "vite": "8.3.5",
-    "vitest": "4.1.12"
+    "vitest": "4.1.12",
+    "xstate": "5.33.3"
   },
   "tsd": {
     "directory": "test-d",
@@ -139,6 +141,7 @@
   },
   "trustedDependencies": [
     "@moenarch/editor-core",
-    "@moritzbrantner/graph-editor"
+    "@moritzbrantner/graph-editor",
+    "mobile-analysis"
   ]
 }
