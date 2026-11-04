@@ -299,6 +299,7 @@ export {
   type WorkflowWorkbenchPanelBehavior,
   type WorkflowWorkbenchPanelPlacement,
   type WorkflowWorkbenchPanelState,
+  type WorkflowWorkbenchToolbarOverflow,
   type WorkflowWorkbenchPaletteItem,
   type WorkflowWorkbenchHistoryControls,
   type WorkflowWorkbenchProps,

@@ -19,7 +19,7 @@ async function storedEntry(page: Page) {
 async function openInputs(page: Page) {
   const inputs = page.getByRole("region", { name: "Inputs" });
   if (!(await inputs.isVisible())) {
-    await page.getByRole("button", { name: "Expand info panel" }).click();
+    await page.getByRole("button", { name: "Show Inspector" }).click();
   }
   await expect(inputs).toBeVisible();
   return inputs;

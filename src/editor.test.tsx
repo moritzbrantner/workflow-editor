@@ -342,7 +342,7 @@ describe("@moritzbrantner/workflow-editor editor shell", () => {
     );
     // Let the stored library load first; edits before that would be replaced by it.
     await waitFor(() => expect(saveLibrary).toHaveBeenCalled());
-    fireEvent.click(screen.getByRole("button", { name: "Expand info panel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show Inspector" }));
     const run = screen.getByRole("button", { name: "Run with these inputs" }) as HTMLButtonElement;
     expect(run.disabled).toBe(true);
     fireEvent.change(screen.getByLabelText("Input Region"), { target: { value: '"eu"' } });

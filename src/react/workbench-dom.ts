@@ -1,7 +1,7 @@
 import type { WorkflowEditorPoint } from "./workbench-types";
 
 const workflowWorkbenchOverlayInteractionSelector =
-  "[data-slot='workflow-palette-overlay'], [data-slot='workflow-inspector-overlay'], [data-slot='workflow-node-rename-control'], [data-slot='workflow-json-primitive-node-control'], [data-slot='workflow-object-constructor-node-control'], [data-slot='workflow-port-connection-menu'], [data-slot='select-content'], [data-slot='dropdown-menu-content']";
+  "[data-slot='workflow-palette-overlay'], [data-workflow-pane='inspector'], [data-slot='workflow-node-rename-control'], [data-slot='workflow-json-primitive-node-control'], [data-slot='workflow-object-constructor-node-control'], [data-slot='workflow-port-connection-menu'], [data-slot='select-content'], [data-slot='dropdown-menu-content']";
 
 export function isWorkflowWorkbenchOverlayInteractionTarget(target: EventTarget | null) {
   return target instanceof Element && !!target.closest(workflowWorkbenchOverlayInteractionSelector);

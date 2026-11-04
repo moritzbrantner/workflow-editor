@@ -391,9 +391,10 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
   });
 
   test("hides visible input and output headers in the workflow workbench", () => {
-    render(<WorkflowWorkbench document={document} />);
+    const { container } = render(<WorkflowWorkbench document={document} />);
+    const canvas = within(container.querySelector<HTMLElement>('[data-slot="workbench-canvas"]')!);
 
-    for (const header of [...screen.getAllByText("Inputs"), ...screen.getAllByText("Outputs")]) {
+    for (const header of [...canvas.getAllByText("Inputs"), ...canvas.getAllByText("Outputs")]) {
       expect(getComputedStyle(header).display).toBe("none");
     }
   });
@@ -1390,7 +1391,9 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
       />,
     );
 
-    const shared = screen.getAllByText("Shared settings (2 nodes)")[0]!.closest("aside")!;
+    const shared = screen
+      .getAllByText("Shared settings (2 nodes)")[0]!
+      .closest<HTMLElement>('[data-slot="editor-inspector"]')!;
     expect(shared.textContent).toContain("1 field has mixed values");
     fireEvent.click(within(shared).getByRole("button", { name: "Swatch red" }));
     fireEvent.click(within(shared).getByRole("button", { name: "Apply" }));
@@ -1442,8 +1445,8 @@ describe("@moritzbrantner/workflow-editor React workbench", () => {
     const { rerender } = render(
       <WorkflowWorkbench document={document} onDocumentChange={handleChange} />,
     );
-    // With nothing selected, the info panel opens on document settings.
-    fireEvent.click(screen.getAllByRole("button", { name: "Expand info panel" })[0]!);
+    // With nothing selected, the inspector pane opens on document settings.
+    fireEvent.click(screen.getAllByRole("button", { name: "Show Inspector" })[0]!);
     expect(screen.getAllByText(/Activation unavailable/u).length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getAllByRole("button", { name: "Add trigger" })[0]!);

@@ -84,6 +84,6 @@ test("passes Axe with the mobile inspector open", async ({ page }, testInfo) => 
     .first()
     .evaluate((element) => (element as HTMLElement).click());
   await dock.getByRole("button", { name: "Info", exact: true }).click();
-  await expect(page.locator('[data-slot="workflow-inspector-overlay"]')).toBeVisible();
+  await expect(page.locator('[data-workflow-pane="inspector"]')).toBeVisible();
   await expectNoAxeViolations(page);
 });

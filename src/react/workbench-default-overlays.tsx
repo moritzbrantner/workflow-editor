@@ -8,6 +8,9 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuTrigger,
+  EditorPane,
+  EditorPaneContent,
+  EditorPaneHeader,
   cn,
 } from "@moritzbrantner/ui";
 import { SearchField } from "@moritzbrantner/ui/data";
@@ -25,7 +28,10 @@ import type {
   WorkflowWorkbenchPaletteItem,
 } from "./palette-model";
 import { toUiWorkflowNodeTemplate } from "./workbench-model";
-import type { WorkflowWorkbenchOverlayState } from "./workbench-overlay-state";
+import {
+  workflowWorkbenchInspectorDefaultSize,
+  type WorkflowWorkbenchOverlayState,
+} from "./workbench-overlay-state";
 import type { WorkflowWorkbenchController, WorkflowWorkbenchProps } from "./workbench-types";
 import { WorkflowNode } from "./workflow-node";
 
@@ -216,8 +222,14 @@ export function WorkflowWorkbenchPaletteOverlay<
   );
 }
 
-/** The draggable info panel `WorkflowWorkbench` renders unless the host hides or replaces it. */
-export function WorkflowWorkbenchInspectorOverlay<
+/** Accessible name of the workbench inspector pane, used by its splitter, rail and toggles. */
+export const workflowWorkbenchInspectorLabel = "Inspector";
+
+/**
+ * The inspector pane `WorkflowWorkbench` renders unless the host hides or replaces it: a docked,
+ * resizable and collapsible `EditorPane` that becomes an overlay drawer on narrow containers.
+ */
+export function WorkflowWorkbenchInspectorPane<
   TNodeData extends Record<string, unknown>,
   TEdgeData extends Record<string, unknown>,
   TTemplateData,
@@ -225,12 +237,14 @@ export function WorkflowWorkbenchInspectorOverlay<
   controller,
   execution,
   humanTasks,
+  id,
   panel,
   renderExecutionDetails,
 }: {
   controller: WorkflowWorkbenchController<TNodeData, TEdgeData, TTemplateData>;
   execution: WorkflowExecutionSnapshot | null | undefined;
   humanTasks: WorkflowWorkbenchHumanTasks | undefined;
+  id: string;
   panel: WorkflowWorkbenchOverlayState["inspector"];
   renderExecutionDetails: WorkflowWorkbenchProps<
     TNodeData,
@@ -245,74 +259,53 @@ export function WorkflowWorkbenchInspectorOverlay<
   } = controller;
 
   return (
-    <div
-      data-slot="workflow-inspector-overlay"
-      ref={panel.ref}
-      className={cn(
-        "absolute z-[20000] flex max-h-[calc(100%-1.5rem)] max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-md border border-border/70 bg-card/95 text-sm shadow-md supports-backdrop-filter:backdrop-blur-xl",
-        panel.collapsed ? "w-44 p-2" : "w-[min(20rem,calc(100%-1.5rem))] p-3",
-      )}
-      style={panel.style}
+    <EditorPane
+      id={id}
+      side="end"
+      label={workflowWorkbenchInspectorLabel}
+      data-workflow-pane="inspector"
+      size={panel.size}
+      defaultSize={workflowWorkbenchInspectorDefaultSize}
+      minSize={260}
+      maxSize={560}
+      onSizeChange={panel.setSize}
+      onResizeEnd={panel.commitSize}
+      collapsed={panel.collapsed}
+      onCollapsedChange={panel.setCollapsed}
     >
-      <div className="flex min-h-0 flex-col gap-3">
-        <div
-          data-slot="workflow-inspector-header"
-          className={cn(
-            "flex flex-none touch-none select-none items-center justify-between gap-3 rounded-sm",
-            panel.dragging ? "cursor-grabbing" : "cursor-grab",
-          )}
-          onPointerCancel={panel.completeDrag}
-          onPointerDown={panel.startDrag}
-          onPointerMove={panel.updateDrag}
-          onPointerUp={panel.completeDrag}
-        >
-          <div className="min-w-0 truncate text-sm font-medium">Info</div>
-          <Button
-            type="button"
-            size="icon-sm"
-            variant="ghost"
-            aria-label={panel.collapsed ? "Expand info panel" : "Minimize info panel"}
-            aria-pressed={panel.collapsed}
-            onClick={panel.toggleCollapsed}
-          >
-            {panel.collapsed ? (
-              <Maximize2Icon className="size-3.5" aria-hidden="true" />
-            ) : (
-              <Minimize2Icon className="size-3.5" aria-hidden="true" />
-            )}
-          </Button>
-        </div>
-        {panel.collapsed ? null : (
-          <div className="min-h-0 overflow-y-auto">
-            {selectedNode
-              ? humanTasks?.pending
-                  .filter((task) => task.nodeId === selectedNode.id)
-                  .map((task) => (
-                    <WorkflowPendingHumanTaskPanel
-                      key={`${task.runId}:${task.taskId}`}
-                      task={task}
-                      respond={humanTasks.respond}
-                      readOnly={false}
-                      typeDeclarations={controller.document.typeDeclarations}
-                      typeDefinitions={typeDefinitions}
-                    />
-                  ))
-              : null}
-            {execution && selectedNode ? (
-              <WorkflowExecutionDetails
-                execution={execution}
-                node={selectedNode}
-                renderExecutionDetails={renderExecutionDetails}
-              />
-            ) : null}
-            {renderInspector ? (
-              renderInspector(inspectorContext)
-            ) : (
-              <DefaultWorkflowInspector context={inspectorContext} />
-            )}
-          </div>
+      <EditorPaneHeader title={workflowWorkbenchInspectorLabel} />
+      <EditorPaneContent
+        data-slot="workflow-inspector"
+        // The inspector's sticky Apply/Reset footer sits flush with the pane's bottom edge.
+        className="grid content-start gap-3 overscroll-contain pb-0"
+      >
+        {selectedNode
+          ? humanTasks?.pending
+              .filter((task) => task.nodeId === selectedNode.id)
+              .map((task) => (
+                <WorkflowPendingHumanTaskPanel
+                  key={`${task.runId}:${task.taskId}`}
+                  task={task}
+                  respond={humanTasks.respond}
+                  readOnly={false}
+                  typeDeclarations={controller.document.typeDeclarations}
+                  typeDefinitions={typeDefinitions}
+                />
+              ))
+          : null}
+        {execution && selectedNode ? (
+          <WorkflowExecutionDetails
+            execution={execution}
+            node={selectedNode}
+            renderExecutionDetails={renderExecutionDetails}
+          />
+        ) : null}
+        {renderInspector ? (
+          renderInspector(inspectorContext)
+        ) : (
+          <DefaultWorkflowInspector context={inspectorContext} />
         )}
-      </div>
-    </div>
+      </EditorPaneContent>
+    </EditorPane>
   );
 }

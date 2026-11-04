@@ -13,7 +13,13 @@ export type WorkflowWorkbenchOverlayPosition = { x: number; y: number } | null;
 export type WorkflowWorkbenchPanelState = {
   minimized?: boolean;
   placement?: WorkflowWorkbenchPanelPlacement;
+  /**
+   * Free overlay position. Only the node palette is a positioned overlay; the inspector is a docked
+   * pane and ignores it.
+   */
   position?: WorkflowWorkbenchOverlayPosition;
+  /** Docked inspector pane width in pixels; reported once a resize ends. Ignored by the palette. */
+  size?: number;
 };
 
 export type WorkflowWorkbenchPanelBehavior = {

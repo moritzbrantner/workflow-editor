@@ -72,7 +72,7 @@ async function boundaries(page: Page) {
   await page.keyboard.press("Escape");
   const region = page.getByRole("region", { name: "Iteration boundaries" });
   if (!(await region.isVisible())) {
-    await page.getByRole("button", { name: "Expand info panel" }).click();
+    await page.getByRole("button", { name: "Show Inspector" }).click();
   }
   await expect(region).toBeVisible();
   return region;

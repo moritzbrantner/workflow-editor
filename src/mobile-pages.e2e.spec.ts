@@ -37,7 +37,7 @@ test("keeps the Pages workbench interactive on a phone", async ({ page }, testIn
   await expect(infoButton).toBeEnabled();
   await infoButton.click();
 
-  const inspector = page.locator('[data-slot="workflow-inspector-overlay"]');
+  const inspector = page.locator('[data-workflow-pane="inspector"]');
   await expect(inspector).toBeVisible();
   const labelInput = inspector.getByLabel("Label", { exact: true });
   await labelInput.fill("Mobile webhook");
