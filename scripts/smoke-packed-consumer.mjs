@@ -5,15 +5,19 @@ import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 
 const rootDir = path.resolve(fileURLToPath(new URL("../", import.meta.url)));
-// The consumer installs the same graph-editor commit pin and ui range as this package.
+// The consumer installs the same graph-editor and ui pins as this package.
 const rootDependencies = JSON.parse(
   await readFile(path.join(rootDir, "package.json"), "utf8"),
 ).dependencies;
 // Bun skips `prepare` for transitive git deps, so pin editor-core directly when this package does.
 const editorCoreDependency = rootDependencies["@moenarch/editor-core"];
+// A git-pinned ui builds its `dist` in `prepare`, which bun only runs for trusted dependencies.
+const uiDependency = rootDependencies["@moritzbrantner/ui"];
+const uiIsGitPinned = typeof uiDependency === "string" && uiDependency.startsWith("git+");
 const trustedDependencies = [
   "@moritzbrantner/graph-editor",
   ...(editorCoreDependency ? ["@moenarch/editor-core"] : []),
+  ...(uiIsGitPinned ? ["@moritzbrantner/ui"] : []),
 ];
 const tempDir = await mkdtemp(path.join(tmpdir(), "workflow-editor-consumer-"));
 const keepTemp = process.env.WORKFLOW_EDITOR_KEEP_SMOKE_TEMP === "1";
@@ -56,6 +60,8 @@ try {
         },
         devDependencies: {},
         trustedDependencies,
+        // Keep graph-editor's transitive ui on the same pin as the direct dependency.
+        ...(uiIsGitPinned ? { overrides: { "@moritzbrantner/ui": uiDependency } } : {}),
       },
       null,
       2,
