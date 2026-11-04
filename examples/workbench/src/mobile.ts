@@ -16,20 +16,33 @@ function queueReconcile() {
   });
 }
 
-function findPanelToggle(layout: HTMLElement, panel: "nodes" | "info") {
-  const labels =
-    panel === "nodes"
-      ? ["Expand node palette", "Minimize node palette"]
-      : ["Expand info panel", "Minimize info panel"];
-
-  return labels
-    .map((label) => layout.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`))
-    .find((button): button is HTMLButtonElement => Boolean(button));
+// The inspector is the workbench's shared editor pane: on a phone it is an overlay drawer that
+// the dock opens and closes through the pane's own show/hide controls.
+function findInspectorPane(layout: HTMLElement) {
+  return layout.querySelector<HTMLElement>('[data-workflow-pane="inspector"]');
 }
 
-function expandPanel(layout: HTMLElement, panel: "nodes" | "info") {
-  const expandLabel = panel === "nodes" ? "Expand node palette" : "Expand info panel";
-  const button = layout.querySelector<HTMLButtonElement>(`button[aria-label="${expandLabel}"]`);
+function inspectorPaneOpen(layout: HTMLElement) {
+  return findInspectorPane(layout)?.dataset.state === "open";
+}
+
+function setInspectorPaneOpen(layout: HTMLElement, open: boolean) {
+  const pane = findInspectorPane(layout);
+  if (!pane || inspectorPaneOpen(layout) === open) {
+    return;
+  }
+  const label = pane.getAttribute("aria-label") ?? "Inspector";
+  layout
+    .querySelector<HTMLButtonElement>(
+      `button[aria-controls="${pane.id}"][aria-label="${open ? "Show" : "Hide"} ${label}"]`,
+    )
+    ?.click();
+}
+
+function expandPalette(layout: HTMLElement) {
+  const button = layout.querySelector<HTMLButtonElement>(
+    'button[aria-label="Expand node palette"]',
+  );
 
   if (button && !button.disabled) {
     button.click();
@@ -41,10 +54,12 @@ function setSheet(layout: HTMLElement, sheet: Exclude<MobileSheet, "none">) {
   const next: MobileSheet = current === sheet ? "none" : sheet;
 
   layout.dataset.mobileSheet = next;
-  if (next === "nodes" || next === "info") {
-    expandPanel(layout, next);
+  if (next === "nodes") {
+    expandPalette(layout);
   }
-  syncDock(layout);
+  setInspectorPaneOpen(layout, next === "info");
+  // The drawer renders on the next commit; the observer reconciles the dock with it afterwards.
+  syncDock(layout, false);
 }
 
 function createDockButton(label: string, sheet: Exclude<MobileSheet, "none">) {
@@ -78,8 +93,18 @@ function installDock(layout: HTMLElement) {
   layout.append(dock);
 }
 
-function syncDock(layout: HTMLElement) {
-  const sheet = (layout.dataset.mobileSheet ?? "none") as MobileSheet;
+function syncDock(layout: HTMLElement, followDrawer = true) {
+  // The drawer also opens from its rail and closes on Escape, scrim or focus leaving it.
+  const current = (layout.dataset.mobileSheet ?? "none") as MobileSheet;
+  const drawerOpen = inspectorPaneOpen(layout);
+  const sheet: MobileSheet = !followDrawer
+    ? current
+    : drawerOpen
+      ? "info"
+      : current === "info"
+        ? "none"
+        : current;
+  layout.dataset.mobileSheet = sheet;
   const buttons = layout.querySelectorAll<HTMLButtonElement>("[data-mobile-workbench-tool]");
 
   for (const button of buttons) {
@@ -87,14 +112,13 @@ function syncDock(layout: HTMLElement) {
   }
 
   const infoButton = layout.querySelector<HTMLButtonElement>('[data-mobile-workbench-tool="info"]');
-  const infoToggle = findPanelToggle(layout, "info");
   if (infoButton) {
-    infoButton.disabled = !infoToggle || infoToggle.disabled;
+    infoButton.disabled = !findInspectorPane(layout);
   }
 }
 
 const sheetSurfaceSelector =
-  "[data-mobile-workbench-dock], [data-slot='workflow-palette-overlay'], [data-slot='workflow-inspector-overlay'], [data-slot='workbench-toolbar']";
+  "[data-mobile-workbench-dock], [data-slot='workflow-palette-overlay'], [data-workflow-pane='inspector'], [data-slot='workbench-toolbar']";
 
 // Listen on window in the capture phase: the editor canvas stops pointer events in React
 // capture handlers at the root container, before a listener on the layout would run.
@@ -109,7 +133,8 @@ function dismissSheetOnCanvasPointerDown(event: PointerEvent) {
   }
 
   layout.dataset.mobileSheet = "none";
-  syncDock(layout);
+  setInspectorPaneOpen(layout, false);
+  syncDock(layout, false);
 }
 
 function installMobileWorkbench(layout: HTMLElement) {
@@ -145,7 +170,7 @@ function reconcileMobileWorkbench() {
 const observer = new MutationObserver(queueReconcile);
 observer.observe(document.documentElement, {
   attributes: true,
-  attributeFilter: ["aria-label", "disabled"],
+  attributeFilter: ["aria-label", "aria-expanded", "disabled"],
   childList: true,
   subtree: true,
 });

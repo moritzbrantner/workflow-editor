@@ -1,16 +1,20 @@
 "use client";
 
 import * as React from "react";
-import { CheckIcon, ChevronDownIcon, RotateCcwIcon } from "lucide-react";
+import { CheckIcon, RotateCcwIcon } from "lucide-react";
 
 import {
   Badge,
   Button,
   Checkbox,
+  EditorInspector,
+  EditorInspectorContent,
+  EditorInspectorFooter,
+  EditorInspectorHeader,
   Input,
-  ScrollArea,
+  PropertyRow,
+  PropertySection,
   SelectDropdown,
-  Separator,
   Slider,
   Textarea,
   cn,
@@ -59,7 +63,7 @@ type InspectorPanelSectionData = {
   fields: InspectorFieldDefinition[];
 };
 
-type InspectorPanelProps = Omit<React.ComponentProps<"aside">, "onChange"> & {
+type InspectorPanelProps = Omit<React.ComponentProps<"section">, "onChange" | "title"> & {
   title?: React.ReactNode;
   description?: React.ReactNode;
   sections?: InspectorPanelSectionData[];
@@ -73,13 +77,13 @@ type InspectorPanelProps = Omit<React.ComponentProps<"aside">, "onChange"> & {
   onReset?: () => void;
 };
 
-export type InspectorPanelHeaderProps = React.ComponentProps<"div"> & {
+export type InspectorPanelHeaderProps = Omit<React.ComponentProps<"header">, "title"> & {
   title?: React.ReactNode;
   description?: React.ReactNode;
   dirty?: boolean;
 };
 
-export type InspectorPanelSectionProps = React.ComponentProps<"section"> & {
+export type InspectorPanelSectionProps = Omit<React.ComponentProps<"section">, "title"> & {
   title: React.ReactNode;
   description?: React.ReactNode;
   defaultOpen?: boolean;
@@ -95,7 +99,7 @@ export type InspectorFieldProps = React.ComponentProps<"div"> & {
 
 export type InspectorFieldGroupProps = React.ComponentProps<"div">;
 
-export type InspectorActionsProps = React.ComponentProps<"div"> & {
+export type InspectorActionsProps = React.ComponentProps<"footer"> & {
   dirty?: boolean;
   readOnly?: boolean;
   onApply?: () => void;
@@ -163,70 +167,53 @@ function InspectorPanel({
   };
 
   return (
-    <aside
-      data-slot="inspector-panel"
+    <EditorInspector
       data-read-only={readOnly ? "true" : undefined}
-      className={cn(
-        "flex h-full min-h-[32rem] flex-col rounded-md border bg-card text-card-foreground",
-        className,
-      )}
+      className={cn("h-auto rounded-md border border-border/70", className)}
       {...props}
     >
       <InspectorPanelHeader title={title} description={description} dirty={dirty} />
-      <ScrollArea className="min-h-0 flex-1">
-        <div className="space-y-3 p-3">
-          {normalizedSections.map((section) => (
-            <InspectorPanelSection
-              key={section.id}
-              title={section.title}
-              description={section.description}
-              defaultOpen={section.defaultOpen ?? true}
-            >
-              <InspectorFieldGroup>
-                {section.fields.map((field) => (
-                  <InspectorField
-                    key={field.id}
-                    field={field}
-                    value={currentValues[field.id]}
-                    readOnly={readOnly}
-                    validationMessage={validationMessages?.[field.id]}
-                    onValueChange={(value) => commitValue(field.id, value)}
-                  />
-                ))}
-              </InspectorFieldGroup>
-            </InspectorPanelSection>
-          ))}
-        </div>
-      </ScrollArea>
+      <EditorInspectorContent className="overflow-visible py-0">
+        {normalizedSections.map((section) => (
+          <InspectorPanelSection
+            key={section.id}
+            title={section.title}
+            description={section.description}
+            defaultOpen={section.defaultOpen ?? true}
+          >
+            <InspectorFieldGroup>
+              {section.fields.map((field) => (
+                <InspectorField
+                  key={field.id}
+                  field={field}
+                  value={currentValues[field.id]}
+                  readOnly={readOnly}
+                  validationMessage={validationMessages?.[field.id]}
+                  onValueChange={(value) => commitValue(field.id, value)}
+                />
+              ))}
+            </InspectorFieldGroup>
+          </InspectorPanelSection>
+        ))}
+      </EditorInspectorContent>
       <InspectorActions
         dirty={dirty}
         readOnly={readOnly}
         onApply={() => onApply?.(currentValues)}
         onReset={resetValues}
       />
-    </aside>
+    </EditorInspector>
   );
 }
 
-function InspectorPanelHeader({
-  title,
-  description,
-  dirty,
-  className,
-  ...props
-}: InspectorPanelHeaderProps) {
+function InspectorPanelHeader({ title, description, dirty, ...props }: InspectorPanelHeaderProps) {
   return (
-    <div
-      data-slot="inspector-panel-header"
-      className={cn("space-y-1 border-b p-3", className)}
+    <EditorInspectorHeader
+      title={title}
+      description={description}
+      actions={dirty ? <Badge variant="secondary">Unsaved</Badge> : undefined}
       {...props}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold">{title}</h2>
-        {dirty ? <Badge variant="secondary">Unsaved</Badge> : null}
-      </div>
-      {description ? <p className="text-xs text-muted-foreground">{description}</p> : null}
-    </div>
+    />
   );
 }
 
@@ -235,45 +222,24 @@ function InspectorPanelSection({
   description,
   defaultOpen = true,
   children,
-  className,
   ...props
 }: InspectorPanelSectionProps) {
-  const [open, setOpen] = React.useState(defaultOpen);
-
   return (
-    <section
-      data-slot="inspector-panel-section"
-      data-open={open ? "true" : undefined}
-      className={cn("rounded-md border bg-background", className)}
+    <PropertySection
+      title={title}
+      description={description}
+      collapsible
+      defaultOpen={defaultOpen}
       {...props}
     >
-      <button
-        type="button"
-        className="flex w-full items-center justify-between gap-2 p-3 text-left outline-none hover:bg-muted/40 focus-visible:ring-[3px] focus-visible:ring-ring/50"
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
-      >
-        <span>
-          <span className="block text-sm font-medium">{title}</span>
-          {description ? (
-            <span className="block text-xs text-muted-foreground">{description}</span>
-          ) : null}
-        </span>
-        <ChevronDownIcon className={cn("size-4 transition-transform", open && "rotate-180")} />
-      </button>
-      {open ? (
-        <>
-          <Separator />
-          <div className="p-3">{children}</div>
-        </>
-      ) : null}
-    </section>
+      {children}
+    </PropertySection>
   );
 }
 
 function InspectorFieldGroup({ className, ...props }: InspectorFieldGroupProps) {
   return (
-    <div data-slot="inspector-field-group" className={cn("space-y-3", className)} {...props} />
+    <div data-slot="inspector-field-group" className={cn("grid gap-3", className)} {...props} />
   );
 }
 
@@ -283,35 +249,36 @@ function InspectorField({
   readOnly,
   validationMessage,
   onValueChange,
-  className,
   ...props
 }: InspectorFieldProps) {
   const disabled = readOnly || field.readOnly;
+  const id = `inspector-${field.id}`;
+  const descriptionId = field.description ? `${id}-description` : undefined;
+  const validationId = validationMessage ? `${id}-validation` : undefined;
+  const describedBy = [descriptionId, validationId].filter(Boolean).join(" ") || undefined;
 
   return (
-    <div data-slot="inspector-field" className={cn("space-y-1.5", className)} {...props}>
-      <label
-        className="block text-xs font-medium text-muted-foreground"
-        htmlFor={`inspector-${field.id}`}
-      >
-        {field.label}
-      </label>
+    <PropertyRow
+      data-field-id={field.id}
+      label={field.label}
+      // Custom controls name themselves; the label still points at a control using the field id.
+      htmlFor={id}
+      description={field.description}
+      descriptionId={descriptionId}
+      validationMessage={validationMessage}
+      validationId={validationId}
+      orientation="vertical"
+      {...props}
+    >
       <InspectorFieldEditor
         field={field}
         value={value}
         disabled={disabled}
-        describedBy={validationMessage ? `inspector-${field.id}-validation` : undefined}
+        describedBy={describedBy}
+        invalid={Boolean(validationMessage)}
         onValueChange={onValueChange}
       />
-      {field.description ? (
-        <div className="text-xs text-muted-foreground">{field.description}</div>
-      ) : null}
-      {validationMessage ? (
-        <div id={`inspector-${field.id}-validation`} className="text-xs text-destructive">
-          {validationMessage}
-        </div>
-      ) : null}
-    </div>
+    </PropertyRow>
   );
 }
 
@@ -320,15 +287,21 @@ function InspectorFieldEditor({
   value,
   disabled,
   describedBy,
+  invalid,
   onValueChange,
 }: {
   field: InspectorFieldDefinition;
   value?: InspectorFieldValue;
   disabled?: boolean;
   describedBy?: string;
+  invalid?: boolean;
   onValueChange?: (value: InspectorFieldValue) => void;
 }) {
   const id = `inspector-${field.id}`;
+  const described = {
+    "aria-describedby": describedBy,
+    "aria-invalid": invalid ? true : undefined,
+  } as const;
 
   if (field.type === "custom") {
     return <>{field.render?.(value, (nextValue) => !disabled && onValueChange?.(nextValue))}</>;
@@ -339,6 +312,7 @@ function InspectorFieldEditor({
       <label className="flex h-8 items-center gap-2 rounded-md border px-2 text-sm">
         <Checkbox
           id={id}
+          {...described}
           checked={Boolean(value)}
           disabled={disabled}
           onCheckedChange={(checked) => onValueChange?.(checked === true)}
@@ -353,6 +327,7 @@ function InspectorFieldEditor({
       <SelectDropdown
         id={id}
         aria-label={field.label}
+        {...described}
         value={String(value ?? "")}
         disabled={disabled}
         onValueChange={(nextValue) => onValueChange?.(nextValue)}
@@ -372,6 +347,7 @@ function InspectorFieldEditor({
         <Slider
           id={id}
           aria-label={field.label}
+          {...described}
           value={[Number.isFinite(numericValue) ? numericValue : (field.min ?? 0)]}
           min={field.min ?? 0}
           max={field.max ?? 100}
@@ -400,6 +376,7 @@ function InspectorFieldEditor({
         <Input
           id={id}
           aria-label={field.label}
+          {...described}
           type="color"
           value={String(value || "#000000")}
           disabled={disabled}
@@ -423,6 +400,7 @@ function InspectorFieldEditor({
       <Textarea
         id={id}
         aria-label={field.label}
+        {...described}
         value={String(value ?? "")}
         disabled={disabled}
         placeholder={field.placeholder}
@@ -437,6 +415,7 @@ function InspectorFieldEditor({
       <Textarea
         id={id}
         aria-label={field.label}
+        {...described}
         value={String(value ?? "")}
         disabled={disabled}
         placeholder={field.placeholder ?? "rounded-md border-border/60"}
@@ -450,7 +429,7 @@ function InspectorFieldEditor({
     <Input
       id={id}
       aria-label={field.label}
-      aria-describedby={describedBy}
+      {...described}
       type={field.type === "number" ? "number" : "text"}
       value={String(value ?? "")}
       disabled={disabled}
@@ -476,11 +455,7 @@ function InspectorActions({
   ...props
 }: InspectorActionsProps) {
   return (
-    <div
-      data-slot="inspector-actions"
-      className={cn("flex items-center justify-end gap-2 border-t p-3", className)}
-      {...props}
-    >
+    <EditorInspectorFooter className={cn("sticky bottom-0 z-10 bg-card", className)} {...props}>
       <Button
         type="button"
         variant="outline"
@@ -495,7 +470,7 @@ function InspectorActions({
         <CheckIcon />
         Apply
       </Button>
-    </div>
+    </EditorInspectorFooter>
   );
 }
 

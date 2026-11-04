@@ -127,6 +127,7 @@ describe("validation policy presets", () => {
     ]);
   });
 
+  // A cold import of the root entrypoint (React and ui chrome) can exceed the default 5s.
   it("exposes the policy API from both the core and the root entrypoints", async () => {
     // Imported lazily so a root-entrypoint environment problem cannot mask the headless tests.
     const index = await import("./index");
@@ -136,7 +137,7 @@ describe("validation policy presets", () => {
     expect(index.validateWorkflowEditorDocument).toBe(core.validateWorkflowEditorDocument);
     expect(index.assertWorkflowEditorDocument).toBe(core.assertWorkflowEditorDocument);
     expect(typeof core.repairWorkflowEditorDocument).toBe("function");
-  });
+  }, 20_000);
 });
 
 describe("normalizeWorkflowEditorDocument under the default strict policy", () => {

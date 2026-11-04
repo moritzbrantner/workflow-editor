@@ -87,18 +87,25 @@
     overscroll-behavior: contain;
   }
 
+  /* The actions sheet lets the shared editor toolbar wrap its command groups. */
   [data-slot="workbench-layout"][data-mobile-workbench="true"][data-mobile-sheet="actions"]
     > [data-slot="workbench-toolbar"]
-    > div,
-  [data-slot="workbench-layout"][data-mobile-workbench="true"][data-mobile-sheet="actions"]
-    > [data-slot="workbench-toolbar"]
-    > div
-    > div {
-    min-width: 0 !important;
-    flex: 1 1 100%;
+    > [data-slot="editor-toolbar"] {
     flex-wrap: wrap !important;
-    justify-content: flex-start !important;
-    white-space: normal !important;
+    overflow: visible !important;
+    border: 0 !important;
+    background: transparent !important;
+    padding: 0 !important;
+  }
+
+  [data-slot="workbench-layout"][data-mobile-workbench="true"][data-mobile-sheet="actions"]
+    [data-slot="editor-toolbar-group"],
+  [data-slot="workbench-layout"][data-mobile-workbench="true"][data-mobile-sheet="actions"]
+    [data-slot="workbench-toolbar-host-actions"] {
+    max-width: 100%;
+    flex-shrink: 1 !important;
+    flex-wrap: wrap !important;
+    min-width: 0 !important;
   }
 
   [data-slot="workbench-layout"][data-mobile-workbench="true"][data-mobile-sheet="actions"]
@@ -109,8 +116,19 @@
     font-size: 0.8rem !important;
   }
 
+  /* Touch has no tooltips: the actions sheet names its icon commands. */
+  [data-slot="workbench-layout"][data-mobile-workbench="true"][data-mobile-sheet="actions"]
+    [data-slot="editor-toolbar-button"][aria-label] {
+    width: auto !important;
+  }
+
+  [data-slot="workbench-layout"][data-mobile-workbench="true"][data-mobile-sheet="actions"]
+    [data-slot="editor-toolbar-button"][aria-label]::after {
+    content: attr(aria-label);
+  }
+
   [data-slot="workbench-layout"][data-mobile-workbench="true"]
-    > [data-slot="workbench-canvas"]
+    [data-slot="workbench-canvas"]
     > div {
     padding: 0.25rem !important;
     padding-bottom: 4.5rem !important;
@@ -122,9 +140,7 @@
   }
 
   [data-slot="workbench-layout"][data-mobile-workbench="true"]
-    [data-slot="workflow-palette-overlay"],
-  [data-slot="workbench-layout"][data-mobile-workbench="true"]
-    [data-slot="workflow-inspector-overlay"] {
+    [data-slot="workflow-palette-overlay"] {
     position: absolute !important;
     z-index: 20050 !important;
     top: auto !important;
@@ -142,16 +158,12 @@
   }
 
   [data-slot="workbench-layout"][data-mobile-workbench="true"][data-mobile-sheet="nodes"]
-    [data-slot="workflow-palette-overlay"],
-  [data-slot="workbench-layout"][data-mobile-workbench="true"][data-mobile-sheet="info"]
-    [data-slot="workflow-inspector-overlay"] {
+    [data-slot="workflow-palette-overlay"] {
     display: flex !important;
   }
 
   [data-slot="workbench-layout"][data-mobile-workbench="true"]
-    [data-slot="workflow-palette-header"],
-  [data-slot="workbench-layout"][data-mobile-workbench="true"]
-    [data-slot="workflow-inspector-header"] {
+    [data-slot="workflow-palette-header"] {
     min-height: 2.75rem;
     cursor: default !important;
   }
@@ -160,6 +172,12 @@
     [data-slot="workflow-palette-header"]
     button[aria-label="Pin node palette"] {
     display: none;
+  }
+
+  /* Keep the inspector drawer's content and Apply/Reset footer clear of the dock. */
+  [data-slot="workbench-layout"][data-mobile-workbench="true"]
+    [data-workflow-pane="inspector"][data-presentation="overlay"] {
+    padding-bottom: calc(4rem + env(safe-area-inset-bottom));
   }
 
   [data-mobile-workbench-dock] {

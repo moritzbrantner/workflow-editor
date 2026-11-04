@@ -51,6 +51,14 @@ async function selectNode(page: Page, label: string) {
     .evaluate(clickElement);
 }
 
+// Narrow workbenches present the inspector as a closed drawer; open it from its rail.
+async function showInspector(page: Page) {
+  const show = page.getByRole("button", { name: "Show Inspector", exact: true });
+  if (await show.isVisible()) {
+    await show.click();
+  }
+}
+
 async function addNodeToSelection(page: Page, label: string) {
   await page
     .locator(
@@ -282,7 +290,13 @@ test.describe("WorkflowWorkbench desktop", () => {
     const draggedPaletteBox = await palette.boundingBox();
     expect(draggedPaletteBox).not.toBeNull();
     expect(draggedPaletteBox!.x - expandedPaletteBox!.x).toBeGreaterThan(80);
-    expect(draggedPaletteBox!.y - expandedPaletteBox!.y).toBeGreaterThan(40);
+    // The palette moves down as far as the canvas allows (a wrapping toolbar can shorten it):
+    // the clamp keeps the canvas padding and overlay margin (12px each) below it.
+    const verticalRoom =
+      canvasBox!.y + canvasBox!.height - (expandedPaletteBox!.y + expandedPaletteBox!.height) - 24;
+    expect(draggedPaletteBox!.y - expandedPaletteBox!.y).toBeGreaterThanOrEqual(
+      Math.min(40, verticalRoom) - 1,
+    );
 
     await page.mouse.move(draggedPaletteBox!.x + 48, draggedPaletteBox!.y + 12);
     await page.mouse.down();
@@ -334,58 +348,42 @@ test.describe("WorkflowWorkbench desktop", () => {
     expect(decision?.x).toBeGreaterThan(300);
   });
 
-  test("minimizes and drags the info panel within the canvas", async ({ page }, testInfo) => {
+  test("docks, resizes and collapses the inspector pane beside the canvas", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name === "mobile-chrome", "Docked pane layout is desktop-only");
     await gotoWorkflowEditor(page, testInfo);
     await selectNode(page, "Input");
 
-    const canvasBox = await page.locator('[data-slot="workbench-canvas"]').first().boundingBox();
-    const inspector = page.locator('[data-slot="workflow-inspector-overlay"]').first();
-    const inspectorHeader = page.locator('[data-slot="workflow-inspector-header"]').first();
-    await expect(inspector).toContainText("Info");
+    const canvas = page.locator('[data-slot="workbench-canvas"]').first();
+    const inspector = page.getByRole("region", { name: "Inspector", exact: true });
+    await expect(inspector).toHaveAttribute("data-presentation", "docked");
     await expect(inspector).toContainText("Workflow node");
 
-    const expandedInspectorBox = await inspector.boundingBox();
+    // The pane sits beside the canvas instead of covering it.
+    const canvasBox = await canvas.boundingBox();
+    const inspectorBox = await inspector.boundingBox();
     expect(canvasBox).not.toBeNull();
-    expect(expandedInspectorBox).not.toBeNull();
-    expect(expandedInspectorBox!.x).toBeGreaterThanOrEqual(canvasBox!.x);
-    expect(expandedInspectorBox!.y).toBeGreaterThanOrEqual(canvasBox!.y);
-    expect(expandedInspectorBox!.x + expandedInspectorBox!.width).toBeLessThanOrEqual(
-      canvasBox!.x + canvasBox!.width,
-    );
-    expect(expandedInspectorBox!.y + expandedInspectorBox!.height).toBeLessThanOrEqual(
-      canvasBox!.y + canvasBox!.height,
-    );
+    expect(inspectorBox).not.toBeNull();
+    expect(canvasBox!.x + canvasBox!.width).toBeLessThanOrEqual(inspectorBox!.x + 1);
 
-    await page.getByRole("button", { name: "Minimize info panel", exact: true }).click();
-    await expect(
-      page.getByRole("button", { name: "Expand info panel", exact: true }),
-    ).toBeVisible();
-    await expect(inspector).toContainText("Info");
-    await expect(inspector).not.toContainText("Workflow node");
-    const minimizedInspectorBox = await inspector.boundingBox();
-    expect(minimizedInspectorBox).not.toBeNull();
-    expect(minimizedInspectorBox!.width).toBeLessThan(expandedInspectorBox!.width);
+    // The splitter resizes it from the keyboard.
+    const splitter = page.getByRole("separator", { name: /Inspector/u });
+    await splitter.focus();
+    await splitter.press("ArrowLeft");
+    await expect
+      .poll(async () => (await inspector.boundingBox())?.width ?? 0)
+      .toBeGreaterThan(inspectorBox!.width + 8);
 
-    await page.getByRole("button", { name: "Expand info panel", exact: true }).click();
+    // Collapsing keeps a rail that restores it; the canvas takes the freed space.
+    await page.getByRole("button", { name: "Hide Inspector", exact: true }).click();
+    await expect(inspector).toBeHidden();
+    await expect
+      .poll(async () => (await canvas.boundingBox())?.width ?? 0)
+      .toBeGreaterThan(canvasBox!.width + 100);
+    await page.getByRole("button", { name: "Show Inspector", exact: true }).click();
+    await expect(inspector).toBeVisible();
     await expect(inspector).toContainText("Workflow node");
-
-    const headerBox = await inspectorHeader.boundingBox();
-    expect(headerBox).not.toBeNull();
-    await page.mouse.move(headerBox!.x + 48, headerBox!.y + headerBox!.height / 2);
-    await page.mouse.down();
-    await page.mouse.move(canvasBox!.x + canvasBox!.width + 400, canvasBox!.y + 90, {
-      steps: 8,
-    });
-    await page.mouse.up();
-    const clampedInspectorBox = await inspector.boundingBox();
-    expect(clampedInspectorBox).not.toBeNull();
-    expect(clampedInspectorBox!.x + clampedInspectorBox!.width).toBeLessThanOrEqual(
-      canvasBox!.x + canvasBox!.width,
-    );
-    expect(clampedInspectorBox!.y).toBeGreaterThanOrEqual(canvasBox!.y);
-    expect(clampedInspectorBox!.y + clampedInspectorBox!.height).toBeLessThanOrEqual(
-      canvasBox!.y + canvasBox!.height,
-    );
   });
 
   test("keeps JSON primitive value controls visible while minimized", async ({
@@ -1281,6 +1279,7 @@ test.describe("WorkflowWorkbench accessibility and responsive smoke", () => {
     await expectNoAxeViolations(page);
 
     await selectNode(page, "Input");
+    await showInspector(page);
     await expect(page.getByRole("heading", { name: "Workflow node" })).toBeVisible();
     await expectNoAxeViolations(page);
   });
@@ -1456,6 +1455,7 @@ test.describe("WorkflowWorkbench accessibility and responsive smoke", () => {
     await gotoWorkflowEditor(page, testInfo);
 
     await selectEdge(page, "input-transform");
+    await showInspector(page);
     await expect(page.getByRole("heading", { name: "Workflow edge" })).toBeVisible();
     await expectNoAxeViolations(page);
 
@@ -1479,6 +1479,7 @@ test.describe("WorkflowWorkbench accessibility and responsive smoke", () => {
     await expect(page.getByTestId("node-count")).toHaveText("4");
 
     await selectNode(page, "Input");
+    await showInspector(page);
     await expect(page.getByRole("heading", { name: "Workflow node" })).toBeVisible();
     await page.locator('input[aria-label="Label"]:visible').fill("Mobile Input");
     await page

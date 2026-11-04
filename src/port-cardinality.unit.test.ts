@@ -870,6 +870,7 @@ describe("cardinality metadata survives document operations", () => {
 });
 
 describe("removed sidecar cardinality API", () => {
+  // A cold import of the root entrypoint (React and ui chrome) can exceed the default 5s.
   it("is not exported from the core or root entrypoints", async () => {
     const index = await import("./index");
     for (const name of [
@@ -885,7 +886,7 @@ describe("removed sidecar cardinality API", () => {
     expect(index.validateWorkflowEditorConnection).toBe(core.validateWorkflowEditorConnection);
     expect(index.connectWorkflowEditorNodes).toBe(core.connectWorkflowEditorNodes);
     expect(index.repairWorkflowEditorDocument).toBe(core.repairWorkflowEditorDocument);
-  });
+  }, 20_000);
 
   it("has no ./cardinality module or package entrypoint", async () => {
     const modulePath = "./cardinality";

@@ -4,11 +4,17 @@ import {
   type DragEvent as ReactDragEvent,
   type PointerEvent as ReactPointerEvent,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
 } from "react";
-import { cn } from "@moritzbrantner/ui";
+import {
+  EditorPaneLayout,
+  EditorPaneMain,
+  cn,
+  type EditorPanePresentation,
+} from "@moritzbrantner/ui";
 import {
   getGraphWorkbenchCommandFromKeyboardEvent,
   isGraphWorkbenchEditableTarget,
@@ -68,7 +74,7 @@ import { WorkflowSelectionOverlay } from "./selection-overlay";
 import { describeWorkflowWorkbenchDocumentChange } from "./workbench-announcements";
 import { useWorkflowWorkbenchCanvasInteractions } from "./workbench-canvas-interactions";
 import {
-  WorkflowWorkbenchInspectorOverlay,
+  WorkflowWorkbenchInspectorPane,
   WorkflowWorkbenchPaletteOverlay,
 } from "./workbench-default-overlays";
 import { WorkflowWorkbenchDefaultToolbar } from "./workbench-default-toolbar";
@@ -389,6 +395,8 @@ export function WorkflowWorkbench<
     nothingSelected,
     overlayBehavior,
   });
+  const inspectorPaneId = `workflow-inspector-${useId().replaceAll(":", "")}`;
+  const [panePresentation, setPanePresentation] = useState<EditorPanePresentation>("docked");
   const { openPortConnectionMenu, portConnectionMenu, setPortConnectionMenu } =
     useWorkflowPortConnectionMenu({
       connectionInProgressRef,
@@ -596,6 +604,44 @@ export function WorkflowWorkbench<
     window.setTimeout(() => {
       connectionInProgressRef.current = false;
     }, 0);
+  };
+
+  // The node menu returns focus to its trigger once it has closed (after its exit animation); a
+  // rename field focused before that would lose focus and commit at once. Start once focus is back
+  // on the trigger, or once no menu remains open, or after a last-resort timeout.
+  const startNodeRenameAfterMenuFocusReturn = (nodeId: string) => {
+    const ownerDocument = containerRef.current?.ownerDocument ?? window.document;
+    const view = ownerDocument.defaultView ?? window;
+    let started = false;
+    let frame = 0;
+    const deadline = view.setTimeout(() => start(), 1000);
+    const start = () => {
+      if (started) {
+        return;
+      }
+      started = true;
+      ownerDocument.removeEventListener("focusin", handleFocusIn, true);
+      view.cancelAnimationFrame(frame);
+      view.clearTimeout(deadline);
+      view.setTimeout(() => setRenamingNodeId(nodeId), 0);
+    };
+    const handleFocusIn = (event: FocusEvent) => {
+      if (
+        event.target instanceof Element &&
+        event.target.closest("[data-slot='workflow-node-menu-trigger']")
+      ) {
+        start();
+      }
+    };
+    const waitForMenuToClose = () => {
+      if (!ownerDocument.querySelector("[role='menu']")) {
+        start();
+        return;
+      }
+      frame = view.requestAnimationFrame(waitForMenuToClose);
+    };
+    ownerDocument.addEventListener("focusin", handleFocusIn, true);
+    frame = view.requestAnimationFrame(waitForMenuToClose);
   };
 
   const startNodeRenameFromDoubleClick = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -941,460 +987,475 @@ export function WorkflowWorkbench<
         <WorkflowWorkbenchDefaultToolbar
           controller={workbenchController}
           graphIndex={graphIndex}
+          overflow={panePresentation === "overlay" ? "scroll" : "wrap"}
           selectedNodeHasWorkflowReference={selectedNodeHasWorkflowReference}
           selectedNodeWorkflowReferenceValid={selectedNodeWorkflowReferenceValid}
         />
       )}
-      <main
-        data-slot="workbench-canvas"
-        className="relative grid min-h-0 overflow-hidden bg-background"
-      >
-        <div className="grid min-h-0 min-w-0 p-3">
-          <div
-            ref={containerRef}
-            className="relative min-h-0 min-w-0"
-            onClickCapture={preserveGraphCanvasModifierSelection}
-            onPointerDownCapture={startCanvasPointerInteraction}
-            onPointerMoveCapture={updateCanvasPointerInteraction}
-            onPointerUpCapture={(event) => {
-              if (!completeCanvasPointerInteraction(event)) {
-                clearPendingConnectionAfterTargetClick(event);
-              }
-            }}
-            onPointerUp={() => {
-              completePendingNodeSnap();
-            }}
-            onPointerCancel={(event) => {
-              cancelCanvasPointerInteraction(event);
-              pendingNodeSnapRef.current = null;
-            }}
-            onContextMenuCapture={openPortConnectionMenu}
-            onKeyDownCapture={(event) => {
-              if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
-                openPortConnectionMenu(event);
-              }
-            }}
-            onDoubleClickCapture={startNodeRenameFromDoubleClick}
-            onDragOver={handleTemplateDragOver}
-            onDrop={handleTemplateDrop}
+      <EditorPaneLayout onPresentationChange={setPanePresentation}>
+        {/* `isolate` keeps canvas overlays below the inspector drawer on narrow workbenches. */}
+        <EditorPaneMain className="isolate grid overflow-hidden">
+          <main
+            data-slot="workbench-canvas"
+            className="relative grid min-h-0 overflow-hidden bg-background"
           >
-            <WorkflowBuilder
-              className="flex h-full min-h-0 min-w-0 flex-col [&>[data-slot='workflow-builder-surface']]:flex-1 [&>[data-slot='workflow-builder-surface']]:basis-0"
-              nodes={uiNodes}
-              edges={uiEdges}
-              groups={document.groups}
-              selectedNodeId={primarySelectedNodeId}
-              selectedEdgeId={primarySelectedEdgeId}
-              selectedGroupId={primarySelectedGroupId}
-              selectedNodeIds={selection.nodeIds}
-              selectedEdgeIds={selection.edgeIds}
-              selectedGroupIds={selection.groupIds}
-              hiddenNodeIds={hiddenNodeIds}
-              hiddenEdgeIds={hiddenEdgeIds}
-              readOnly={readOnly}
-              showMiniMap
-              showPortColumnHeaders={false}
-              showNodeCategory={false}
-              enableWheelZoom={false}
-              measurePorts="dom"
-              surfaceHeight="auto"
-              // JSON value editors render natively inside the node (graph-editor composition seams).
-              renderMinimizedNodeContent={({ node }) => {
-                const workflowNode = documentContext.nodeById.get(node.id);
-                return workflowNode && isWorkflowEditorJsonPrimitiveNode(workflowNode) ? (
-                  <WorkflowJsonPrimitiveNodeValueControl
-                    node={workflowNode}
-                    readOnly={readOnly}
-                    onFocusNode={selectWorkflowJsonPrimitiveNode}
-                    onValueChange={updateWorkflowJsonPrimitiveNodeValue}
-                  />
-                ) : null;
-              }}
-              // One geometry model (#48): graph-editor sizes nodes from these options.
-              minimizedNodeLayout="inline"
-              getNodeBodyHeight={(node) =>
-                getWorkflowEditorNodeBodyHeight(node, {
-                  objectConstructorExpressions: objectConstructorExpressionDrafts,
-                })
-              }
-              getNodeWidth={(node) =>
-                getWorkflowEditorNodeWidth(node, {
-                  objectConstructorExpressions: objectConstructorExpressionDrafts,
-                  objectConstructorExpression: () => {
+            <div className="grid min-h-0 min-w-0 p-3">
+              <div
+                ref={containerRef}
+                className="relative min-h-0 min-w-0"
+                onClickCapture={preserveGraphCanvasModifierSelection}
+                onPointerDownCapture={startCanvasPointerInteraction}
+                onPointerMoveCapture={updateCanvasPointerInteraction}
+                onPointerUpCapture={(event) => {
+                  if (!completeCanvasPointerInteraction(event)) {
+                    clearPendingConnectionAfterTargetClick(event);
+                  }
+                }}
+                onPointerUp={() => {
+                  completePendingNodeSnap();
+                }}
+                onPointerCancel={(event) => {
+                  cancelCanvasPointerInteraction(event);
+                  pendingNodeSnapRef.current = null;
+                }}
+                onContextMenuCapture={openPortConnectionMenu}
+                onKeyDownCapture={(event) => {
+                  if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
+                    openPortConnectionMenu(event);
+                  }
+                }}
+                onDoubleClickCapture={startNodeRenameFromDoubleClick}
+                onDragOver={handleTemplateDragOver}
+                onDrop={handleTemplateDrop}
+              >
+                <WorkflowBuilder
+                  className="flex h-full min-h-0 min-w-0 flex-col [&>[data-slot='workflow-builder-surface']]:flex-1 [&>[data-slot='workflow-builder-surface']]:basis-0"
+                  nodes={uiNodes}
+                  edges={uiEdges}
+                  groups={document.groups}
+                  selectedNodeId={primarySelectedNodeId}
+                  selectedEdgeId={primarySelectedEdgeId}
+                  selectedGroupId={primarySelectedGroupId}
+                  selectedNodeIds={selection.nodeIds}
+                  selectedEdgeIds={selection.edgeIds}
+                  selectedGroupIds={selection.groupIds}
+                  hiddenNodeIds={hiddenNodeIds}
+                  hiddenEdgeIds={hiddenEdgeIds}
+                  readOnly={readOnly}
+                  showMiniMap
+                  showPortColumnHeaders={false}
+                  showNodeCategory={false}
+                  enableWheelZoom={false}
+                  measurePorts="dom"
+                  surfaceHeight="auto"
+                  // JSON value editors render natively inside the node (graph-editor composition seams).
+                  renderMinimizedNodeContent={({ node }) => {
                     const workflowNode = documentContext.nodeById.get(node.id);
-                    return workflowNode
-                      ? formatWorkflowEditorObjectConstructorExpression(workflowNode)
-                      : undefined;
-                  },
-                })
-              }
-              renderNodeBody={({ node }) => {
-                const workflowNode = documentContext.nodeById.get(node.id);
-                if (!workflowNode) return null;
-                if (isWorkflowEditorJsonPrimitiveNode(workflowNode)) {
-                  return (
-                    <WorkflowJsonPrimitiveNodeValueControl
-                      node={workflowNode}
-                      readOnly={readOnly}
-                      onFocusNode={selectWorkflowJsonPrimitiveNode}
-                      onValueChange={updateWorkflowJsonPrimitiveNodeValue}
-                    />
-                  );
-                }
-                if (!isWorkflowEditorDynamicPortNode(workflowNode)) return null;
-                const addAction = (
-                  <WorkflowDynamicPortAddAction
-                    document={document}
-                    node={workflowNode}
-                    readOnly={readOnly}
-                    commit={(nextDocument) => commitDocument(nextDocument)}
-                  />
-                );
-                return isWorkflowEditorObjectConstructorNode(workflowNode) ? (
-                  <div className="grid gap-1">
-                    <WorkflowObjectConstructorExpressionControl
-                      node={workflowNode}
-                      readOnly={readOnly}
-                      onDraftChange={updateWorkflowObjectConstructorExpressionDraft}
-                      onFocusNode={selectWorkflowJsonPrimitiveNode}
-                      onValueChange={updateWorkflowObjectConstructorExpressionValue}
-                    />
-                    {addAction}
-                  </div>
-                ) : (
-                  addAction
-                );
-              }}
-              // One action surface per node: graph-editor's built-in node menu (#46).
-              {...(chrome?.nodeControls === "hidden"
-                ? {}
-                : {
-                    getNodeMenuItems: (node: { id: string }) => [
-                      // Nested workflow navigation is contextual, in the node menu (#47).
-                      ...(() => {
+                    return workflowNode && isWorkflowEditorJsonPrimitiveNode(workflowNode) ? (
+                      <WorkflowJsonPrimitiveNodeValueControl
+                        node={workflowNode}
+                        readOnly={readOnly}
+                        onFocusNode={selectWorkflowJsonPrimitiveNode}
+                        onValueChange={updateWorkflowJsonPrimitiveNodeValue}
+                      />
+                    ) : null;
+                  }}
+                  // One geometry model (#48): graph-editor sizes nodes from these options.
+                  minimizedNodeLayout="inline"
+                  getNodeBodyHeight={(node) =>
+                    getWorkflowEditorNodeBodyHeight(node, {
+                      objectConstructorExpressions: objectConstructorExpressionDrafts,
+                    })
+                  }
+                  getNodeWidth={(node) =>
+                    getWorkflowEditorNodeWidth(node, {
+                      objectConstructorExpressions: objectConstructorExpressionDrafts,
+                      objectConstructorExpression: () => {
                         const workflowNode = documentContext.nodeById.get(node.id);
-                        const target = workflowNode?.workflowRef?.documentId;
-                        return workflowNode &&
-                          target &&
-                          onOpenWorkflowReference &&
-                          documentReferences?.some((reference) => reference.id === target)
-                          ? [
-                              {
-                                id: "open-workflow",
-                                label: "Open workflow",
-                                onSelect: () => onOpenWorkflowReference(workflowNode),
-                              },
-                            ]
-                          : [];
-                      })(),
-                      // An iteration body opens in its own view (#94).
-                      ...(() => {
-                        const workflowNode = documentContext.nodeById.get(node.id);
-                        return workflowNode &&
-                          onOpenIterationBody &&
-                          isWorkflowEditorIterationNode(workflowNode)
-                          ? [
-                              {
-                                id: "open-iteration-body",
-                                label: "Open body",
-                                onSelect: () => onOpenIterationBody(workflowNode),
-                              },
-                            ]
-                          : [];
-                      })(),
-                      ...(readOnly
-                        ? []
-                        : [
-                            {
-                              id: "rename",
-                              label: "Rename",
-                              onSelect: () => {
-                                emitSelectionState({
-                                  nodeIds: [node.id],
-                                  edgeIds: [],
-                                  primary: { type: "node", id: node.id },
-                                });
-                                // Start after the menu closes and returns focus to its trigger,
-                                // so the field keeps focus instead of committing on blur.
-                                window.setTimeout(() => setRenamingNodeId(node.id), 0);
-                              },
-                            },
-                            ...(documentContext.nodeById.get(node.id) &&
-                            isWorkflowEditorComposedNode(documentContext.nodeById.get(node.id)!)
+                        return workflowNode
+                          ? formatWorkflowEditorObjectConstructorExpression(workflowNode)
+                          : undefined;
+                      },
+                    })
+                  }
+                  renderNodeBody={({ node }) => {
+                    const workflowNode = documentContext.nodeById.get(node.id);
+                    if (!workflowNode) return null;
+                    if (isWorkflowEditorJsonPrimitiveNode(workflowNode)) {
+                      return (
+                        <WorkflowJsonPrimitiveNodeValueControl
+                          node={workflowNode}
+                          readOnly={readOnly}
+                          onFocusNode={selectWorkflowJsonPrimitiveNode}
+                          onValueChange={updateWorkflowJsonPrimitiveNodeValue}
+                        />
+                      );
+                    }
+                    if (!isWorkflowEditorDynamicPortNode(workflowNode)) return null;
+                    const addAction = (
+                      <WorkflowDynamicPortAddAction
+                        document={document}
+                        node={workflowNode}
+                        readOnly={readOnly}
+                        commit={(nextDocument) => commitDocument(nextDocument)}
+                      />
+                    );
+                    return isWorkflowEditorObjectConstructorNode(workflowNode) ? (
+                      <div className="grid gap-1">
+                        <WorkflowObjectConstructorExpressionControl
+                          node={workflowNode}
+                          readOnly={readOnly}
+                          onDraftChange={updateWorkflowObjectConstructorExpressionDraft}
+                          onFocusNode={selectWorkflowJsonPrimitiveNode}
+                          onValueChange={updateWorkflowObjectConstructorExpressionValue}
+                        />
+                        {addAction}
+                      </div>
+                    ) : (
+                      addAction
+                    );
+                  }}
+                  // One action surface per node: graph-editor's built-in node menu (#46).
+                  {...(chrome?.nodeControls === "hidden"
+                    ? {}
+                    : {
+                        getNodeMenuItems: (node: { id: string }) => [
+                          // Nested workflow navigation is contextual, in the node menu (#47).
+                          ...(() => {
+                            const workflowNode = documentContext.nodeById.get(node.id);
+                            const target = workflowNode?.workflowRef?.documentId;
+                            return workflowNode &&
+                              target &&
+                              onOpenWorkflowReference &&
+                              documentReferences?.some((reference) => reference.id === target)
                               ? [
                                   {
-                                    id: "restore-composition",
-                                    label: "Restore composition",
-                                    onSelect: () => restoreComposition(node.id),
+                                    id: "open-workflow",
+                                    label: "Open workflow",
+                                    onSelect: () => onOpenWorkflowReference(workflowNode),
                                   },
                                 ]
-                              : []),
-                            {
-                              id: "delete",
-                              label: "Delete",
-                              destructive: true,
-                              onSelect: () => deleteNode(node.id),
-                            },
-                          ]),
-                    ],
-                  })}
-              // Inline rename replaces the header title in place (no portal, #46).
-              renderNodeTitle={({ node }) => {
-                const workflowNode =
-                  node.id === renamingNodeId && !readOnly
-                    ? documentContext.nodeById.get(node.id)
-                    : undefined;
-                return workflowNode ? (
-                  <WorkflowNodeRenameControl
-                    node={workflowNode}
-                    onCancel={() => setRenamingNodeId(null)}
-                    onCommit={(nodeId, label) => {
-                      setRenamingNodeId(null);
-                      updateWorkflowNodeLabel(nodeId, label);
+                              : [];
+                          })(),
+                          // An iteration body opens in its own view (#94).
+                          ...(() => {
+                            const workflowNode = documentContext.nodeById.get(node.id);
+                            return workflowNode &&
+                              onOpenIterationBody &&
+                              isWorkflowEditorIterationNode(workflowNode)
+                              ? [
+                                  {
+                                    id: "open-iteration-body",
+                                    label: "Open body",
+                                    onSelect: () => onOpenIterationBody(workflowNode),
+                                  },
+                                ]
+                              : [];
+                          })(),
+                          ...(readOnly
+                            ? []
+                            : [
+                                {
+                                  id: "rename",
+                                  label: "Rename",
+                                  onSelect: () => {
+                                    emitSelectionState({
+                                      nodeIds: [node.id],
+                                      edgeIds: [],
+                                      primary: { type: "node", id: node.id },
+                                    });
+                                    // Start after the menu closes and returns focus to its trigger,
+                                    // so the field keeps focus instead of committing on blur.
+                                    startNodeRenameAfterMenuFocusReturn(node.id);
+                                  },
+                                },
+                                ...(documentContext.nodeById.get(node.id) &&
+                                isWorkflowEditorComposedNode(documentContext.nodeById.get(node.id)!)
+                                  ? [
+                                      {
+                                        id: "restore-composition",
+                                        label: "Restore composition",
+                                        onSelect: () => restoreComposition(node.id),
+                                      },
+                                    ]
+                                  : []),
+                                {
+                                  id: "delete",
+                                  label: "Delete",
+                                  destructive: true,
+                                  onSelect: () => deleteNode(node.id),
+                                },
+                              ]),
+                        ],
+                      })}
+                  // Inline rename replaces the header title in place (no portal, #46).
+                  renderNodeTitle={({ node }) => {
+                    const workflowNode =
+                      node.id === renamingNodeId && !readOnly
+                        ? documentContext.nodeById.get(node.id)
+                        : undefined;
+                    return workflowNode ? (
+                      <WorkflowNodeRenameControl
+                        node={workflowNode}
+                        onCancel={() => setRenamingNodeId(null)}
+                        onCommit={(nodeId, label) => {
+                          setRenamingNodeId(null);
+                          updateWorkflowNodeLabel(nodeId, label);
+                        }}
+                      />
+                    ) : undefined;
+                  }}
+                  renderPortContent={({ node, port, direction }) => {
+                    const workflowNode = documentContext.nodeById.get(node.id);
+                    return workflowNode && isWorkflowEditorDynamicPortNode(workflowNode) ? (
+                      <WorkflowDynamicPortControl
+                        document={document}
+                        node={workflowNode}
+                        portId={port.id}
+                        direction={direction}
+                        readOnly={readOnly}
+                        commit={(nextDocument) => commitDocument(nextDocument)}
+                      />
+                    ) : null;
+                  }}
+                  minZoom={workflowEditorMinZoom}
+                  maxZoom={workflowEditorMaxZoom}
+                  viewport={document.viewport}
+                  toolbarLabel="Workflow"
+                  onNodesChange={(nodes) => {
+                    if (!readOnly) {
+                      const nodeIds = new Set(nodes.map((node) => node.id));
+                      const movedNodeIds = nodes
+                        .filter((node) => {
+                          const currentNode = documentContext.nodeById.get(node.id);
+                          return (
+                            currentNode && (currentNode.x !== node.x || currentNode.y !== node.y)
+                          );
+                        })
+                        .map((node) => node.id);
+                      const nextDocument = normalizeWorkflowEditorDocument({
+                        ...document,
+                        nodes: keepDesignPresentation(
+                          fromUiWorkflowBuilderNodes(nodes, document.nodes),
+                          documentContext.nodeById,
+                        ),
+                        edges: document.edges.filter(
+                          (edge) =>
+                            nodeIds.has(edge.sourceNodeId) && nodeIds.has(edge.targetNodeId),
+                        ),
+                      }).document;
+                      const snappedDocument = movedNodeIds.reduce(
+                        (currentDocument, nodeId) =>
+                          snapWorkflowEditorNodePositionToCompatiblePort(currentDocument, nodeId, {
+                            typeDefinitions,
+                          }),
+                        nextDocument,
+                      );
+
+                      if (movedNodeIds.length > 0) {
+                        const pendingSnap = pendingNodeSnapRef.current ?? {
+                          document: snappedDocument,
+                          nodeIds: new Set<string>(),
+                        };
+                        pendingSnap.document = snappedDocument;
+
+                        for (const nodeId of movedNodeIds) {
+                          pendingSnap.nodeIds.add(nodeId);
+                        }
+
+                        pendingNodeSnapRef.current = pendingSnap;
+                      }
+
+                      commitDocument(snappedDocument);
+                    }
+                  }}
+                  getNodeDragGroupIds={(nodeId) => {
+                    const groupId = getWorkflowEditorNodeGroupId(document, nodeId);
+                    const group = groupId
+                      ? document.groups?.find((candidate) => candidate.id === groupId)
+                      : undefined;
+                    return group?.nodeIds ?? [nodeId];
+                  }}
+                  onNodePointerSelect={(nodeId) => {
+                    const groupId = getWorkflowEditorNodeGroupId(document, nodeId);
+                    return groupId ? { type: "group", id: groupId } : undefined;
+                  }}
+                  onEdgesChange={(edges) => {
+                    if (!readOnly) {
+                      const uiCreatedEdge = edges.find(
+                        (edge) => !documentContext.edgeById.has(edge.id),
+                      );
+
+                      if (uiCreatedEdge) {
+                        commitWorkflowEditorConnection(uiCreatedEdge, { fromUiCreatedEdge: true });
+                        return;
+                      }
+
+                      commitDocument(
+                        normalizeWorkflowEditorDocument({
+                          ...document,
+                          edges: keepDesignPresentation(
+                            fromUiWorkflowBuilderEdges(edges, document.edges),
+                            documentContext.edgeById,
+                          ),
+                        }).document,
+                      );
+                    }
+                  }}
+                  onViewportChange={(viewport) => {
+                    commitViewportChange(viewport);
+                  }}
+                  onSelectionStateChange={(nextSelection) => {
+                    emitSelectionState(nextSelection);
+                  }}
+                  onConnectionStart={() => {
+                    connectionInProgressRef.current = true;
+                  }}
+                  onConnectionCancel={() => {
+                    connectionInProgressRef.current = false;
+                  }}
+                  isConnectionValid={(connection) => {
+                    const validity = validateWorkflowEditorConnection(
+                      document,
+                      toWorkflowWorkbenchConnectionInput(connection),
+                      { typeDefinitions },
+                    );
+
+                    return {
+                      valid: validity.valid,
+                      reason: toUiConnectionInvalidReason(validity.reason),
+                    };
+                  }}
+                  onConnectionComplete={(connection) => {
+                    connectionInProgressRef.current = false;
+                    if (!readOnly) {
+                      commitWorkflowEditorConnection(connection);
+                      return true;
+                    }
+                  }}
+                  onDoubleClick={() => {
+                    openSelectedNodeWorkflow();
+                  }}
+                />
+                {portConnectionMenu ? (
+                  <WorkflowPortConnectionMenu
+                    document={document}
+                    menu={portConnectionMenu}
+                    typeDefinitions={typeDefinitions}
+                    onClose={() => setPortConnectionMenu(null)}
+                    onConnect={(connection) => {
+                      setPortConnectionMenu(null);
+                      commitWorkflowEditorConnection(connection);
                     }}
                   />
-                ) : undefined;
-              }}
-              renderPortContent={({ node, port, direction }) => {
-                const workflowNode = documentContext.nodeById.get(node.id);
-                return workflowNode && isWorkflowEditorDynamicPortNode(workflowNode) ? (
-                  <WorkflowDynamicPortControl
-                    document={document}
-                    node={workflowNode}
-                    portId={port.id}
-                    direction={direction}
-                    readOnly={readOnly}
-                    commit={(nextDocument) => commitDocument(nextDocument)}
+                ) : null}
+                {chrome?.nodeControls === "hidden" ? null : (
+                  <>
+                    <WorkflowGroupOverlays
+                      document={document}
+                      readOnly={readOnly}
+                      selectedGroupId={primarySelectedGroupId}
+                      zoom={document.viewport?.zoom ?? 1}
+                      onDeleteGroup={(groupId) => {
+                        emitSelectionState({
+                          nodeIds: [],
+                          edgeIds: [],
+                          groupIds: [groupId],
+                          primary: { type: "group", id: groupId },
+                        });
+                        commitDocument(
+                          removeWorkflowEditorSelection(document, {
+                            nodeIds: [],
+                            edgeIds: [],
+                            groupIds: [groupId],
+                            primary: { type: "group", id: groupId },
+                          }),
+                        );
+                      }}
+                      onMoveGroup={(groupId, delta) => {
+                        commitDocument(moveWorkflowEditorGroup(document, groupId, delta));
+                      }}
+                      onRenameGroup={(groupId, label) => {
+                        const nextLabel = label.trim();
+                        if (nextLabel) {
+                          commitDocument(
+                            updateWorkflowEditorGroup(document, groupId, { label: nextLabel }),
+                          );
+                        }
+                      }}
+                      onSelectGroup={(groupId) => {
+                        emitSelectionState({
+                          nodeIds: [],
+                          edgeIds: [],
+                          groupIds: [groupId],
+                          primary: { type: "group", id: groupId },
+                        });
+                      }}
+                      onToggleGroupMinimized={(groupId) => {
+                        const group = document.groups?.find(
+                          (candidate) => candidate.id === groupId,
+                        );
+                        if (group) {
+                          commitDocument(
+                            updateWorkflowEditorGroup(document, groupId, {
+                              minimized: group.minimized !== true,
+                            }),
+                          );
+                        }
+                      }}
+                      onUngroupGroup={(groupId) => {
+                        const group = document.groups?.find(
+                          (candidate) => candidate.id === groupId,
+                        );
+                        const nextDocument = ungroupWorkflowEditorGroup(document, groupId);
+                        commitDocument(nextDocument);
+                        emitSelectionState(
+                          {
+                            nodeIds: group?.nodeIds ?? [],
+                            edgeIds: [],
+                            ...(group?.nodeIds[0]
+                              ? { primary: { type: "node", id: group.nodeIds[0] } }
+                              : {}),
+                          },
+                          nextDocument,
+                        );
+                      }}
+                    />
+                    <WorkflowSelectionOverlay
+                      document={document}
+                      marquee={null}
+                      primaryNodeId={primarySelectedNodeId}
+                      selection={selection}
+                    />
+                  </>
+                )}
+                {typeof chrome?.palette === "function" ? (
+                  chrome.palette(workbenchController)
+                ) : chrome?.palette === "hidden" ? null : (
+                  <WorkflowWorkbenchPaletteOverlay
+                    controller={workbenchController}
+                    panel={overlays.palette}
+                    startTemplateDrag={startTemplateDrag}
                   />
-                ) : null;
-              }}
-              minZoom={workflowEditorMinZoom}
-              maxZoom={workflowEditorMaxZoom}
-              viewport={document.viewport}
-              toolbarLabel="Workflow"
-              onNodesChange={(nodes) => {
-                if (!readOnly) {
-                  const nodeIds = new Set(nodes.map((node) => node.id));
-                  const movedNodeIds = nodes
-                    .filter((node) => {
-                      const currentNode = documentContext.nodeById.get(node.id);
-                      return currentNode && (currentNode.x !== node.x || currentNode.y !== node.y);
-                    })
-                    .map((node) => node.id);
-                  const nextDocument = normalizeWorkflowEditorDocument({
-                    ...document,
-                    nodes: keepDesignPresentation(
-                      fromUiWorkflowBuilderNodes(nodes, document.nodes),
-                      documentContext.nodeById,
-                    ),
-                    edges: document.edges.filter(
-                      (edge) => nodeIds.has(edge.sourceNodeId) && nodeIds.has(edge.targetNodeId),
-                    ),
-                  }).document;
-                  const snappedDocument = movedNodeIds.reduce(
-                    (currentDocument, nodeId) =>
-                      snapWorkflowEditorNodePositionToCompatiblePort(currentDocument, nodeId, {
-                        typeDefinitions,
-                      }),
-                    nextDocument,
-                  );
-
-                  if (movedNodeIds.length > 0) {
-                    const pendingSnap = pendingNodeSnapRef.current ?? {
-                      document: snappedDocument,
-                      nodeIds: new Set<string>(),
-                    };
-                    pendingSnap.document = snappedDocument;
-
-                    for (const nodeId of movedNodeIds) {
-                      pendingSnap.nodeIds.add(nodeId);
-                    }
-
-                    pendingNodeSnapRef.current = pendingSnap;
-                  }
-
-                  commitDocument(snappedDocument);
-                }
-              }}
-              getNodeDragGroupIds={(nodeId) => {
-                const groupId = getWorkflowEditorNodeGroupId(document, nodeId);
-                const group = groupId
-                  ? document.groups?.find((candidate) => candidate.id === groupId)
-                  : undefined;
-                return group?.nodeIds ?? [nodeId];
-              }}
-              onNodePointerSelect={(nodeId) => {
-                const groupId = getWorkflowEditorNodeGroupId(document, nodeId);
-                return groupId ? { type: "group", id: groupId } : undefined;
-              }}
-              onEdgesChange={(edges) => {
-                if (!readOnly) {
-                  const uiCreatedEdge = edges.find(
-                    (edge) => !documentContext.edgeById.has(edge.id),
-                  );
-
-                  if (uiCreatedEdge) {
-                    commitWorkflowEditorConnection(uiCreatedEdge, { fromUiCreatedEdge: true });
-                    return;
-                  }
-
-                  commitDocument(
-                    normalizeWorkflowEditorDocument({
-                      ...document,
-                      edges: keepDesignPresentation(
-                        fromUiWorkflowBuilderEdges(edges, document.edges),
-                        documentContext.edgeById,
-                      ),
-                    }).document,
-                  );
-                }
-              }}
-              onViewportChange={(viewport) => {
-                commitViewportChange(viewport);
-              }}
-              onSelectionStateChange={(nextSelection) => {
-                emitSelectionState(nextSelection);
-              }}
-              onConnectionStart={() => {
-                connectionInProgressRef.current = true;
-              }}
-              onConnectionCancel={() => {
-                connectionInProgressRef.current = false;
-              }}
-              isConnectionValid={(connection) => {
-                const validity = validateWorkflowEditorConnection(
-                  document,
-                  toWorkflowWorkbenchConnectionInput(connection),
-                  { typeDefinitions },
-                );
-
-                return {
-                  valid: validity.valid,
-                  reason: toUiConnectionInvalidReason(validity.reason),
-                };
-              }}
-              onConnectionComplete={(connection) => {
-                connectionInProgressRef.current = false;
-                if (!readOnly) {
-                  commitWorkflowEditorConnection(connection);
-                  return true;
-                }
-              }}
-              onDoubleClick={() => {
-                openSelectedNodeWorkflow();
-              }}
-            />
-            {portConnectionMenu ? (
-              <WorkflowPortConnectionMenu
-                document={document}
-                menu={portConnectionMenu}
-                typeDefinitions={typeDefinitions}
-                onClose={() => setPortConnectionMenu(null)}
-                onConnect={(connection) => {
-                  setPortConnectionMenu(null);
-                  commitWorkflowEditorConnection(connection);
-                }}
-              />
-            ) : null}
-            {chrome?.nodeControls === "hidden" ? null : (
-              <>
-                <WorkflowGroupOverlays
-                  document={document}
-                  readOnly={readOnly}
-                  selectedGroupId={primarySelectedGroupId}
-                  zoom={document.viewport?.zoom ?? 1}
-                  onDeleteGroup={(groupId) => {
-                    emitSelectionState({
-                      nodeIds: [],
-                      edgeIds: [],
-                      groupIds: [groupId],
-                      primary: { type: "group", id: groupId },
-                    });
-                    commitDocument(
-                      removeWorkflowEditorSelection(document, {
-                        nodeIds: [],
-                        edgeIds: [],
-                        groupIds: [groupId],
-                        primary: { type: "group", id: groupId },
-                      }),
-                    );
-                  }}
-                  onMoveGroup={(groupId, delta) => {
-                    commitDocument(moveWorkflowEditorGroup(document, groupId, delta));
-                  }}
-                  onRenameGroup={(groupId, label) => {
-                    const nextLabel = label.trim();
-                    if (nextLabel) {
-                      commitDocument(
-                        updateWorkflowEditorGroup(document, groupId, { label: nextLabel }),
-                      );
-                    }
-                  }}
-                  onSelectGroup={(groupId) => {
-                    emitSelectionState({
-                      nodeIds: [],
-                      edgeIds: [],
-                      groupIds: [groupId],
-                      primary: { type: "group", id: groupId },
-                    });
-                  }}
-                  onToggleGroupMinimized={(groupId) => {
-                    const group = document.groups?.find((candidate) => candidate.id === groupId);
-                    if (group) {
-                      commitDocument(
-                        updateWorkflowEditorGroup(document, groupId, {
-                          minimized: group.minimized !== true,
-                        }),
-                      );
-                    }
-                  }}
-                  onUngroupGroup={(groupId) => {
-                    const group = document.groups?.find((candidate) => candidate.id === groupId);
-                    const nextDocument = ungroupWorkflowEditorGroup(document, groupId);
-                    commitDocument(nextDocument);
-                    emitSelectionState(
-                      {
-                        nodeIds: group?.nodeIds ?? [],
-                        edgeIds: [],
-                        ...(group?.nodeIds[0]
-                          ? { primary: { type: "node", id: group.nodeIds[0] } }
-                          : {}),
-                      },
-                      nextDocument,
-                    );
-                  }}
-                />
-                <WorkflowSelectionOverlay
-                  document={document}
-                  marquee={null}
-                  primaryNodeId={primarySelectedNodeId}
-                  selection={selection}
-                />
-              </>
-            )}
-            {typeof chrome?.palette === "function" ? (
-              chrome.palette(workbenchController)
-            ) : chrome?.palette === "hidden" ? null : (
-              <WorkflowWorkbenchPaletteOverlay
-                controller={workbenchController}
-                panel={overlays.palette}
-                startTemplateDrag={startTemplateDrag}
-              />
-            )}
-            {typeof chrome?.inspector === "function" ? (
-              chrome.inspector(workbenchController)
-            ) : chrome?.inspector === "hidden" ? null : (
-              <WorkflowWorkbenchInspectorOverlay
-                controller={workbenchController}
-                execution={execution}
-                humanTasks={humanTasks}
-                panel={overlays.inspector}
-                renderExecutionDetails={renderExecutionDetails}
-              />
-            )}
-          </div>
-        </div>
-      </main>
+                )}
+                {typeof chrome?.inspector === "function"
+                  ? chrome.inspector(workbenchController)
+                  : null}
+              </div>
+            </div>
+          </main>
+        </EditorPaneMain>
+        {typeof chrome?.inspector === "function" || chrome?.inspector === "hidden" ? null : (
+          <WorkflowWorkbenchInspectorPane
+            controller={workbenchController}
+            execution={execution}
+            humanTasks={humanTasks}
+            id={inspectorPaneId}
+            panel={overlays.inspector}
+            renderExecutionDetails={renderExecutionDetails}
+          />
+        )}
+      </EditorPaneLayout>
       <div
         role="status"
         aria-live="polite"

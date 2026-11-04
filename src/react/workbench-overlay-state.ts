@@ -78,7 +78,14 @@ function useWorkflowWorkbenchOverlayPositionClamp(
   }, [narrowOverlayLayout, overlayCollapsed, position !== null]);
 }
 
-/** Position, collapse and drag state of the workbench's default palette and inspector overlays. */
+/** Default docked width of the inspector pane in pixels. */
+export const workflowWorkbenchInspectorDefaultSize = 320;
+
+/**
+ * Palette overlay position, collapse and drag state, and the inspector pane's collapse and size
+ * state. The inspector is a docked `EditorPane` (an overlay drawer on narrow containers), so its
+ * legacy overlay `position` is kept only for hosts that still read or control it.
+ */
 export function useWorkflowWorkbenchOverlayState({
   containerRef,
   nothingSelected,
@@ -89,13 +96,11 @@ export function useWorkflowWorkbenchOverlayState({
   overlayBehavior: WorkflowWorkbenchProps["overlayBehavior"];
 }) {
   const paletteRef = useRef<HTMLDivElement | null>(null);
-  const inspectorRef = useRef<HTMLDivElement | null>(null);
   const paletteDragRef = useRef<WorkflowOverlayDragState | null>(null);
-  const inspectorDragRef = useRef<WorkflowOverlayDragState | null>(null);
-  const [inspectorDragging, setInspectorDragging] = useState(false);
   const [inspectorMinimized, setInspectorMinimized] = useState(false);
   const [inspectorPosition, setInspectorPosition] =
     useState<WorkflowWorkbenchOverlayPosition>(null);
+  const [inspectorSize, setInspectorSize] = useState(workflowWorkbenchInspectorDefaultSize);
   const [narrowOverlayLayout, setNarrowOverlayLayout] = useState(false);
   const [paletteMinimized, setPaletteMinimized] = useState(false);
   const [paletteCorner, setPaletteCorner] = useState<WorkflowWorkbenchPanelPlacement>(
@@ -122,6 +127,7 @@ export function useWorkflowWorkbenchOverlayState({
     inspectorPanelBehavior?.controlledState?.position === undefined
       ? inspectorPosition
       : inspectorPanelBehavior.controlledState.position;
+  const effectiveInspectorSize = inspectorPanelBehavior?.controlledState?.size ?? inspectorSize;
   // With nothing selected the panel stays collapsed until the user opens document settings (#91).
   const [documentSettingsOpen, setDocumentSettingsOpen] = useState(false);
   const inspectorCollapsed = nothingSelected ? !documentSettingsOpen : effectiveInspectorMinimized;
@@ -145,14 +151,6 @@ export function useWorkflowWorkbenchOverlayState({
     containerRef,
     paletteRef,
     paletteMinimized,
-    narrowOverlayLayout,
-  );
-  useWorkflowWorkbenchOverlayPositionClamp(
-    inspectorPosition,
-    setInspectorPosition,
-    containerRef,
-    inspectorRef,
-    inspectorCollapsed,
     narrowOverlayLayout,
   );
 
@@ -274,18 +272,6 @@ export function useWorkflowWorkbenchOverlayState({
     completeOverlayDrag(event, paletteDragRef, setPaletteDragging);
   };
 
-  const startInspectorDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
-    startOverlayDrag(event, inspectorRef.current, inspectorDragRef, setInspectorDragging);
-  };
-
-  const updateInspectorDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
-    updateOverlayDrag(event, inspectorRef.current, inspectorDragRef, setInspectorPosition);
-  };
-
-  const completeInspectorDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
-    completeOverlayDrag(event, inspectorDragRef, setInspectorDragging);
-  };
-
   const setPaletteMinimizedState = (minimized: boolean) => {
     setPaletteMinimized(minimized);
     palettePanelBehavior?.onStateChange?.({
@@ -319,6 +305,7 @@ export function useWorkflowWorkbenchOverlayState({
     inspectorPanelBehavior?.onStateChange?.({
       minimized,
       position: effectiveInspectorPosition,
+      size: effectiveInspectorSize,
     });
   };
 
@@ -327,7 +314,30 @@ export function useWorkflowWorkbenchOverlayState({
     inspectorPanelBehavior?.onStateChange?.({
       minimized: effectiveInspectorMinimized,
       position,
+      size: effectiveInspectorSize,
     });
+  };
+
+  const setInspectorSizeState = (size: number) => {
+    setInspectorSize(size);
+  };
+
+  const commitInspectorSize = (size: number) => {
+    setInspectorSize(size);
+    inspectorPanelBehavior?.onStateChange?.({
+      minimized: effectiveInspectorMinimized,
+      position: effectiveInspectorPosition,
+      size,
+    });
+  };
+
+  // With nothing selected, collapsing and expanding toggles document settings instead (#91).
+  const setInspectorCollapsedState = (collapsed: boolean) => {
+    if (nothingSelected) {
+      setDocumentSettingsOpen(!collapsed);
+      return;
+    }
+    setInspectorMinimizedState(collapsed);
   };
 
   const paletteOverlayPosition: CSSProperties = effectivePalettePosition
@@ -340,13 +350,6 @@ export function useWorkflowWorkbenchOverlayState({
         ...getWorkflowPalettePinnedStyle(effectivePaletteCorner),
         maxHeight: `calc(100% - ${workflowWorkbenchOverlayMargin * 2}px)`,
       };
-  const inspectorOverlayPosition: CSSProperties = effectiveInspectorPosition
-    ? {
-        left: effectiveInspectorPosition.x,
-        maxHeight: getWorkflowOverlayMaxHeight(effectiveInspectorPosition.y),
-        top: effectiveInspectorPosition.y,
-      }
-    : { maxHeight: "calc(100% - 4.75rem)", right: "0.75rem", top: "4rem" };
 
   return {
     palette: {
@@ -365,21 +368,15 @@ export function useWorkflowWorkbenchOverlayState({
       completeDrag: completePaletteDrag,
     },
     inspector: {
-      ref: inspectorRef,
       collapsed: inspectorCollapsed,
-      dragging: inspectorDragging,
       minimized: effectiveInspectorMinimized,
       position: effectiveInspectorPosition,
-      style: inspectorOverlayPosition,
+      size: effectiveInspectorSize,
+      setCollapsed: setInspectorCollapsedState,
       setMinimized: setInspectorMinimizedState,
       setPosition: setInspectorPositionState,
-      toggleCollapsed: () =>
-        nothingSelected
-          ? setDocumentSettingsOpen(!documentSettingsOpen)
-          : setInspectorMinimizedState(!effectiveInspectorMinimized),
-      startDrag: startInspectorDrag,
-      updateDrag: updateInspectorDrag,
-      completeDrag: completeInspectorDrag,
+      setSize: setInspectorSizeState,
+      commitSize: commitInspectorSize,
     },
   };
 }

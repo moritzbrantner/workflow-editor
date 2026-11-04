@@ -54,7 +54,10 @@ export type {
 export { WorkflowWorkbenchInspector } from "./react/workbench-inspector";
 export { WorkflowWorkbenchOverlayPanel } from "./react/workbench-overlay-panel";
 export { WorkflowWorkbenchPalette } from "./react/workbench-palette";
-export { WorkflowWorkbenchToolbar } from "./react/workbench-toolbar";
+export {
+  WorkflowWorkbenchToolbar,
+  type WorkflowWorkbenchToolbarOverflow,
+} from "./react/workbench-toolbar";
 export type {
   WorkflowEditorPoint,
   WorkflowGraphWorkbenchController,
