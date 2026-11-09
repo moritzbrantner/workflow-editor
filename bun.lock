@@ -5,9 +5,9 @@
     "": {
       "name": "@moritzbrantner/workflow-editor",
       "dependencies": {
-        "@moenarch/editor-core": "git+https://github.com/moritzbrantner/editor-core.git#d00922c389810a20581c8424363920da3927c70f",
-        "@moritzbrantner/graph-editor": "git+https://github.com/moritzbrantner/graph-editor.git#13213f6401ad6e5040506bce0603458100db1de8",
-        "@moritzbrantner/ui": "git+https://github.com/moritzbrantner/ui.git#21b3e4764beda65acdee3139270be824c234d69e",
+        "@moenarch/editor-core": "git+https://github.com/moritzbrantner/editor-core.git#881e2d818603d3c38996ca7ca404bcd1dfbccb12",
+        "@moritzbrantner/graph-editor": "git+https://github.com/moritzbrantner/graph-editor.git#fa905d18062f489cf9e40c8a201948ba1854e0d6",
+        "@moritzbrantner/ui": "git+https://github.com/moritzbrantner/ui.git#9795e58452e0a42e7a91a158a8594bfd44269217",
         "lucide-react": "^1.17.0",
         "typescript": "6.0.3",
       },
@@ -24,7 +24,7 @@
         "@types/react-dom": "19.3.0",
         "@vitest/coverage-v8": "4.1.12",
         "jsdom": "26.1.0",
-        "mobile-analysis": "git+https://github.com/moritzbrantner/mobile-analysis.git#fb2c1c6e8f422f4ac2c4ba7c2fac1ae00473896d",
+        "mobile-analysis": "git+https://github.com/moritzbrantner/mobile-analysis.git#f3f6a708b260cc0c5aeeaa24d940aa6d68012b48",
         "oxfmt": "0.75.0",
         "oxlint": "1.90.0",
         "react": "19.3.1",
@@ -50,7 +50,7 @@
     "mobile-analysis",
   ],
   "overrides": {
-    "@moritzbrantner/ui": "git+https://github.com/moritzbrantner/ui.git#21b3e4764beda65acdee3139270be824c234d69e",
+    "@moritzbrantner/ui": "git+https://github.com/moritzbrantner/ui.git#9795e58452e0a42e7a91a158a8594bfd44269217",
   },
   "packages": {
     "@adobe/css-tools": ["@adobe/css-tools@4.5.0", "", {}, "sha512-6OzddxPio9UiWTCemp4N8cYLV2ZN1ncRnV1cVGtve7dhPOtRkleRyx32GQCYSwDYgaHU3USMm84tNsvKzRCa1Q=="],
@@ -217,11 +217,11 @@
 
     "@microsoft/tsdoc-config": ["@microsoft/tsdoc-config@0.18.3", "", { "dependencies": { "@microsoft/tsdoc": "0.17.1", "ajv": "~8.18.0", "jju": "~1.4.0", "resolve": "~1.22.2" } }, "sha512-0I0rGXo1eJziw3EEErkDS9p/0RzBcyOiV+zbSDqOZTeURmhtut+WIvpih0LM5g+ZpZ9SyFxDfkhAcl/r8e2zGw=="],
 
-    "@moenarch/editor-core": ["@moenarch/editor-core@github:moritzbrantner/editor-core#d00922c", { "peerDependencies": { "react": "^19.0.0" }, "optionalPeers": ["react"], "hasInstallScript": true }, "moritzbrantner-editor-core-d00922c", "sha512-PDcIpNrwTW1OXX226DilxlacQNmjzDiRMnZTdkMkqnM1v5gBzY0wgTY+4o1WPneKPY/FNNGjVxPe7SJBQx2WGQ=="],
+    "@moenarch/editor-core": ["@moenarch/editor-core@github:moritzbrantner/editor-core#881e2d8", { "peerDependencies": { "react": "^19.0.0" }, "optionalPeers": ["react"], "hasInstallScript": true }, "moritzbrantner-editor-core-881e2d8", "sha512-UPvXc8YH3P6pKjsU6MMSJrP72TEKbcWGEgV8Ng9mIp2QaqTv6GYRQTEKcblExiKq43r4P/hLME3yMpis1gzhrA=="],
 
-    "@moritzbrantner/graph-editor": ["@moritzbrantner/graph-editor@github:moritzbrantner/graph-editor#13213f6", { "dependencies": { "@dagrejs/dagre": "^3.0.0", "@moenarch/editor-core": "git+https://github.com/moritzbrantner/editor-core.git#d00922c389810a20581c8424363920da3927c70f", "@moritzbrantner/ui": "git+https://github.com/moritzbrantner/ui.git#21b3e4764beda65acdee3139270be824c234d69e", "lucide-react": "^1.21.0" }, "peerDependencies": { "react": "^19.0.0", "react-dom": "^19.0.0" }, "hasInstallScript": true }, "moritzbrantner-graph-editor-13213f6", "sha512-xpFpqqyxjR5koTtOS9rLCIE++QVynfZJH1cyn+J3SZqnufZcN/8kbvEYDLEhbzcnFuhrSseGRLiHgF/WsqVzZg=="],
+    "@moritzbrantner/graph-editor": ["@moritzbrantner/graph-editor@github:moritzbrantner/graph-editor#fa905d1", { "dependencies": { "@dagrejs/dagre": "^3.0.0", "@moenarch/editor-core": "git+https://github.com/moritzbrantner/editor-core.git#881e2d818603d3c38996ca7ca404bcd1dfbccb12", "@moritzbrantner/ui": "git+https://github.com/moritzbrantner/ui.git#9795e58452e0a42e7a91a158a8594bfd44269217", "lucide-react": "^1.21.0" }, "peerDependencies": { "react": "^19.0.0", "react-dom": "^19.0.0" }, "hasInstallScript": true }, "moritzbrantner-graph-editor-fa905d1", "sha512-onNcmD2DQj+6fg6MmKxHKPlgaP+qYbV5vwujzbC0bNuifR8LLFajbbNStwFsdawkH7XkuDpBJe/sTzJRmNB3iw=="],
 
-    "@moritzbrantner/ui": ["@moritzbrantner/ui@github:moritzbrantner/ui#21b3e47", { "dependencies": { "@base-ui/react": "^1.3.0", "@dnd-kit/react": "^0.5.0", "@tanstack/react-table": "^8.21.3", "class-variance-authority": "^0.7.1", "clsx": "^2.1.1", "cmdk": "^1.1.1", "date-fns": "^4.1.0", "embla-carousel-react": "^8.6.0", "input-otp": "^1.4.2", "lucide-react": "^1.7.0", "motion": "^13.1.1", "radix-ui": "^1.4.3", "react-day-picker": "^9.14.0", "react-resizable-panels": "^4.9.0", "sonner": "^2.0.7", "tailwind-merge": "^3.4.0", "tailwindcss": "^4.1.14", "tw-animate-css": "^1.4.0", "vaul": "^1.1.2" }, "peerDependencies": { "react": "^19.0.0", "react-dom": "^19.0.0" }, "hasInstallScript": true }, "moritzbrantner-ui-21b3e47", "sha512-dgrV1LDY9X2ZGEbSplmbD6NVZiokMHcjkt1pjhXggeMNc3o1MkHeEKUhLSic7rzSvcFBlmYXA1tIShYexQGhfg=="],
+    "@moritzbrantner/ui": ["@moritzbrantner/ui@github:moritzbrantner/ui#9795e58", { "dependencies": { "@base-ui/react": "^1.3.0", "@dnd-kit/react": "^0.5.0", "@tanstack/react-table": "^8.21.3", "class-variance-authority": "^0.7.1", "clsx": "^2.1.1", "cmdk": "^1.1.1", "date-fns": "^4.1.0", "embla-carousel-react": "^8.6.0", "input-otp": "^1.4.2", "lucide-react": "^1.7.0", "motion": "^13.1.1", "radix-ui": "^1.4.3", "react-day-picker": "^9.14.0", "react-resizable-panels": "^4.9.0", "sonner": "^2.0.7", "tailwind-merge": "^3.4.0", "tailwindcss": "^4.1.14", "tw-animate-css": "^1.4.0", "vaul": "^1.1.2" }, "peerDependencies": { "react": "^19.0.0", "react-dom": "^19.0.0" }, "hasInstallScript": true }, "moritzbrantner-ui-9795e58", "sha512-tJJYl+6h4XNztma6vPhT1vFKStlFCFW2YLOhiqkuMgD7hGAlx0SAxUHU5IxnZbXv6oUwIy9DY88PvLcfFdnKYA=="],
 
     "@napi-rs/wasm-runtime": ["@napi-rs/wasm-runtime@1.1.4", "", { "dependencies": { "@tybys/wasm-util": "^0.10.1" }, "peerDependencies": { "@emnapi/core": "^1.7.1", "@emnapi/runtime": "^1.7.1" } }, "sha512-3NQNNgA1YSlJb/kMH1ildASP9HW7/7kYnRI2szWJaofaS1hWmbGI4H+d3+22aGzXXN9IJ+n+GiFVcGipJP18ow=="],
 
@@ -1083,7 +1083,7 @@
 
     "mlly": ["mlly@1.8.2", "", { "dependencies": { "acorn": "^8.16.0", "pathe": "^2.0.3", "pkg-types": "^1.3.1", "ufo": "^1.6.3" } }, "sha512-d+ObxMQFmbt10sretNDytwt85VrbkhhUA/JBGm1MPaWJ65Cl4wOgLaB1NYvJSZ0Ef03MMEU/0xpPMXUIQ29UfA=="],
 
-    "mobile-analysis": ["mobile-analysis@github:moritzbrantner/mobile-analysis#fb2c1c6", { "dependencies": { "playwright": "1.64.1", "xstate": "5.33.3" }, "hasInstallScript": true }, "moritzbrantner-mobile-analysis-fb2c1c6", "sha512-0xKKZN38MJl0LrDq4F5KFCF8DZ6Cf3d8i4NbZdwaQH8skTWUPkkFnHAF8pIjkv+QAj7VEdVswC3hCP1Mt8Ilkw=="],
+    "mobile-analysis": ["mobile-analysis@github:moritzbrantner/mobile-analysis#f3f6a70", { "dependencies": { "playwright": "1.65.0", "xstate": "5.33.3" }, "hasInstallScript": true, "bin": { "mobile-analysis": "dist/src/cli.js" } }, "moritzbrantner-mobile-analysis-f3f6a70", "sha512-8D4CovTAAqHugouFGpfPFCYhvUyUWJ/ZW4z39swIeoOVVm2+sQjuKV4Neeb48/CM8WwLzKVuxHOqsPRLGTxxCg=="],
 
     "motion": ["motion@13.5.1", "", { "dependencies": { "framer-motion": "13.5.1", "tslib": "^2.4.0" }, "peerDependencies": { "react": "^18.0.0 || ^19.0.0", "react-dom": "^18.0.0 || ^19.0.0" }, "optionalPeers": ["react", "react-dom"] }, "sha512-eV9SUem6KnzEa9+eT+dVBeDlhy5TTdn09YWR1WhUsKoZCJPw/n4TcYhjbxq2Gy5PTwDr//4H3r5vxkcZnNnO1w=="],
 
@@ -1149,7 +1149,7 @@
 
     "playwright": ["playwright@1.64.1", "", { "dependencies": { "playwright-core": "1.64.1" }, "bin": { "playwright": "cli.js" } }, "sha512-HCrVhHr5QQuwYoswEUGTb7gGp522yflbv/ST8nF4sFWGuLjQCt17Q/EubpGGSNKYn1tsTCPZxqHhHCfVURu7UA=="],
 
-    "playwright-core": ["playwright-core@1.64.1", "", { "bin": { "playwright-core": "cli.js" } }, "sha512-BC4s8y6SEVA6Q1rSxZTto8hI1KUI3xXlHGZgvGqP4IqPdI/a6FX9H29IDNz7vKo9l21b6LfYosScPL6M3xxyDQ=="],
+    "playwright-core": ["playwright-core@1.65.0", "", { "bin": { "playwright-core": "cli.js" } }, "sha512-vNSKgH6YqtN7cdT/L334zo0a+YwkrpicyrHJlWWPIm/Q+Nn2SWInil01oT0mbu96U4GgoRtCYQD9CzJQgju+lA=="],
 
     "plur": ["plur@4.0.0", "", { "dependencies": { "irregular-plurals": "^3.2.0" } }, "sha512-4UGewrYgqDFw9vV6zNV+ADmPAUAfJPKtGvb/VdpQAx25X5f3xXdGdyOEVFwkl8Hl/tl7+xbeHqSEM+D5/TirUg=="],
 
@@ -1539,9 +1539,13 @@
 
     "micromatch/picomatch": ["picomatch@2.3.2", "", {}, "sha512-V7+vQEJ06Z+c5tSye8S+nHUfI51xoXIXjHQ99cQtKUkQqqO1kO/KCJUfZXuB47h/YBlDhah2H3hdUGXn8ie0oA=="],
 
+    "mobile-analysis/playwright": ["playwright@1.65.0", "", { "dependencies": { "playwright-core": "1.65.0" }, "bin": { "playwright": "cli.js" } }, "sha512-F3AMWcR44qMBt4kq+6Kb6mX7bjGXshktKFOPULd7reED6ZJWevjbNRqysP7q+AATE9kdPEZBibex1BYsvpVoeA=="],
+
     "normalize-package-data/semver": ["semver@7.8.1", "", { "bin": { "semver": "bin/semver.js" } }, "sha512-rkVq3IXh+4FDGch+KwzX3aV9W3kO54GyEgpvBzSyctDA6Xtd7RJQV1xmXbeQp5v7+VzLOfVqiutSE6GICgPFvg=="],
 
     "path-scurry/lru-cache": ["lru-cache@11.5.1", "", {}, "sha512-RPimw/7aMdv2oqRrxKwvZXcPfwBrn/JZ2xYcY9Hus/6LaS3VOAKVWKWgNLCFSiOm1ESXinjsDlidVU7JlnCN2A=="],
+
+    "playwright/playwright-core": ["playwright-core@1.64.1", "", { "bin": { "playwright-core": "cli.js" } }, "sha512-BC4s8y6SEVA6Q1rSxZTto8hI1KUI3xXlHGZgvGqP4IqPdI/a6FX9H29IDNz7vKo9l21b6LfYosScPL6M3xxyDQ=="],
 
     "radix-ui/@radix-ui/react-primitive": ["@radix-ui/react-primitive@2.1.3", "", { "dependencies": { "@radix-ui/react-slot": "1.2.3" }, "peerDependencies": { "@types/react": "*", "@types/react-dom": "*", "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc", "react-dom": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc" }, "optionalPeers": ["@types/react", "@types/react-dom"] }, "sha512-m9gTwRkhy2lvCPe6QJp4d3G1TYEUHn/FzJUtq9MjH46an1wJU+GdoGC5VLof8RX8Ft/DlpshApkhswDLZzHIcQ=="],
 
