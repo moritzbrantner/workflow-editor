@@ -81,7 +81,7 @@
     "@types/react-dom": "19.3.0",
     "@vitest/coverage-v8": "4.1.12",
     "jsdom": "26.1.0",
-    "mobile-analysis": "git+https://github.com/moritzbrantner/mobile-analysis.git#f3f6a708b260cc0c5aeeaa24d940aa6d68012b48",
+    "mobile-analysis": "git+https://github.com/moritzbrantner/mobile-analysis.git#923f797ae6cf6519c99d95b2ee9c98514c9e5195",
     "oxfmt": "0.75.0",
     "oxlint": "1.90.0",
     "react": "19.3.1",
