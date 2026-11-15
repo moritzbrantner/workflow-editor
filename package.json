@@ -62,9 +62,9 @@
     "react-dom": "^19.0.0"
   },
   "dependencies": {
-    "@moenarch/editor-core": "git+https://github.com/moritzbrantner/editor-core.git#cee80b6d91bca59ddfcf20d6d0395de6fc6f9470",
-    "@moritzbrantner/graph-editor": "git+https://github.com/moritzbrantner/graph-editor.git#8c45fdfdd764d518a8e4eab0e6924d1fca2099a6",
-    "@moritzbrantner/ui": "git+https://github.com/moritzbrantner/ui.git#927ac617091ac94a68e32115da79061f8ef676c1",
+    "@moenarch/editor-core": "git+https://github.com/moritzbrantner/editor-core.git#934f40542c11c67f76e44d4f0753addee308d16e",
+    "@moritzbrantner/graph-editor": "git+https://github.com/moritzbrantner/graph-editor.git#ece4cd7bf9e8f59e2d1807c438a1bf632ea3b105",
+    "@moritzbrantner/ui": "git+https://github.com/moritzbrantner/ui.git#0bdc87039e7f76e24c7cac6f0f4e62782b6b57d7",
     "lucide-react": "^1.17.0",
     "typescript": "6.0.3"
   },
@@ -146,6 +146,6 @@
     "mobile-analysis"
   ],
   "overrides": {
-    "@moritzbrantner/ui": "git+https://github.com/moritzbrantner/ui.git#927ac617091ac94a68e32115da79061f8ef676c1"
+    "@moritzbrantner/ui": "git+https://github.com/moritzbrantner/ui.git#0bdc87039e7f76e24c7cac6f0f4e62782b6b57d7"
   }
 }
