@@ -61,9 +61,9 @@
     "react-dom": "^19.0.0"
   },
   "dependencies": {
-    "@moenarch/editor-core": "git+https://github.com/moritzbrantner/editor-core.git#bcf7f3bf4c37383691e5b06c03553f3517a29c38",
-    "@moritzbrantner/graph-editor": "git+https://github.com/moritzbrantner/graph-editor.git#c725196868564f50178f761383ebd55fdec5a263",
-    "@moritzbrantner/ui": "git+https://github.com/moritzbrantner/ui.git#336fbc0ed8ea784c8f7822ab64c83bcc8e954787",
+    "@moenarch/editor-core": "git+https://github.com/moritzbrantner/editor-core.git#e5124175d44a8b3620cfead758f9ac7cd28d8511",
+    "@moritzbrantner/graph-editor": "git+https://github.com/moritzbrantner/graph-editor.git#ed03bccbec182db321109c315915aa179cb88814",
+    "@moritzbrantner/ui": "git+https://github.com/moritzbrantner/ui.git#ad1c052fbefb42f8c03baab3bc8b33ddf7a6e329",
     "lucide-react": "^1.17.0",
     "typescript": "6.0.3"
   },
@@ -80,7 +80,7 @@
     "@types/react-dom": "19.3.0",
     "@vitest/coverage-v8": "4.1.12",
     "jsdom": "26.1.0",
-    "mobile-analysis": "git+https://github.com/moritzbrantner/mobile-analysis.git#88e8062a4aa9da366106b5d2a00d4a1d56929528",
+    "mobile-analysis": "git+https://github.com/moritzbrantner/mobile-analysis.git#ca907d9485a7d33f73aeb0ca60cb94f66344dad2",
     "oxfmt": "0.80.0",
     "oxlint": "1.95.0",
     "react": "19.3.1",
@@ -145,6 +145,6 @@
     "mobile-analysis"
   ],
   "overrides": {
-    "@moritzbrantner/ui": "git+https://github.com/moritzbrantner/ui.git#336fbc0ed8ea784c8f7822ab64c83bcc8e954787"
+    "@moritzbrantner/ui": "git+https://github.com/moritzbrantner/ui.git#ad1c052fbefb42f8c03baab3bc8b33ddf7a6e329"
   }
 }
